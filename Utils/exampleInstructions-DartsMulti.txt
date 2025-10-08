@@ -1,0 +1,67 @@
+python runExp.py -resultsFolder testing2D-Multi-Normal-Hyps-5-5-5-5 -domain 2d-multi -iters 1 -numObservations 50 -seed 10 -mode normal
+
+
+python Processing/makeCovErrorElipse.py -resultsFolder Experiments/2d-multi/testing2D-Multi-Normal-Hyps-5-5-5-5/ -domain 2d-multi
+
+python Processing/computeKLD.py -resultsFolder Experiments/2d-multi/testing2D-Multi-Normal-Hyps-5-5-5-5/ -domain 2d-multi
+
+
+
+python runExp.py -resultsFolder testing-2d-multi-particles-States100-N1k-Noise-90%Resample -domain 2d-multi -iters 1 -numObservations 100 -seed 10 -mode rand_pos -particles -numParticles 10
+
+
+python runExp.py -resultsFolder testing-2d-multi-States100-JTM-Normal-Hyps-33-33-JTM-Particles-N2k-75%Resample-Noise-Multi-W-[150,150,500,500]-Resolution-10 -seed 10 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 100 -particles -numParticles 2000 -resample 0.75 -resampleNEFF -noise 1 1 1 1
+
+
+
+# With setup for cluster exps
+
+python runExp.py -numObservations 1 -numParticles 1 -noise 50 500 -resample 0.75 0.90 -agent 10 10
+
+python runExp.py -numObservations 5 -numParticles 5  -agent 10 10 -seed 10
+
+
+
+
+python runExpGiven.py -seed 1 -agent 10 10 -pfe -resamplingMethod systematic
+
+
+
+
+# For processing
+
+python Processing/processResultsDartsMulti.py -resultsFolder Experiments/2d-multi/testing-2d-multi-States10
+
+
+python Processing/mergeDartsExpGivenAgentPerMethod.py -resultsFolder Experiments/2d-multi/Experiments-NumObservations100-NumParticles1000
+
+
+
+
+# FOR MAKE PLOTS
+
+python Processing/makePlotsDartsMulti.py -resultsFolder Experiments/2d-multi/testing-2d-multi-States10
+
+
+python Processing/makePlotsDartsMulti.py -resultsFolder Experiments/2d-multi/testing-2d-multi-States10 (-randomAgents)
+
+python Processing/makePlotsAcrossFolder.py -resultsFolder Experiments/...
+
+
+
+# FOR STATS
+
+ python Processing/getTimesExps.py -resultsFolder Experiments/2d-multi/Cluster/N200/Take2/Experiments-NumObservations200-NumParticles2000/
+
+python Processing/getStatsAgents.py  -domain 2d-multi -resultsFolder Experiments/2d-multi/Experiments-NumObservations3-NumParticles3/
+
+
+
+python Processing/plotParticles.py -resultsFolder Experiments/2d-multi/Experiments-NumObservations100-NumParticles1000 -file OnlineExp_100-0-100-0-0-75-_24_05_15_56_25_0_128037_PFE_NEFF-0-AgentTargetAgent\|X100.0\|X100.0\|R0.75.results ;
+
+
+
+python Processing/testAlternativeEstimates.py -resultsFolder Experiments/2d-multi/Experiments-NumObservations100-NumParticles1000/Resample90%-ResampleNEFF-NoiseDiv500-JT-EES -file OnlineExp_100-0-100-0-0-75-_24_05_15_56_25_0_128037_PFE_NEFF-0-AgentTargetAgent\|X100.0\|X100.0\|R0.75.results ;
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

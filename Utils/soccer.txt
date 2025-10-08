@@ -1,0 +1,53 @@
+unxpass load-data \
+  sqlite://$(pwd)/stores/database.sql \
+  --getter="remote" \
+  --competition-id="43" \
+  --season-id="106"
+
+
+unxpass create-dataset \
+sqlite://$(pwd)/stores/database.sql \
+$(pwd)/stores/datasets/FifaWorldCup2022-All/train \
+$(pwd)/config/dataset/FifaWorldCup2022-All/train.yaml
+
+
+unxpass create-dataset \
+sqlite://$(pwd)/stores/database.sql \
+$(pwd)/stores/datasets/FifaWorldCup2022-All/validate \
+$(pwd)/config/dataset/FifaWorldCup2022-All/validate.yaml
+
+
+unxpass create-dataset \
+sqlite://$(pwd)/stores/database.sql \
+$(pwd)/stores/datasets/FifaWorldCup2022-All/test \
+$(pwd)/config/dataset/FifaWorldCup2022-All/test.yaml
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# PASS SUCCESS MODEL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+unxpass train $(pwd)/config $(pwd)/stores/datasets/FifaWorldCup2022-All/train --dataset-test-fp="/Users/delmairis_22/Desktop/Research/un-xPass/stores/datasets/FifaWorldCup2022-All/validate" experiment="pass_success/threesixty"
+
+unxpass test \
+$(pwd)/config \
+$(pwd)/stores/datasets/FifaWorldCup2022-All/test \
+$(pwd)/stores/model/258422246136232039/40995ec973da46c38266937387e3c3f4/artifacts
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# PASS VALUE MODEL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+unxpass train $(pwd)/config $(pwd)/stores/datasets/FifaWorldCup2022-All/train --dataset-test-fp="/Users/delmairis_22/Desktop/Research/un-xPass/stores/datasets/FifaWorldCup2022-All/validate" experiment="pass_value/vaep_xg_360"
+
+unxpass test \
+$(pwd)/config \
+$(pwd)/stores/datasets/FifaWorldCup2022-All/test \
+$(pwd)/stores/model/847618215982429390-pass-value-FifaWorldCup2022-all/9f1b1d0553c6465a8f652147637609a1/artifacts
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

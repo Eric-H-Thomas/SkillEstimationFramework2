@@ -1,0 +1,16 @@
+Pitch Type: FF | ID: 592662 | Pitcher: Robbie Ray | Count: 1899
+Pitch Type: SL | ID: 571578 | Pitcher: Patrick Corbin | Count: 1052
+Pitch Type: CU | ID: 450203 | Pitcher: Charlie Morton | Count: 1208
+Pitch Type: SI | ID: 640455 | Pitcher: Sean Manaea | Count: 1761
+Pitch Type: CH | ID: 608337 | Pitcher: Lucas Giolito | Count: 993
+Pitch Type: ST | ID: 657277 | Pitcher: Logan Webb | Count: 675
+Pitch Type: KC | ID: 592767 | Pitcher: Drew Smyly | Count: 975
+Pitch Type: FC | ID: 669203 | Pitcher: Corbin Burnes | Count: 1388
+Pitch Type: PO | ID: 656288 | Pitcher: Griffin Canning | Count: 4
+Pitch Type: FS | ID: 592332 | Pitcher: Kevin Gausman | Count: 1085
+Pitch Type: CS | ID: 607560 | Pitcher: Ryne Harper | Count: 57
+Pitch Type: KN | ID: 595263 | Pitcher: Mickey Jannis | Count: 57
+Pitch Type: SV | ID: 628711 | Pitcher: Julio Urías | Count: 1057
+Pitch Type: FA | ID: 506702 | Pitcher: Sandy León | Count: 71
+Pitch Type: EP | ID: 607054 | Pitcher: Jace Peterson | Count: 33
+Pitch Type: SC | ID: 641703 | Pitcher: Brent Honeywell | Count: 1

@@ -1,0 +1,76 @@
+Ryu, Hyun Jin: 547943 | 
+	FF: 993 | SL: 14 | CU: 357 | SI: 21 | CH: 715 | KC: 0 | FC: 714 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Eflin, Zach: 621107 | 
+	FF: 209 | SL: 395 | CU: 186 | SI: 692 | CH: 182 | KC: 0 | FC: 7 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Urías, Julio: 628711 | 
+	FF: 1435 | SL: 1 | CU: 1056 | SI: 27 | CH: 549 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Wainwright, Adam: 425794 | 
+	FF: 320 | SL: 0 | CU: 1086 | SI: 907 | CH: 222 | KC: 0 | FC: 701 | FS: 0 | CS: 14 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Nola, Aaron: 605400 | 
+	FF: 1184 | SL: 0 | CU: 0 | SI: 439 | CH: 631 | KC: 841 | FC: 58 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Yarbrough, Ryan: 642232 | 
+	FF: 8 | SL: 0 | CU: 439 | SI: 331 | CH: 693 | KC: 0 | FC: 993 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Pérez, Martín: 527048 | 
+	FF: 249 | SL: 0 | CU: 158 | SI: 484 | CH: 457 | KC: 0 | FC: 548 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Chapman, Aroldis: 547973 | 
+	FF: 600 | SL: 289 | CU: 0 | SI: 58 | CH: 0 | KC: 0 | FC: 0 | FS: 116 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Santana, Dennis: 642701 | 
+	FF: 57 | SL: 264 | CU: 23 | SI: 394 | CH: 188 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Alvarado, José: 621237 | 
+	FF: 41 | SL: 0 | CU: 47 | SI: 892 | CH: 0 | KC: 0 | FC: 186 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Richards, Trevor: 670950 | 
+	FF: 591 | SL: 0 | CU: 142 | SI: 0 | CH: 305 | KC: 0 | FC: 0 | FS: 0 | CS: 2 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Sborz, Josh: 622250 | 
+	FF: 585 | SL: 317 | CU: 174 | SI: 0 | CH: 0 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Snell, Blake: 605483 | 
+	FF: 1224 | SL: 567 | CU: 310 | SI: 0 | CH: 232 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Howard, Spencer: 675921 | 
+	FF: 589 | SL: 51 | CU: 76 | SI: 6 | CH: 84 | KC: 0 | FC: 127 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Dunning, Dane: 641540 | 
+	FF: 9 | SL: 418 | CU: 0 | SI: 1013 | CH: 257 | KC: 92 | FC: 157 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Otto, Glenn: 657248 | 
+	FF: 218 | SL: 158 | CU: 0 | SI: 0 | CH: 27 | KC: 44 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Hearn, Taylor: 621368 | 
+	FF: 770 | SL: 339 | CU: 0 | SI: 357 | CH: 204 | KC: 0 | FC: 3 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Martin, Brett: 656685 | 
+	FF: 222 | SL: 235 | CU: 192 | SI: 281 | CH: 0 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Tinoco, Jesus: 622786 | 
+	FF: 12 | SL: 9 | CU: 10 | SI: 18 | CH: 0 | KC: 0 | FC: 0 | FS: 3 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Gray, Jon: 592351 | 
+	FF: 1227 | SL: 989 | CU: 170 | SI: 0 | CH: 210 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Allard, Kolby: 663465 | 
+	FF: 961 | SL: 0 | CU: 226 | SI: 8 | CH: 346 | KC: 0 | FC: 506 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Moore, Matt: 519043 | 
+	FF: 761 | SL: 0 | CU: 0 | SI: 0 | CH: 268 | KC: 217 | FC: 132 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+King, John: 667463 | 
+	FF: 0 | SL: 94 | CU: 0 | SI: 395 | CH: 128 | KC: 0 | FC: 69 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Barlow, Joe: 669618 | 
+	FF: 207 | SL: 184 | CU: 58 | SI: 5 | CH: 0 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+deGrom, Jacob: 594798 | 
+	FF: 731 | SL: 424 | CU: 4 | SI: 0 | CH: 113 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Cole, Gerrit: 543037 | 
+	FF: 1527 | SL: 722 | CU: 0 | SI: 26 | CH: 456 | KC: 505 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Scherzer, Max: 453286 | 
+	FF: 1468 | SL: 615 | CU: 310 | SI: 0 | CH: 469 | KC: 0 | FC: 298 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Kershaw, Clayton: 477132 | 
+	FF: 657 | SL: 856 | CU: 272 | SI: 0 | CH: 11 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Burnes, Corbin: 669203 | 
+	FF: 41 | SL: 253 | CU: 484 | SI: 238 | CH: 254 | KC: 0 | FC: 1388 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Bieber, Shane: 669456 | 
+	FF: 548 | SL: 392 | CU: 0 | SI: 0 | CH: 73 | KC: 486 | FC: 49 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Buehler, Walker: 621111 | 
+	FF: 1521 | SL: 468 | CU: 0 | SI: 256 | CH: 178 | KC: 447 | FC: 580 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Hader, Josh: 623352 | 
+	FF: 1 | SL: 272 | CU: 0 | SI: 620 | CH: 63 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Hendriks, Liam: 521230 | 
+	FF: 790 | SL: 243 | CU: 110 | SI: 0 | CH: 1 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Díaz, Edwin: 621242 | 
+	FF: 648 | SL: 389 | CU: 0 | SI: 6 | CH: 0 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Rodón, Carlos: 607074 | 
+	FF: 1355 | SL: 636 | CU: 39 | SI: 0 | CH: 288 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Ray, Robbie: 592662 | 
+	FF: 1902 | SL: 982 | CU: 0 | SI: 5 | CH: 119 | KC: 197 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Anderson, Nick: 623433 | 
+	FF: 83 | SL: 0 | CU: 37 | SI: 0 | CH: 1 | KC: 0 | FC: 0 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 
+Jansen, Kenley: 445276 | 
+	FF: 0 | SL: 186 | CU: 0 | SI: 313 | CH: 0 | KC: 0 | FC: 668 | FS: 0 | CS: 0 | KN: 0 | FA: 0 | EP: 0 | SC: 0 | 

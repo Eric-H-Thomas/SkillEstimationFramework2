@@ -1,0 +1,132 @@
+# TO GENERATE INSTRUCTIONS TO RUN EXPERIMENTS
+# INSIDE "Utils/"
+python makeInstructions.py -ids 642232 621237 -types FF CU
+
+
+# TO RUN EXPERIMENTS
+python3 runExp.py -domain baseball -ids 642232 -types FF CU -resultsFolder Experiment-PitcherID-642232-PitchTypes-FF-CU
+
+python3 runExp.py -domain baseball -ids 621237 -types FF CU -resultsFolder Experiment-PitcherID-621237-PitchTypes-FF-CU
+
+
+# TO COMPILE RESULTS FROM DIFFERENT EXPERIMENTS FOLDERS
+# NOTE: ASSUMES DESIRED FOLDERS CONTAIN "EXPERIMENT" IN THEIR NAME
+# (TO IGNORE OTHER (TESTING) FOLDERS)
+# INSIDE "Utils/"
+python compileResults_Baseball.py
+
+
+# TO PROCESS COMPILED RESULTS
+python Processing/processResultsBaseball.py -resultsFolder Experiments/baseball/CompiledResults/
+
+
+# TO RUN TESTING EXPERIMENTS
+# INSIDE "Testing/"
+python testingBaseball.py 642232 FF test1
+
+
+python testingBaseball_Processing.py 621237 FF
+
+
+
+
+
+python runExp.py -domain baseball -ids 547973 -types SL -resultsFolder testingChanges2222 -maxRows 10 -every 5
+
+
+python Processing/compileResults_Baseball.py -folderContains ForJournal
+
+
+python Processing/verifyResultsBaseball.py -resultsFolder CompiledResults -file tempIDs.txt
+
+
+cd Processing/
+python makeCSV_FolderSearch.py -folderContains ForJournal
+
+
+cd Processing/
+python makeCSV_CompiledResults.py -compiledResultsFolder JournalExperiments
+
+
+python Processing/processResultsOnlineBaseball.py -resultsFolder Experiments/baseball/testingChanges2222/
+
+
+python Processing/makePlotsForPaperBaseball.py gist_rainbow_r
+
+
+
+
+
+
+# MULTI DIMENSIONS
+
+# Just JTM
+python3 runExp.py -domain baseball-multi -ids 547973 -types SL -resultsFolder testingChanges -maxRows 2 -every 2
+
+
+# For comparison
+python3 runExp.py -domain baseball-multi -ids 623433 -types CH -resultsFolder For-JTM-Comparison -maxRows 1000 -every 100
+
+
+python3 runExp.py -domain baseball-multi -ids 623433 -types FF -resultsFolder testingJustJTM-GivenFile-x2 -maxRows 1000 -every 2 -seed 15952 -reload
+
+
+
+# PFE
+python3 runExp.py -domain baseball-multi -ids 547973 -types SL -resultsFolder testingMulti -maxRows 2 -every 2 -particles -numParticles 10 -resample 0.75 -noise 500 500 500 500
+
+
+
+
+# FOR CLUSTER
+python3 runExpBaseball.py -ids 547973 -types SL
+
+python3 runExpBaseball.py -ids 547973 -types SL -numParticles 1000 -seed 1 -jeeds
+
+python3 runExpBaseball.py -ids 547973 -types SL -numParticles 1000 -seed 1 -pfe
+
+python3 runExpBaseball.py -ids 547973 -types SL -numParticles 1000 -seed 1 -pfeNeff
+
+
+
+# Stats for exp setup
+
+python3 Environments/Baseball/getPitchersStats.py 
+
+cd Environments/Baseball
+python3 dataTake2.py 
+
+
+
+
+# PROCESSING
+
+
+python Processing/mergeBaseballExpPerMethod.py -resultsFolder Experiments/baseball-multi/Experiments-BaseballMulti-NumObservations4-NumParticles1/
+
+
+python3 Processing/makeCSV_CompiledResultsBaseball.py -compiledResultsFolder Experiments-BaseballMulti-NumObservations2-NumParticles2/
+
+
+python3 Processing/makePlotsForPaperBaseballMulti.py viridis
+
+
+python3 Processing/processResultsBaseballMulti.py -resultsFolder Experiments/baseball-multi/Experiments-BaseballMulti-NumObservations2-NumParticles2
+
+python3 Processing/makePlotsBaseballMulti.py -resultsFolder Experiments/baseball-multi/Experiments-BaseballMulti-NumObservations2-NumParticles2
+
+
+python3 Processing/getPercentHitsBaseball.py -resultsFolder Experiments/baseball-multi/Cluster/NumObservations100-Numparticles200/
+
+
+
+python Processing/plotParticles.py -resultsFolder Experiments/baseball-multi/Cluster/NumObservations100-Numparticles200/ -file OnlineExp_656945_FF_Chunk_1.results
+
+
+python3 Processing/pconfBaseballTake2.py
+
+
+python3 Processing/getInfoPitches.py
+
+
+

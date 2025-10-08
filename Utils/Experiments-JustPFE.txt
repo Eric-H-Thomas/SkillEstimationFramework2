@@ -1,0 +1,92 @@
+EXPERIMENTS TO PERFORM - To test PFE alone
+
+Resolution = 5.0 
+x/p skill given = True
+Plotting & JTM output disabled
+Just subset of target agents (9 different ones)
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NoiseDiv5-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -noise 5 5 5 5
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-90%Resample-NoiseDiv5-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.90 -noise 5 5 5 5
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-80%Resample-NoiseDiv5-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.80  -noise 5 5 5 5
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NEFF-ThresNDiv2-NoiseDiv5-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -resampleNEFF -noise 5 5 5 5
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NoiseDiv50-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -noise 50 50 50 50
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-90%Resample-NoiseDiv50-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.90 -noise 50 50 50 50
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-80%Resample-NoiseDiv50-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.80  -noise 50 50 50 50
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NEFF-ThresNDiv2-NoiseDiv50-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -resampleNEFF -noise 50 50 50 50
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NoiseDiv500-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -noise 500 500 500 500
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-90%Resample-NoiseDiv500-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.90 -noise 500 500 500 500
+
+
+python runExp.py -resultsFolder Testing-2D-RazndPos-States250-JustTargetAgent-JustPFE-N1K-80%Resample-NoiseDiv500-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.80  -noise 500 500 500 500
+
+
+python runExp.py -resultsFolder Testing-2D-RandPos-States250-JustTargetAgent-JustPFE-N1K-75%Resample-NEFF-ThresNDiv2-NoiseDiv500-Resolution-5 -domain 2d-multi -mode rand_pos -iters 1 -numObservations 250 -particles -numParticles 1000 -resample 0.75 -resampleNEFF -noise 500 500 500 500
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+NEED TO TEST OTHER NUMBER OF OBSERVATIONS: 500,1K
+AND NUMBER OF PARTICLES: 2K
+
+
+-----------Done-----------
+Observations  | Particles
+100 		  | 200
+100 		  | 1K
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+MAKE OTHER TEXT FILES FOR OTHER EXPS:
+
+- To compare with JEEDS
+	- Static Agents
+	- Dynamic Agents
+
+- Baseball
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+

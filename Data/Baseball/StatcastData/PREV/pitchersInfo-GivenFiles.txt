@@ -1,0 +1,40 @@
+Mantiply, Joe: 573009 | 
+	CU: 517 | CH: 371 | SL: 0 | FF: 78 | FS: 0 | SI: 725 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Martin, Chris: 455119 | 
+	CU: 33 | CH: 0 | SL: 473 | FF: 1622 | FS: 368 | SI: 338 | FC: 781 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+deGrom, Jacob: 594798 | 
+	CU: 369 | CH: 1407 | SL: 3030 | FF: 4670 | FS: 0 | SI: 325 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Kluber, Corey: 446372 | 
+	CU: 1910 | CH: 704 | SL: 0 | FF: 479 | FS: 0 | SI: 2232 | FC: 2349 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 1 | SC: 0 | FT: 0 | 
+Clase, Emmanuel: 661403 | 
+	CU: 0 | CH: 0 | SL: 759 | FF: 48 | FS: 0 | SI: 0 | FC: 1590 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Nola, Aaron: 605400 | 
+	CU: 0 | CH: 2715 | SL: 0 | FF: 4964 | FS: 0 | SI: 2087 | FC: 283 | KC: 4229 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Stripling, Ross: 548389 | 
+	CU: 0 | CH: 1426 | SL: 1633 | FF: 3287 | FS: 0 | SI: 198 | FC: 93 | KC: 1549 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Pruitt, Austin: 643493 | 
+	CU: 486 | CH: 280 | SL: 770 | FF: 1068 | FS: 0 | SI: 14 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Kirby, George: 669923 | 
+	CU: 287 | CH: 185 | SL: 229 | FF: 1044 | FS: 0 | SI: 297 | FC: 255 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Lynn, Lance: 458681 | 
+	CU: 968 | CH: 376 | SL: 105 | FF: 5894 | FS: 0 | SI: 2591 | FC: 2498 | KC: 0 | FA: 0 | CS: 9 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Scott, Tanner: 656945 | 
+	CU: 0 | CH: 0 | SL: 2002 | FF: 1945 | FS: 0 | SI: 52 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Diekman, Jake: 518617 | 
+	CU: 0 | CH: 30 | SL: 1754 | FF: 2448 | FS: 0 | SI: 600 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Davidson, Tucker: 656353 | 
+	CU: 119 | CH: 41 | SL: 552 | FF: 551 | FS: 0 | SI: 50 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Adon, Joan: 672851 | 
+	CU: 276 | CH: 93 | SL: 82 | FF: 879 | FS: 0 | SI: 46 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Davis, Austin: 656354 | 
+	CU: 98 | CH: 468 | SL: 821 | FF: 1325 | FS: 0 | SI: 27 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Kikuchi, Yusei: 579328 | 
+	CU: 406 | CH: 777 | SL: 1914 | FF: 3473 | FS: 0 | SI: 0 | FC: 1356 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Hicks, Jordan: 663855 | 
+	CU: 0 | CH: 56 | SL: 791 | FF: 36 | FS: 0 | SI: 2148 | FC: 36 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Stanek, Ryne: 592773 | 
+	CU: 0 | CH: 0 | SL: 1127 | FF: 2797 | FS: 918 | SI: 0 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Smith, Caleb: 592761 | 
+	CU: 224 | CH: 1236 | SL: 2249 | FF: 3997 | FS: 0 | SI: 4 | FC: 0 | KC: 0 | FA: 0 | CS: 0 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 
+Richards, Trevor: 670950 | 
+	CU: 624 | CH: 2532 | SL: 268 | FF: 3627 | FS: 0 | SI: 0 | FC: 240 | KC: 0 | FA: 0 | CS: 6 | nan: 0 | EP: 0 | FO: 0 | KN: 0 | PO: 0 | SC: 0 | FT: 0 | 

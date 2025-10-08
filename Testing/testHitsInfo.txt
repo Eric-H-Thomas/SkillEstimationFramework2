@@ -1,0 +1,260 @@
+xSkill:  0.001 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  0.7548 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  1.5085 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  2.2623 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  3.0161 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  3.7698 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  4.5236 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  5.2773 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  6.0311 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  6.7849 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  7.5386 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  8.2924 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  9.0462 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  9.7999 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  10.5537 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  11.3075 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  12.0612 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  12.815 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  13.5687 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  14.3225 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  15.0763 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  15.83 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  16.5838 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  17.3376 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  18.0913 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  18.8451 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  19.5989 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  20.3526 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  21.1064 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  21.8602 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  22.6139 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  23.3677 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  24.1214 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  24.8752 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  25.629 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  26.3827 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  27.1365 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  27.8903 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  28.644 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  29.3978 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  30.1516 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  30.9053 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  31.6591 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  32.4128 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  33.1666 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  33.9204 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  34.6741 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  35.4279 | 	Total Hits:  9999.0  out of  10000 ->  99.99 %
+xSkill:  36.1817 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  36.9354 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  37.6892 | 	Total Hits:  9999.0  out of  10000 ->  99.99 %
+xSkill:  38.443 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  39.1967 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  39.9505 | 	Total Hits:  10000.0  out of  10000 ->  100.0 %
+xSkill:  40.7042 | 	Total Hits:  9999.0  out of  10000 ->  99.99 %
+xSkill:  41.458 | 	Total Hits:  9998.0  out of  10000 ->  99.98 %
+xSkill:  42.2118 | 	Total Hits:  9996.0  out of  10000 ->  99.96000000000001 %
+xSkill:  42.9655 | 	Total Hits:  9997.0  out of  10000 ->  99.97 %
+xSkill:  43.7193 | 	Total Hits:  9994.0  out of  10000 ->  99.94 %
+xSkill:  44.4731 | 	Total Hits:  9990.0  out of  10000 ->  99.9 %
+xSkill:  45.2268 | 	Total Hits:  9996.0  out of  10000 ->  99.96000000000001 %
+xSkill:  45.9806 | 	Total Hits:  9988.0  out of  10000 ->  99.88 %
+xSkill:  46.7344 | 	Total Hits:  9985.0  out of  10000 ->  99.85000000000001 %
+xSkill:  47.4881 | 	Total Hits:  9978.0  out of  10000 ->  99.78 %
+xSkill:  48.2419 | 	Total Hits:  9986.0  out of  10000 ->  99.86 %
+xSkill:  48.9956 | 	Total Hits:  9976.0  out of  10000 ->  99.76 %
+xSkill:  49.7494 | 	Total Hits:  9958.0  out of  10000 ->  99.58 %
+xSkill:  50.5032 | 	Total Hits:  9963.0  out of  10000 ->  99.63 %
+xSkill:  51.2569 | 	Total Hits:  9961.0  out of  10000 ->  99.61 %
+xSkill:  52.0107 | 	Total Hits:  9960.0  out of  10000 ->  99.6 %
+xSkill:  52.7645 | 	Total Hits:  9941.0  out of  10000 ->  99.41 %
+xSkill:  53.5182 | 	Total Hits:  9934.0  out of  10000 ->  99.33999999999999 %
+xSkill:  54.272 | 	Total Hits:  9919.0  out of  10000 ->  99.19 %
+xSkill:  55.0258 | 	Total Hits:  9915.0  out of  10000 ->  99.15 %
+xSkill:  55.7795 | 	Total Hits:  9913.0  out of  10000 ->  99.13 %
+xSkill:  56.5333 | 	Total Hits:  9883.0  out of  10000 ->  98.83 %
+xSkill:  57.2871 | 	Total Hits:  9874.0  out of  10000 ->  98.74000000000001 %
+xSkill:  58.0408 | 	Total Hits:  9869.0  out of  10000 ->  98.69 %
+xSkill:  58.7946 | 	Total Hits:  9852.0  out of  10000 ->  98.52 %
+xSkill:  59.5483 | 	Total Hits:  9842.0  out of  10000 ->  98.42 %
+xSkill:  60.3021 | 	Total Hits:  9821.0  out of  10000 ->  98.21 %
+xSkill:  61.0559 | 	Total Hits:  9783.0  out of  10000 ->  97.83 %
+xSkill:  61.8096 | 	Total Hits:  9777.0  out of  10000 ->  97.77 %
+xSkill:  62.5634 | 	Total Hits:  9774.0  out of  10000 ->  97.74000000000001 %
+xSkill:  63.3172 | 	Total Hits:  9701.0  out of  10000 ->  97.00999999999999 %
+xSkill:  64.0709 | 	Total Hits:  9674.0  out of  10000 ->  96.74000000000001 %
+xSkill:  64.8247 | 	Total Hits:  9657.0  out of  10000 ->  96.57 %
+xSkill:  65.5785 | 	Total Hits:  9655.0  out of  10000 ->  96.55 %
+xSkill:  66.3322 | 	Total Hits:  9639.0  out of  10000 ->  96.39 %
+xSkill:  67.086 | 	Total Hits:  9583.0  out of  10000 ->  95.83 %
+xSkill:  67.8397 | 	Total Hits:  9574.0  out of  10000 ->  95.74000000000001 %
+xSkill:  68.5935 | 	Total Hits:  9560.0  out of  10000 ->  95.6 %
+xSkill:  69.3473 | 	Total Hits:  9510.0  out of  10000 ->  95.1 %
+xSkill:  70.101 | 	Total Hits:  9453.0  out of  10000 ->  94.53 %
+xSkill:  70.8548 | 	Total Hits:  9422.0  out of  10000 ->  94.22 %
+xSkill:  71.6086 | 	Total Hits:  9400.0  out of  10000 ->  94.0 %
+xSkill:  72.3623 | 	Total Hits:  9381.0  out of  10000 ->  93.81 %
+xSkill:  73.1161 | 	Total Hits:  9267.0  out of  10000 ->  92.67 %
+xSkill:  73.8699 | 	Total Hits:  9285.0  out of  10000 ->  92.85 %
+xSkill:  74.6236 | 	Total Hits:  9250.0  out of  10000 ->  92.5 %
+xSkill:  75.3774 | 	Total Hits:  9172.0  out of  10000 ->  91.72 %
+xSkill:  76.1311 | 	Total Hits:  9176.0  out of  10000 ->  91.75999999999999 %
+xSkill:  76.8849 | 	Total Hits:  9114.0  out of  10000 ->  91.14 %
+xSkill:  77.6387 | 	Total Hits:  9097.0  out of  10000 ->  90.97 %
+xSkill:  78.3924 | 	Total Hits:  9068.0  out of  10000 ->  90.68 %
+xSkill:  79.1462 | 	Total Hits:  8979.0  out of  10000 ->  89.79 %
+xSkill:  79.9 | 	Total Hits:  8974.0  out of  10000 ->  89.74 %
+xSkill:  80.6537 | 	Total Hits:  8910.0  out of  10000 ->  89.1 %
+xSkill:  81.4075 | 	Total Hits:  8925.0  out of  10000 ->  89.25 %
+xSkill:  82.1613 | 	Total Hits:  8823.0  out of  10000 ->  88.23 %
+xSkill:  82.915 | 	Total Hits:  8832.0  out of  10000 ->  88.32 %
+xSkill:  83.6688 | 	Total Hits:  8716.0  out of  10000 ->  87.16000000000001 %
+xSkill:  84.4225 | 	Total Hits:  8666.0  out of  10000 ->  86.66 %
+xSkill:  85.1763 | 	Total Hits:  8598.0  out of  10000 ->  85.98 %
+xSkill:  85.9301 | 	Total Hits:  8543.0  out of  10000 ->  85.42999999999999 %
+xSkill:  86.6838 | 	Total Hits:  8605.0  out of  10000 ->  86.05000000000001 %
+xSkill:  87.4376 | 	Total Hits:  8472.0  out of  10000 ->  84.72 %
+xSkill:  88.1914 | 	Total Hits:  8465.0  out of  10000 ->  84.65 %
+xSkill:  88.9451 | 	Total Hits:  8384.0  out of  10000 ->  83.84 %
+xSkill:  89.6989 | 	Total Hits:  8312.0  out of  10000 ->  83.12 %
+xSkill:  90.4527 | 	Total Hits:  8299.0  out of  10000 ->  82.99 %
+xSkill:  91.2064 | 	Total Hits:  8212.0  out of  10000 ->  82.12 %
+xSkill:  91.9602 | 	Total Hits:  8195.0  out of  10000 ->  81.95 %
+xSkill:  92.7139 | 	Total Hits:  8173.0  out of  10000 ->  81.73 %
+xSkill:  93.4677 | 	Total Hits:  8084.0  out of  10000 ->  80.84 %
+xSkill:  94.2215 | 	Total Hits:  8062.0  out of  10000 ->  80.62 %
+xSkill:  94.9752 | 	Total Hits:  8032.0  out of  10000 ->  80.32000000000001 %
+xSkill:  95.729 | 	Total Hits:  7906.0  out of  10000 ->  79.06 %
+xSkill:  96.4828 | 	Total Hits:  7889.0  out of  10000 ->  78.89 %
+xSkill:  97.2365 | 	Total Hits:  7809.0  out of  10000 ->  78.09 %
+xSkill:  97.9903 | 	Total Hits:  7851.0  out of  10000 ->  78.51 %
+xSkill:  98.7441 | 	Total Hits:  7741.0  out of  10000 ->  77.41 %
+xSkill:  99.4978 | 	Total Hits:  7727.0  out of  10000 ->  77.27000000000001 %
+xSkill:  100.2516 | 	Total Hits:  7659.0  out of  10000 ->  76.59 %
+xSkill:  101.0054 | 	Total Hits:  7608.0  out of  10000 ->  76.08 %
+xSkill:  101.7591 | 	Total Hits:  7519.0  out of  10000 ->  75.19 %
+xSkill:  102.5129 | 	Total Hits:  7502.0  out of  10000 ->  75.02 %
+xSkill:  103.2666 | 	Total Hits:  7446.0  out of  10000 ->  74.46000000000001 %
+xSkill:  104.0204 | 	Total Hits:  7420.0  out of  10000 ->  74.2 %
+xSkill:  104.7742 | 	Total Hits:  7331.0  out of  10000 ->  73.31 %
+xSkill:  105.5279 | 	Total Hits:  7245.0  out of  10000 ->  72.45 %
+xSkill:  106.2817 | 	Total Hits:  7237.0  out of  10000 ->  72.37 %
+xSkill:  107.0355 | 	Total Hits:  7204.0  out of  10000 ->  72.04 %
+xSkill:  107.7892 | 	Total Hits:  7150.0  out of  10000 ->  71.5 %
+xSkill:  108.543 | 	Total Hits:  7105.0  out of  10000 ->  71.05 %
+xSkill:  109.2968 | 	Total Hits:  6985.0  out of  10000 ->  69.85 %
+xSkill:  110.0505 | 	Total Hits:  6937.0  out of  10000 ->  69.37 %
+xSkill:  110.8043 | 	Total Hits:  6952.0  out of  10000 ->  69.52000000000001 %
+xSkill:  111.558 | 	Total Hits:  6908.0  out of  10000 ->  69.08 %
+xSkill:  112.3118 | 	Total Hits:  6833.0  out of  10000 ->  68.33 %
+xSkill:  113.0656 | 	Total Hits:  6804.0  out of  10000 ->  68.04 %
+xSkill:  113.8193 | 	Total Hits:  6740.0  out of  10000 ->  67.4 %
+xSkill:  114.5731 | 	Total Hits:  6761.0  out of  10000 ->  67.61 %
+xSkill:  115.3269 | 	Total Hits:  6670.0  out of  10000 ->  66.7 %
+xSkill:  116.0806 | 	Total Hits:  6526.0  out of  10000 ->  65.25999999999999 %
+xSkill:  116.8344 | 	Total Hits:  6526.0  out of  10000 ->  65.25999999999999 %
+xSkill:  117.5882 | 	Total Hits:  6506.0  out of  10000 ->  65.06 %
+xSkill:  118.3419 | 	Total Hits:  6361.0  out of  10000 ->  63.61 %
+xSkill:  119.0957 | 	Total Hits:  6416.0  out of  10000 ->  64.16 %
+xSkill:  119.8494 | 	Total Hits:  6350.0  out of  10000 ->  63.5 %
+xSkill:  120.6032 | 	Total Hits:  6325.0  out of  10000 ->  63.24999999999999 %
+xSkill:  121.357 | 	Total Hits:  6291.0  out of  10000 ->  62.91 %
+xSkill:  122.1107 | 	Total Hits:  6173.0  out of  10000 ->  61.73 %
+xSkill:  122.8645 | 	Total Hits:  6196.0  out of  10000 ->  61.96 %
+xSkill:  123.6183 | 	Total Hits:  6147.0  out of  10000 ->  61.47 %
+xSkill:  124.372 | 	Total Hits:  6128.0  out of  10000 ->  61.28 %
+xSkill:  125.1258 | 	Total Hits:  6095.0  out of  10000 ->  60.95 %
+xSkill:  125.8796 | 	Total Hits:  5984.0  out of  10000 ->  59.84 %
+xSkill:  126.6333 | 	Total Hits:  5925.0  out of  10000 ->  59.25 %
+xSkill:  127.3871 | 	Total Hits:  5872.0  out of  10000 ->  58.720000000000006 %
+xSkill:  128.1408 | 	Total Hits:  5838.0  out of  10000 ->  58.379999999999995 %
+xSkill:  128.8946 | 	Total Hits:  5845.0  out of  10000 ->  58.45 %
+xSkill:  129.6484 | 	Total Hits:  5682.0  out of  10000 ->  56.82000000000001 %
+xSkill:  130.4021 | 	Total Hits:  5821.0  out of  10000 ->  58.209999999999994 %
+xSkill:  131.1559 | 	Total Hits:  5755.0  out of  10000 ->  57.550000000000004 %
+xSkill:  131.9097 | 	Total Hits:  5684.0  out of  10000 ->  56.84 %
+xSkill:  132.6634 | 	Total Hits:  5574.0  out of  10000 ->  55.74 %
+xSkill:  133.4172 | 	Total Hits:  5579.0  out of  10000 ->  55.78999999999999 %
+xSkill:  134.171 | 	Total Hits:  5489.0  out of  10000 ->  54.89000000000001 %
+xSkill:  134.9247 | 	Total Hits:  5501.0  out of  10000 ->  55.010000000000005 %
+xSkill:  135.6785 | 	Total Hits:  5415.0  out of  10000 ->  54.15 %
+xSkill:  136.4323 | 	Total Hits:  5322.0  out of  10000 ->  53.22 %
+xSkill:  137.186 | 	Total Hits:  5344.0  out of  10000 ->  53.44 %
+xSkill:  137.9398 | 	Total Hits:  5556.0  out of  10000 ->  55.559999999999995 %
+xSkill:  138.6935 | 	Total Hits:  5236.0  out of  10000 ->  52.35999999999999 %
+xSkill:  139.4473 | 	Total Hits:  5290.0  out of  10000 ->  52.900000000000006 %
+xSkill:  140.2011 | 	Total Hits:  5168.0  out of  10000 ->  51.68000000000001 %
+xSkill:  140.9548 | 	Total Hits:  5146.0  out of  10000 ->  51.459999999999994 %
+xSkill:  141.7086 | 	Total Hits:  5085.0  out of  10000 ->  50.849999999999994 %
+xSkill:  142.4624 | 	Total Hits:  5056.0  out of  10000 ->  50.56 %
+xSkill:  143.2161 | 	Total Hits:  5019.0  out of  10000 ->  50.19 %
+xSkill:  143.9699 | 	Total Hits:  5057.0  out of  10000 ->  50.57000000000001 %
+xSkill:  144.7237 | 	Total Hits:  5011.0  out of  10000 ->  50.11 %
+xSkill:  145.4774 | 	Total Hits:  4962.0  out of  10000 ->  49.62 %
+xSkill:  146.2312 | 	Total Hits:  4956.0  out of  10000 ->  49.559999999999995 %
+xSkill:  146.9849 | 	Total Hits:  4987.0  out of  10000 ->  49.87 %
+xSkill:  147.7387 | 	Total Hits:  4907.0  out of  10000 ->  49.07 %
+xSkill:  148.4925 | 	Total Hits:  4771.0  out of  10000 ->  47.71 %
+xSkill:  149.2462 | 	Total Hits:  4784.0  out of  10000 ->  47.839999999999996 %
+xSkill:  150.0 | 	Total Hits:  4707.0  out of  10000 ->  47.07 %
+
+--------------------
+
+xSkills = np.linspace(0.001,150.0,num=200)
+numTries = 10_000
+
+Percent: 100 | minX: 0.001 | maxX: 39.9505 | widthX: 39.9495
+Percent: 99 | minX: 35.4279 | maxX: 55.7795 | widthX: 20.3516
+Percent: 98 | minX: 56.5333 | maxX: 60.3021 | widthX: 3.7688
+Percent: 97 | minX: 61.0559 | maxX: 63.3172 | widthX: 2.2613
+Percent: 96 | minX: 64.0709 | maxX: 66.3322 | widthX: 2.2613
+Percent: 95 | minX: 67.086 | maxX: 69.3473 | widthX: 2.2613
+Percent: 94 | minX: 70.101 | maxX: 71.6086 | widthX: 1.5075
+Percent: 93 | minX: 72.3623 | maxX: 72.3623 | widthX: 0.0
+Percent: 92 | minX: 73.1161 | maxX: 74.6236 | widthX: 1.5075
+Percent: 91 | minX: 75.3774 | maxX: 76.8849 | widthX: 1.5075
+Percent: 90 | minX: 77.6387 | maxX: 78.3924 | widthX: 0.7538
+Percent: 89 | minX: 79.1462 | maxX: 81.4075 | widthX: 2.2613
+Percent: 88 | minX: 82.1613 | maxX: 82.915 | widthX: 0.7538
+Percent: 87 | minX: 83.6688 | maxX: 83.6688 | widthX: 0.0
+Percent: 86 | minX: 84.4225 | maxX: 86.6838 | widthX: 2.2613
+Percent: 85 | minX: 85.1763 | maxX: 85.9301 | widthX: 0.7538
+Percent: 84 | minX: 87.4376 | maxX: 88.1914 | widthX: 0.7538
+Percent: 83 | minX: 88.9451 | maxX: 89.6989 | widthX: 0.7538
+Percent: 82 | minX: 90.4527 | maxX: 91.2064 | widthX: 0.7538
+Percent: 81 | minX: 91.9602 | maxX: 92.7139 | widthX: 0.7538
+Percent: 80 | minX: 93.4677 | maxX: 94.9752 | widthX: 1.5075
+Percent: 79 | minX: 95.729 | maxX: 95.729 | widthX: 0.0
+Percent: 78 | minX: 96.4828 | maxX: 97.9903 | widthX: 1.5075
+Percent: 77 | minX: 98.7441 | maxX: 99.4978 | widthX: 0.7538
+Percent: 76 | minX: 100.2516 | maxX: 101.0054 | widthX: 0.7538
+Percent: 75 | minX: 101.7591 | maxX: 102.5129 | widthX: 0.7538
+Percent: 74 | minX: 103.2666 | maxX: 104.0204 | widthX: 0.7538
+Percent: 73 | minX: 104.7742 | maxX: 104.7742 | widthX: 0.0
+Percent: 72 | minX: 105.5279 | maxX: 107.0355 | widthX: 1.5075
+Percent: 71 | minX: 107.7892 | maxX: 108.543 | widthX: 0.7538
+Percent: 69 | minX: 109.2968 | maxX: 111.558 | widthX: 2.2613
+Percent: 68 | minX: 112.3118 | maxX: 113.0656 | widthX: 0.7538
+Percent: 67 | minX: 113.8193 | maxX: 114.5731 | widthX: 0.7538
+Percent: 66 | minX: 115.3269 | maxX: 115.3269 | widthX: 0.0
+Percent: 65 | minX: 116.0806 | maxX: 117.5882 | widthX: 1.5075
+Percent: 64 | minX: 119.0957 | maxX: 119.0957 | widthX: 0.0
+Percent: 63 | minX: 118.3419 | maxX: 120.6032 | widthX: 2.2613
+Percent: 62 | minX: 121.357 | maxX: 121.357 | widthX: 0.0
+Percent: 61 | minX: 122.1107 | maxX: 124.372 | widthX: 2.2613
+Percent: 60 | minX: 125.1258 | maxX: 125.1258 | widthX: 0.0
+Percent: 59 | minX: 125.8796 | maxX: 126.6333 | widthX: 0.7538
+Percent: 58 | minX: 127.3871 | maxX: 130.4021 | widthX: 3.0151
+Percent: 57 | minX: 131.1559 | maxX: 131.1559 | widthX: 0.0
+Percent: 56 | minX: 129.6484 | maxX: 131.9097 | widthX: 2.2613
+Percent: 55 | minX: 132.6634 | maxX: 137.9398 | widthX: 5.2763
+Percent: 54 | minX: 134.171 | maxX: 135.6785 | widthX: 1.5075
+Percent: 53 | minX: 136.4323 | maxX: 137.186 | widthX: 0.7538
+Percent: 52 | minX: 138.6935 | maxX: 139.4473 | widthX: 0.7538
+Percent: 51 | minX: 140.2011 | maxX: 140.9548 | widthX: 0.7538
+Percent: 50 | minX: 141.7086 | maxX: 144.7237 | widthX: 3.0151
+Percent: 49 | minX: 145.4774 | maxX: 147.7387 | widthX: 2.2613
+Percent: 47 | minX: 148.4925 | maxX: 150.0 | widthX: 1.5075
+--------------------
+

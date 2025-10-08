@@ -1,0 +1,11 @@
+Pitch Type: FF | ID: 605400 | Pitcher: Aaron Nola | Count: 1184
+Pitch Type: SL | ID: 592761 | Pitcher: Caleb Smith | Count: 631
+Pitch Type: CU | ID: 446372 | Pitcher: Corey Kluber | Count: 432
+Pitch Type: SI | ID: 458681 | Pitcher: Lance Lynn | Count: 501
+Pitch Type: CH | ID: 605400 | Pitcher: Aaron Nola | Count: 631
+Pitch Type: ST | ID: 518617 | Pitcher: Jake Diekman | Count: 355
+Pitch Type: KC | ID: 605400 | Pitcher: Aaron Nola | Count: 841
+Pitch Type: FC | ID: 579328 | Pitcher: Yusei Kikuchi | Count: 889
+Pitch Type: PO | ID: 548389 | Pitcher: Ross Stripling | Count: 2
+Pitch Type: FS | ID: 592773 | Pitcher: Ryne Stanek | Count: 291
+Pitch Type: CS | ID: 670950 | Pitcher: Trevor Richards | Count: 2

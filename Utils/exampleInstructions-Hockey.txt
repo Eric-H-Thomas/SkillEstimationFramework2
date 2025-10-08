@@ -1,0 +1,74 @@
+
+git pull
+
+
+1. Run: initHockey.py
+	This will create the initial folder structure needed:  "~/skill-estimation-framework/Experiments/ExpFolder/Data/"
+	ExpFolder will follow the format: "year-month-day". (Example: "2024-12-1")
+
+
+2. Place "heatmap_data.pkl" file under "~/skill-estimation-framework/Experiments/ExpFolder/Data/"
+
+
+3. python Environments/Hockey/getHeatmapsPerPlayer.py 2024-12-1
+
+
+4. python Environments/Hockey/getAngularHeatmapsPerPlayer.py 2024-12-1
+
+
+5. python Environments/Hockey/getStatsJson.py 2024-12-1
+
+
+6. python runExpHockey.py -id 949671 -type snapshot -maxRows 2 
+
+
+
+
+# Make heatmap plots (given & computed, same plot) for a given player & shot type - all data, varying player locations
+python Environments/Hockey/makePlotsAngularHeatmaps.py 2024-12-1 949671 snapshot
+
+
+# Make heatmap plots (given & computed, same plot) && plot EVs (for different xskills) - sample of data, just player location
+python Environments/Hockey/hockey.py 2024-12-1 949671 snapshot
+
+
+
+python Environments/Hockey/makePlotsFilteredShots.py 2024-12-1
+
+
+
+7. python Processing/makePlotsHockey.py 2024-12-1
+
+
+
+
+# FOR TESTING
+python Processing/makePlotsHockeyTestingBounded.py 949671 wristshot
+
+
+python Processing/makePlotsStudy5.py
+
+
+python Processing/compareData.py 2024-12-19 2025-1-7
+
+
+
+python Processing/plotParticles.py -resultsFolder Experiments/hockey-multi/2025-1-31/Experiment/ -file OnlineExp_Player_950148_TypeShot_wristshot_JEEDS_PFE_NEFF.results
+
+
+
+
+ python Testing/testDistributions.py
+
+
+
+python Testing/testPlotRink.py JEEDS\&JEEDSviaPFE-BoundedAgent
+
+
+
+python Processing/makePlotAllInfo.py JEEDS\&JEEDSviaPFE-BoundedAgent OnlineExp_Player_950148_TypeShot_wristshot_AgentBoundedAgent\|X0.7853981633974483\|X0.7853981633974483\|R0.0\|L0.001_JEEDS.results
+
+
+
+python Testing/testingUpdatePFE.py Players OnlineExp_Player_950148_TypeShot_wristshot_JEEDS_PFE_NEFF.results
+

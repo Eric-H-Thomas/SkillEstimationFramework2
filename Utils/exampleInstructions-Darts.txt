@@ -1,0 +1,47 @@
+python runExp.py -resultsFolder testing-SequentialDarts-GivenInfo -domain sequentialDarts
+
+python runExp.py -resultsFolder Experiments-RandomAgents-States1k-2D -domain 2d -iters 150 -numObservations 1000 -seed 10
+
+
+python Processing/processResultsDarts.py -resultsFolder Experiments/sequentialDarts/testing -domain sequentialDarts
+
+python Processing/makePlotsDarts.py -resultsFolder Experiments/1d/testing/ -domain 1d
+
+
+
+python Processing/getValueIterTimes.py
+
+
+python Processing/getTimesExps.py -resultsFolder Experiments/sequentialDarts/testing-RandomAgents-States1k/ -max 5
+
+
+python Processing/getAgentsStats.py -resultsFolder Experiments/1d/testing-States1k-15RFs/
+
+python Processing/getStatsReruns.py -resultsFolder Experiments/1d/testingRerun
+
+python Processing/mergeProcessedResults.py -prfsFolderAll Experiments/1d/testing-FullExps/ -prfsFolderSome Experiments/1d/testing-JustBM -domain 1d
+
+python Processing/getAgentsUsedOnExps.py -resultsFolder Experiments/sequentialDarts/testingSeeds-AllEstimators/
+
+
+python Processing/copyRFs.py -fromFolder Experiments/2d/test/ -toFolder Experiments/2d/mergeTest
+
+
+python Processing/removeExpsGivenAgentType.py -resultsFolder Experiments/2d/test/ -type Bounded
+
+
+python Processing/mergeOtherInfoFile.py -allFolder Experiments/2d/MergedResults/ -someFolder Experiments/2d/JustBounded/
+
+
+python Processing/getStatsProcessedAgents.py -resultsFolder Experiments/2d/MergedResults/ -domain 2d
+
+
+
+
+# FOR REPROCESSING JAIR EXPS
+# UPDATE PERCENT RATIONALITY
+
+python Processing/updatePercentRationalityProcessedFiles.py -resultsFolder Experiments/2d/JAIR23/2D-JustBounded-Reprocessed/ -domain 2d -mode rand_pos
+
+
+
