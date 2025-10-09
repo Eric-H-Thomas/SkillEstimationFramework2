@@ -17,6 +17,9 @@ This script implements the experiment described in the accompanying task:
 Running the script will create a CSV file with the underlying data and a
 scatter plot that visualizes absolute estimation error versus aiming
 optimality and true skill.
+
+Example:
+    python Testing/darts_aiming_jeeds_sensitivity.py --seed 7 --num-samples 150
 """
 
 from __future__ import annotations
@@ -45,6 +48,9 @@ def generate_reward_surface(
     state from the environment helper.
     """
 
+    # ``get_N_states`` returns a list of randomly drawn reward surfaces. Each
+    # surface is represented by the boundary locations of alternating reward
+    # regions. We request a single sample and unwrap it below.
     states = darts.get_N_states(rng, min_regions, max_regions, 1, min_width=min_width)
     if not states:
         raise RuntimeError("Failed to sample a reward surface from the darts environment.")
@@ -60,6 +66,10 @@ def simulate_executions(
 ) -> np.ndarray:
     """Generate noisy dart throws using the environment's sampling helper."""
 
+    # ``sample_action`` handles the wraparound board geometry and applies
+    # Gaussian execution noise whose standard deviation equals ``true_skill``.
+    # Repeating the call ``num_samples`` times produces an i.i.d. sample of
+    # noisy dart landings.
     return np.array(
         [darts.sample_action(rng, state, true_skill, aim) for _ in range(num_samples)],
         dtype=float,
@@ -73,6 +83,9 @@ def convolve_expected_values(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Convenience wrapper around the environment's convolution utility."""
 
+    # ``convolve_ev`` numerically integrates the reward surface under the
+    # wrapped Gaussian induced by ``skill``. It returns expected values and the
+    # action grid on which they were evaluated.
     evs, actions = darts.convolve_ev(None, state, skill, delta)
     return np.asarray(evs, dtype=float), np.asarray(actions, dtype=float)
 
@@ -84,6 +97,9 @@ def percent_optimality(
 ) -> float:
     """Compute the percent optimality of aiming at ``aim`` for the given EV surface."""
 
+    # ``actions`` is the grid of aims the EVs were computed on. Interpolating
+    # ensures that aims not exactly on the grid still receive a meaningful
+    # expected value estimate.
     ev_at_aim = float(np.interp(aim, actions, evs))
     ev_min = float(np.min(evs))
     ev_max = float(np.max(evs))
@@ -105,8 +121,12 @@ def log_likelihood_on_circle(samples: np.ndarray, aim: float, sigma: float) -> f
     if sigma <= 0:
         return -np.inf
 
+    # ``actionDiff`` finds the minimal signed distance on the circular dart
+    # board, effectively converting wrapped angles into linear deviations.
     diffs = np.array([darts.actionDiff(sample, aim) for sample in samples], dtype=float)
     var = sigma * sigma
+    # The log-likelihood decomposes into a normalization term and a quadratic
+    # form over the squared deviations.
     norm_const = -0.5 * len(diffs) * np.log(2.0 * np.pi * var)
     quad = -0.5 * np.sum(diffs * diffs) / var
     return float(norm_const + quad)
@@ -129,9 +149,12 @@ def jeeds_estimate_skill(
     best_log_like = -np.inf
 
     for skill in skill_grid:
+        # Construct the expected value landscape implied by the candidate skill.
         evs, actions = convolve_expected_values(state, skill, delta)
         aim_idx = int(np.argmax(evs))
         implied_aim = float(actions[aim_idx])
+        # Under the JEEDS assumption, the agent would choose the best aim for
+        # that skill; evaluate how well that assumption explains the data.
         log_like = log_likelihood_on_circle(samples, implied_aim, float(skill))
 
         if log_like > best_log_like:
@@ -145,27 +168,44 @@ def jeeds_estimate_skill(
 
 
 def run_experiment(args: argparse.Namespace) -> None:
+    # Use a dedicated RNG so repeated runs with the same seed are reproducible.
     rng = np.random.default_rng(args.seed)
 
+    # Draw a single random reward surface that remains fixed for the full
+    # experiment, ensuring comparability across different aim/skill combos.
     state = generate_reward_surface(rng, args.min_regions, args.max_regions, args.min_region_width)
 
+    # ``aims`` spans the possible target angles, ``true_skills`` enumerates the
+    # ground-truth execution noise levels we want to test, and
+    # ``candidate_skills`` defines the hypothesis space used by the JEEDS
+    # estimator.
     aims = np.linspace(-darts.m, darts.m, num=args.num_aim_points)
     true_skills = np.linspace(args.min_true_skill, args.max_true_skill, num=args.num_true_skills)
     candidate_skills = np.linspace(args.grid_min_skill, args.grid_max_skill, num=args.num_grid_skills)
 
+    # Each record stores (true skill, aim, percent optimality, estimated skill,
+    # absolute error). Keeping the raw data allows downstream analysis without
+    # re-running the simulation.
     records: List[Tuple[float, float, float, float, float]] = []
 
+    # Ensure the requested output directory exists before writing artifacts.
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for true_skill in true_skills:
+        # Pre-compute the EV surface under the true skill to avoid redundant
+        # convolutions inside the aiming loop.
         evs_true, actions_true = convolve_expected_values(state, true_skill, args.delta)
 
         for aim in aims:
             samples = simulate_executions(rng, state, true_skill, float(aim), args.num_samples)
 
+            # Measure how much value the chosen aim sacrifices relative to the
+            # optimal aim at this true skill level.
             percent = percent_optimality(float(aim), evs_true, actions_true)
 
+            # Infer execution skill under the JEEDS assumption that the agent
+            # always chooses the optimal aim for its skill level.
             estimated_skill = jeeds_estimate_skill(
                 samples,
                 state,
@@ -173,8 +213,10 @@ def run_experiment(args: argparse.Namespace) -> None:
                 args.delta,
             )
 
+            # Quantify deviation between JEEDS estimate and ground truth.
             abs_error = abs(estimated_skill - true_skill)
 
+            # Collect a row of results that will later be written to disk.
             records.append(
                 (
                     float(true_skill),
@@ -185,6 +227,8 @@ def run_experiment(args: argparse.Namespace) -> None:
                 )
             )
 
+    # Persist the numerical results for subsequent analysis in spreadsheets or
+    # notebooks.
     csv_path = output_dir / "jeeds_skill_vs_aim.csv"
     with csv_path.open("w", newline="") as handle:
         writer = csv.writer(handle)
@@ -195,14 +239,20 @@ def run_experiment(args: argparse.Namespace) -> None:
             "estimated_skill",
             "absolute_error",
         ])
+        # Dump all experiment rows in one go.
         writer.writerows(records)
 
-    # Prepare scatter plot
+    # Prepare scatter plot summarizing how estimation error varies with aim and
+    # true skill.
+    # Extract columns for plotting: aim optimality (x-axis), true skill (y-axis),
+    # and estimation error (colour map).
     percents = [record[2] for record in records]
     skills = [record[0] for record in records]
     errors = [record[4] for record in records]
 
     fig, ax = plt.subplots(figsize=(10, 6))
+    # Encode estimation error as colour so the plot simultaneously conveys how
+    # aim optimality and true skill interact to influence the JEEDS estimator.
     scatter = ax.scatter(percents, skills, c=errors, cmap="viridis", s=50)
     ax.set_xlabel("Percent optimality of chosen aim")
     ax.set_ylabel("True execution skill (sigma)")
@@ -211,19 +261,26 @@ def run_experiment(args: argparse.Namespace) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
 
     cbar = fig.colorbar(scatter, ax=ax)
+    # Annotate the colour bar so viewers can interpret estimation errors.
     cbar.set_label(r"Absolute error |$\hat{\sigma} - \sigma$|")
 
+    # Reduce whitespace and prevent label clipping in the saved figure.
     fig.tight_layout()
 
+    # Persist the visualization alongside the CSV for quick inspection.
     figure_path = output_dir / "jeeds_skill_vs_aim.png"
     fig.savefig(figure_path, dpi=300)
+    # Explicitly close the figure to free memory when running headless batches.
     plt.close(fig)
 
+    # Provide paths so users can quickly locate generated artifacts.
     print(f"Saved CSV results to {csv_path}")
     print(f"Saved visualization to {figure_path}")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    # Expose the key experiment knobs via the command line so the sensitivity
+    # analysis can be rerun with different configurations.
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument("--seed", type=int, default=12345, help="Random seed for reproducibility.")
@@ -296,6 +353,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    # Delegate to the core experiment runner once configuration is parsed.
     run_experiment(args)
 
 
