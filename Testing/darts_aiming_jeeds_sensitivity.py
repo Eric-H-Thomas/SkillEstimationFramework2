@@ -7,10 +7,11 @@ This script implements the experiment described in the accompanying task:
    always *intends* to hit that location. The agent's execution skill is
    modelled as Gaussian noise around the intended aim (using the domain's
    wrapping behaviour).
-3. Collect samples of noisy dart landings and estimate execution skill using a
-   simplified JEEDS procedure that assumes the agent is optimizing its aim for
-   every candidate skill level (i.e., the estimator does **not** know where the
-   agent is truly aiming).
+3. Collect samples of noisy dart landings and estimate execution skill using the
+   production JEEDS implementation (via the joint QRE estimator). Even though
+   the simulated agents always choose what they believe is the optimal action,
+   we still rely on the full JEEDS machinery so the sensitivity study mirrors
+   the behaviour seen elsewhere in the codebase.
 4. Compare the resulting skill estimates to ground truth as a function of the
    agent's true skill and the optimality of its chosen aim.
 
@@ -33,6 +34,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from Environments.Darts.RandomDarts import darts
+from Estimators.joint import JointMethodQRE
+from setupSpaces import SpacesRandomDarts
 
 
 def generate_reward_surface(
@@ -110,61 +113,67 @@ def percent_optimality(
     return (ev_at_aim - ev_min) / (ev_max - ev_min)
 
 
-def log_likelihood_on_circle(samples: np.ndarray, aim: float, sigma: float) -> float:
-    """Compute the log-likelihood for wrapped 1-D darts observations.
+def ensure_jeeds_logging_dirs(results_folder: str) -> None:
+    """Create the directories expected by the JEEDS implementation.
 
-    The darts board wraps from ``-m`` to ``m``. The helper ``actionDiff`` returns
-    the shortest signed distance on this circle, which lets us evaluate the
-    Gaussian likelihood as if everything were centred on zero.
+    The production estimator records timing data under ``Experiments/<folder>``.
+    When reusing the estimator in a standalone analysis we create the
+    directories up-front so the write calls succeed even though we do not
+    inspect the generated files.
     """
 
-    if sigma <= 0:
-        return -np.inf
-
-    # ``actionDiff`` finds the minimal signed distance on the circular dart
-    # board, effectively converting wrapped angles into linear deviations.
-    diffs = np.array([darts.actionDiff(sample, aim) for sample in samples], dtype=float)
-    var = sigma * sigma
-    # The log-likelihood decomposes into a normalization term and a quadratic
-    # form over the squared deviations.
-    norm_const = -0.5 * len(diffs) * np.log(2.0 * np.pi * var)
-    quad = -0.5 * np.sum(diffs * diffs) / var
-    return float(norm_const + quad)
+    base_path = Path("Experiments") / results_folder / "times" / "estimators"
+    base_path.mkdir(parents=True, exist_ok=True)
 
 
-def jeeds_estimate_skill(
+def create_jeeds_components(
+    candidate_skills: Iterable[float],
+    delta: float,
+    num_planning_skills: int,
+) -> Tuple[JointMethodQRE, SpacesRandomDarts]:
+    """Instantiate the JEEDS estimator and the supporting spaces object."""
+
+    spaces = SpacesRandomDarts(
+        numObservations=1,
+        domain=darts,
+        mode="",
+        delta=delta,
+    )
+    estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, darts.getDomainName())
+    return estimator, spaces
+
+
+def estimate_skill_with_jeeds(
+    rng: np.random.Generator,
     samples: np.ndarray,
     state: Sequence[float],
-    skill_grid: Iterable[float],
-    delta: float,
+    estimator: JointMethodQRE,
+    spaces: SpacesRandomDarts,
+    results_folder: str,
+    tag: str,
 ) -> float:
-    """Estimate execution skill using the JEEDS assumption about aiming.
+    """Run the official JEEDS estimator on the provided samples."""
 
-    For each candidate skill we assume the agent would choose the aim that
-    maximizes expected reward. We then evaluate the likelihood of the observed
-    samples under a wrapped Gaussian centred at that aim.
-    """
+    estimator.reset()
+    state_key = str(state)
+    for sample in samples:
+        estimator.addObservation(
+            rng,
+            spaces,
+            state,
+            float(sample),
+            resultsFolder=results_folder,
+            tag=tag,
+            s=state_key,
+        )
 
-    best_skill = None
-    best_log_like = -np.inf
+    results = estimator.getResults()
+    map_key = f"{estimator.methodType}-MAP-{estimator.numXskills}-{estimator.numPskills}-xSkills"
+    estimates = results.get(map_key, [])
+    if not estimates:
+        raise RuntimeError("JEEDS estimator returned no MAP execution skill estimate.")
 
-    for skill in skill_grid:
-        # Construct the expected value landscape implied by the candidate skill.
-        evs, actions = convolve_expected_values(state, skill, delta)
-        aim_idx = int(np.argmax(evs))
-        implied_aim = float(actions[aim_idx])
-        # Under the JEEDS assumption, the agent would choose the best aim for
-        # that skill; evaluate how well that assumption explains the data.
-        log_like = log_likelihood_on_circle(samples, implied_aim, float(skill))
-
-        if log_like > best_log_like:
-            best_log_like = log_like
-            best_skill = float(skill)
-
-    if best_skill is None:
-        raise RuntimeError("JEEDS estimation failed to evaluate any candidate skills.")
-
-    return best_skill
+    return float(estimates[-1])
 
 
 def run_experiment(args: argparse.Namespace) -> None:
@@ -173,7 +182,7 @@ def run_experiment(args: argparse.Namespace) -> None:
 
     # Draw a single random reward surface that remains fixed for the full
     # experiment, ensuring comparability across different aim/skill combos.
-    state = generate_reward_surface(rng, args.min_regions, args.max_regions, args.min_region_width)
+    state = list(generate_reward_surface(rng, args.min_regions, args.max_regions, args.min_region_width))
 
     # ``aims`` spans the possible target angles, ``true_skills`` enumerates the
     # ground-truth execution noise levels we want to test, and
@@ -182,6 +191,9 @@ def run_experiment(args: argparse.Namespace) -> None:
     aims = np.linspace(-darts.m, darts.m, num=args.num_aim_points)
     true_skills = np.linspace(args.min_true_skill, args.max_true_skill, num=args.num_true_skills)
     candidate_skills = np.linspace(args.grid_min_skill, args.grid_max_skill, num=args.num_grid_skills)
+
+    ensure_jeeds_logging_dirs(args.jeeds_results_folder)
+    jeeds_estimator, spaces = create_jeeds_components(candidate_skills, args.delta, args.num_planning_skills)
 
     # Each record stores (true skill, aim, percent optimality, estimated skill,
     # absolute error). Keeping the raw data allows downstream analysis without
@@ -204,13 +216,14 @@ def run_experiment(args: argparse.Namespace) -> None:
             # optimal aim at this true skill level.
             percent = percent_optimality(float(aim), evs_true, actions_true)
 
-            # Infer execution skill under the JEEDS assumption that the agent
-            # always chooses the optimal aim for its skill level.
-            estimated_skill = jeeds_estimate_skill(
+            estimated_skill = estimate_skill_with_jeeds(
+                rng,
                 samples,
                 state,
-                candidate_skills,
-                args.delta,
+                jeeds_estimator,
+                spaces,
+                args.jeeds_results_folder,
+                args.jeeds_time_tag,
             )
 
             # Quantify deviation between JEEDS estimate and ground truth.
@@ -306,6 +319,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Number of candidate skills for the JEEDS estimator.",
     )
     parser.add_argument(
+        "--num-planning-skills",
+        type=int,
+        default=33,
+        help="Number of planning-skill hypotheses passed to the JEEDS estimator.",
+    )
+    parser.add_argument(
         "--grid-min-skill",
         type=float,
         default=0.1,
@@ -346,6 +365,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=str,
         default="Testing/results",
         help="Directory where artifacts (CSV + plot) will be stored.",
+    )
+    parser.add_argument(
+        "--jeeds-results-folder",
+        type=str,
+        default="Testing/darts_aiming_jeeds_sensitivity",
+        help="Folder name (under Experiments/) used for JEEDS timing logs.",
+    )
+    parser.add_argument(
+        "--jeeds-time-tag",
+        type=str,
+        default="darts_aiming_jeeds_sensitivity",
+        help="Tag appended to JEEDS timing log filenames.",
     )
 
     return parser.parse_args(argv)
