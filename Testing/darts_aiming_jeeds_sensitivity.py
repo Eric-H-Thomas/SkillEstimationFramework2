@@ -89,7 +89,7 @@ def convolve_expected_values(
     # ``convolve_ev`` numerically integrates the reward surface under the
     # wrapped Gaussian induced by ``skill``. It returns expected values and the
     # action grid on which they were evaluated.
-    evs, actions = darts.convolve_ev(None, state, skill, delta)
+    evs, actions = darts.convolve_ev(state, skill, delta)
     return np.asarray(evs, dtype=float), np.asarray(actions, dtype=float)
 
 
