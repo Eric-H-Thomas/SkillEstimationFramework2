@@ -29,7 +29,7 @@ def main():
 
 	module = module2D_Multi
 
-	states = module.get_N_states(rng,numStates,mode)
+	states = module.generate_random_states(rng,numStates,mode)
 
 
 	resolution = 5.0
@@ -57,7 +57,7 @@ def main():
 			label = ""
 
 
-			v1 = module.get_v(s,target)
+			v1 = module.get_reward_for_action(s,target)
 			v2 = module.npscore(s,target[0],target[1])
 
 			print(f"\tTarget: {target} | V1: {v1} | V2: {v2}")
@@ -65,7 +65,7 @@ def main():
 
 			if v1 != v2:
 				label = "-NotMatching"
-				# module.get_v(s,target,True)
+				# module.get_reward_for_action(s,target,True)
 				code.interact("...", local=dict(globals(), **locals())) 
 
 

@@ -34,7 +34,7 @@ sys.modules["domain"] = sys.modules[__name__]
 
 
 
-def getDomainName():
+def get_domain_name():
 	return "hockey-multi"
 
 
@@ -57,7 +57,7 @@ def getCovMatrix(stdDevs,rho):
 	return covMatrix
 
 
-def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
+def draw_noise_sample(rng,mean=[0.0,0.0],X=0.0):
 
 	# X is squared already (x**2 = variance)
 	
@@ -74,11 +74,11 @@ def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
 	return N
 
 
-def sample_action(rng,mean,L,a,noiseModel=None):
+def sample_noisy_action(rng,mean,L,a,noiseModel=None):
 
 	# If noise model was not given, proceed to get it
 	if noiseModel == None:
-		N = getNoiseModel(mean,L**2)
+		N = draw_noise_sample(mean,L**2)
 	# Otherwise, use given noise model
 	else:
 		N = noiseModel
@@ -95,7 +95,7 @@ def sample_action(rng,mean,L,a,noiseModel=None):
 
 def getNormalDistribution(rng,covMatrix,resolution,mean,grid,saveAt=None,x=None):
 
-	N = getNoiseModel(rng,mean,covMatrix)
+	N = draw_noise_sample(rng,mean,covMatrix)
 	D = N.pdf(grid)
 
 	# df = 3

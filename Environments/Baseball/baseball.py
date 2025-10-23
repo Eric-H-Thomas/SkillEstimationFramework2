@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 
 
-def getDomainName():
+def get_domain_name():
 	return "baseball"
 
 
@@ -50,7 +50,7 @@ def plotBoard(info):
 	return ax,cmap,norm
 
 
-def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
+def draw_noise_sample(rng,mean=[0.0,0.0],X=0.0):
 
 	# X is squared already (x**2 = variance)
 	
@@ -65,11 +65,11 @@ def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
 	return N
 
 
-def sample_action(mean,L,a,noiseModel=None):
+def sample_noisy_action(mean,L,a,noiseModel=None):
 
 	# If noise model was not given, proceed to get it
 	if noiseModel == None:
-		N = getNoiseModel(mean,L**2)
+		N = draw_noise_sample(mean,L**2)
 	# Otherwise, use given noise model
 	else:
 		N = noiseModel
@@ -100,7 +100,7 @@ def getNormalDistribution(rng,covMatrix,resolution,X,Y):
 	# not quite center of strikezone
 
 
-	N = getNoiseModel(rng,mean,covMatrix)
+	N = draw_noise_sample(rng,mean,covMatrix)
 	
 	D = N.pdf(XYD)
 
@@ -134,7 +134,7 @@ def getSymmetricNormalDistribution(rng,XS,resolution,X,Y):
 
 
 	# XS**2 to get variance
-	N = getNoiseModel(rng,mean,XS**2)
+	N = draw_noise_sample(rng,mean,XS**2)
 	
 	for i in range(len(X)):
 		for j in range(len(Y)):
@@ -155,7 +155,7 @@ def getSymmetricNormalDistribution(rng,XS,resolution,X,Y):
 	return D
 
 
-def testHits(args):
+def simulate_board_hits(args):
 
 	numTries = 10000.0
 
@@ -207,7 +207,7 @@ def testHits(args):
 		xs = round(xs,4)
 		print(f"\txskill: {xs}")
 
-		N = getNoiseModel(xs**2)
+		N = draw_noise_sample(xs**2)
 
 		hits = 0.0
 
@@ -558,4 +558,4 @@ if __name__ == '__main__':
 	# main(args)
 
 
-	testHits(args)
+	simulate_board_hits(args)

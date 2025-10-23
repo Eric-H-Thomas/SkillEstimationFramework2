@@ -472,7 +472,7 @@ def pconf(rng,resultsFolder,domain,domainModule,spaceModule,mode,args,wrap=None)
 			args.resolution = 5.0
 
 			# Get the states to use for evaluation
-			states = domainModule.get_N_states(rng,numSamples,mode)
+			states = domainModule.generate_random_states(rng,numSamples,mode)
 
 			xskills = [5, 10, 30, 50, 70, 90, 110, 130, 150]
 			# xskills = np.linspace(2.5,150.5,num=33)

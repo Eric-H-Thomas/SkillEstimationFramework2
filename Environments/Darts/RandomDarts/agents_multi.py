@@ -31,7 +31,7 @@ class Agent():
 		self.convolutions_ts = []
 		self.convolutions_vs = []
 
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 
 		if "2d" in self.domainName or "hockey" in self.domainName:
 			self.mean = [0.0]*len(params['noise_level'])
@@ -47,7 +47,7 @@ class Agent():
 
 	def setNoiseModel(self,rng,domain,given):
 		self.covMatrix = domain.getCovMatrix(given[:-1],given[-1])
-		self.noiseModel = domain.getNoiseModel(rng,self.mean,self.covMatrix)
+		self.noiseModel = domain.draw_noise_sample(rng,self.mean,self.covMatrix)
 
 
 	def getInfoConvolutions(self):
@@ -324,7 +324,7 @@ class TrickerAgent(Agent):
 			# Find distances
 			for i in range(len(possibleTargetsX)):
 				eachPossibleTarget = [possibleTargetsX[i],possibleTargetsY[i]]
-				dist.append(domain.actionDiff(eachPossibleTarget,ts))
+				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
 
 
 		# Get the max distance
@@ -346,7 +346,7 @@ class TrickerAgent(Agent):
 		'''
 		import Environments.Darts.RandomDarts.two_d_darts_multi as domainModule
 		rng = np.random.default_rng(1000)
-		state = domainModule.get_N_states(rng,1,"normal")[0]
+		state = domainModule.generate_random_states(rng,1,"normal")[0]
 
 		fig = plt.figure()
 		ax = plt.gca()

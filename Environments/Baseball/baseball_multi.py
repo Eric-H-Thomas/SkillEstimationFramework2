@@ -28,7 +28,7 @@ from matplotlib.cm import ScalarMappable
 from time import perf_counter
 
 
-def getDomainName():
+def get_domain_name():
 	return "baseball-multi"
 
 
@@ -71,7 +71,7 @@ def getCovMatrix(stdDevs,rho):
 	# print(covMatrix)
 	return covMatrix
 
-def getNoiseModel(rng,mean,covMatrix):
+def draw_noise_sample(rng,mean,covMatrix):
 	
 	# Need to use rng.bit_generator._seed_seq.entropy instead of just rng to ensure same noises produced each time for given params 
 	if type(rng.bit_generator._seed_seq.entropy) == np.ndarray:
@@ -84,11 +84,11 @@ def getNoiseModel(rng,mean,covMatrix):
 	return N
 
 
-def sample_action(rng,mean,covMatrix,a,noiseModel=None):
+def sample_noisy_action(rng,mean,covMatrix,a,noiseModel=None):
 
 	# If noise model was not given, proceed to get it
 	if noiseModel == None:
-		N = getNoiseModel(rng,mean,covMatrix)
+		N = draw_noise_sample(rng,mean,covMatrix)
 	# Otherwise, use given noise model
 	else:
 		N = noiseModel
@@ -118,7 +118,7 @@ def getNormalDistribution(rng,covMatrix,resolution,X,Y):
 	# not quite center of strikezone
 
 
-	N = getNoiseModel(rng,mean,covMatrix)
+	N = draw_noise_sample(rng,mean,covMatrix)
 	
 	D = N.pdf(XYD)
 
@@ -140,7 +140,7 @@ def getNormalDistribution(rng,covMatrix,resolution,X,Y):
 	return D
 
 
-def testHits(args):
+def simulate_board_hits(args):
 
 	numTries = 10000.0
 
@@ -192,7 +192,7 @@ def testHits(args):
 		xs = round(xs,4)
 		print(f"\txskill: {xs}")
 
-		N = getNoiseModel(xs**2)
+		N = draw_noise_sample(xs**2)
 
 		hits = 0.0
 
@@ -543,4 +543,4 @@ if __name__ == '__main__':
 	# main(args)
 
 
-	testHits(args)
+	simulate_board_hits(args)

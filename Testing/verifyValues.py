@@ -505,7 +505,7 @@ def get_values(XS,resolution,curScore,values):
 	return X,Y,V
 
 
-def getNoiseModel(X):
+def draw_noise_sample(X):
 	N = scipy.stats.multivariate_normal(mean=[0.0,0.0],cov=X)
 	return N
 
@@ -524,7 +524,7 @@ def getSymmetricNormalDistributionAlt(XS,resolution):
 	D = []
 
 	# XS**2 to get variance
-	N = getNoiseModel(XS**2)
+	N = draw_noise_sample(XS**2)
 	
 	for i, a in enumerate(actions):
 		D.append(N.pdf([a[0],a[1]]))
@@ -625,7 +625,7 @@ def getSymmetricNormalDistribution(XS,resolution):
 	# D2 = np.zeros((len(defaultX2),len(defaultY2)))
 
 	# XS**2 to get variance
-	N = getNoiseModel(XS**2)
+	N = draw_noise_sample(XS**2)
 	
 	for i in range(len(defaultX1)):
 		for j in range(len(defaultY1)):

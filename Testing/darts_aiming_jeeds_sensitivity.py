@@ -51,10 +51,10 @@ def generate_reward_surface(
     state from the environment helper.
     """
 
-    # ``get_N_states`` returns a list of randomly drawn reward surfaces. Each
+    # ``generate_random_states`` returns a list of randomly drawn reward surfaces. Each
     # surface is represented by the boundary locations of alternating reward
     # regions. We request a single sample and unwrap it below.
-    states = darts.get_N_states(rng, min_regions, max_regions, 1, min_width=min_width)
+    states = darts.generate_random_states(rng, min_regions, max_regions, 1, min_width=min_width)
     if not states:
         raise RuntimeError("Failed to sample a reward surface from the darts environment.")
     return states[0]
@@ -69,12 +69,12 @@ def simulate_executions(
 ) -> np.ndarray:
     """Generate noisy dart throws using the environment's sampling helper."""
 
-    # ``sample_action`` handles the wraparound board geometry and applies
+    # ``sample_noisy_action`` handles the wraparound board geometry and applies
     # Gaussian execution noise whose standard deviation equals ``true_skill``.
     # Repeating the call ``num_samples`` times produces an i.i.d. sample of
     # noisy dart landings.
     return np.array(
-        [darts.sample_action(rng, state, true_skill, aim) for _ in range(num_samples)],
+        [darts.sample_noisy_action(rng, state, true_skill, aim) for _ in range(num_samples)],
         dtype=float,
     )
 
@@ -86,10 +86,10 @@ def convolve_expected_values(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Convenience wrapper around the environment's convolution utility."""
 
-    # ``convolve_ev`` numerically integrates the reward surface under the
+    # ``compute_expected_value_curve`` numerically integrates the reward surface under the
     # wrapped Gaussian induced by ``skill``. It returns expected values and the
     # action grid on which they were evaluated.
-    evs, actions = darts.convolve_ev(state, skill, delta)
+    evs, actions = darts.compute_expected_value_curve(state, skill, delta)
     return np.asarray(evs, dtype=float), np.asarray(actions, dtype=float)
 
 
@@ -139,7 +139,7 @@ def create_jeeds_components(
         mode="",
         delta=delta,
     )
-    estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, darts.getDomainName())
+    estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, darts.get_domain_name())
     return estimator, spaces
 
 

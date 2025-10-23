@@ -40,13 +40,13 @@ class Agent():
 			self.convolutions_ts_beliefX = []
 			self.convolutions_vs_beliefX = []
 
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 
 		if self.domainName == "1d":
-			self.noiseModel = None # domain.getNoiseModel(L)
+			self.noiseModel = None # domain.draw_noise_sample(L)
 
 		elif self.domainName == "2d":
-			self.noiseModel = domain.getNoiseModel(rng,params['noise_level']**2)
+			self.noiseModel = domain.draw_noise_sample(rng,params['noise_level']**2)
 
 	def getInfoConvolutions(self):
 
@@ -249,7 +249,7 @@ class TrickerAgent(Agent):
 			possibleTargets = listedTargets[possibleEvsIndexes]
 
 			for eachPossibleTarget in possibleTargets:
-				dist.append(domain.actionDiff(eachPossibleTarget,ts))
+				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
 
 		###############################################################################
 		elif self.domainName == "2d":
@@ -260,7 +260,7 @@ class TrickerAgent(Agent):
 			# Find distances
 			for i in range(len(possibleTargetsX)):
 				eachPossibleTarget = [possibleTargetsX[i],possibleTargetsY[i]]
-				dist.append(domain.actionDiff(eachPossibleTarget,ts))
+				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
 
 
 
@@ -581,7 +581,7 @@ class RandomAgent(Agent):
 
 			# sample each one of them K times
 			for a in possibleActions:
-				rewards.append(domain.sample_N(rng,S,self.params["noise_level"],self.params["num_samples"],a))
+				rewards.append(domain.estimate_value_with_samples(rng,S,self.params["noise_level"],self.params["num_samples"],a))
 
 
 		elif self.domainName == "2d":
@@ -619,8 +619,8 @@ class RandomAgent(Agent):
 				rs = []
 
 				for j in range(self.params["num_samples"]):
-					na = domain.sample_action(S, self.params["noise_level"], a, noiseModel = None)
-					rs.append(domain.get_v(S, na))
+					na = domain.sample_noisy_action(S, self.params["noise_level"], a, noiseModel = None)
+					rs.append(domain.get_reward_for_action(S, na))
 
 				rewards.append(sum(rs)/float(self.params["num_samples"]))
 

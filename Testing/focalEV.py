@@ -12,7 +12,7 @@ import random
 
 #File used to generate data/plots for the extended abstract plots
 
-def get_v(S,m,a):
+def get_reward_for_action(S,m,a):
 	low = True
 	for s in S:
 		if a < s:
@@ -24,7 +24,7 @@ def get_v(S,m,a):
 	else:
 		return 1.0
 
-def sample_action(S,m,L,a):
+def sample_noisy_action(S,m,L,a):
 	#Noisy action
 	# print 'Sampling 1 for ', a, L
 	na = np.random.normal(a,L)
@@ -45,29 +45,29 @@ def action_diff(a1,a2,m):
 
 	return d
 
-def sample_1(S,m,L,a):
+def sample_single_rollout(S,m,L,a):
 	#See where noisy action lands in S
-	return get_v(S,m,sample_action(S,m,L,a))
+	return get_reward_for_action(S,m,sample_noisy_action(S,m,L,a))
 
-def sample_N(S,m,L,NS,a):
+def estimate_value_with_samples(S,m,L,NS,a):
 	# print 'Sampling N for', a, L
 	tr = 0.0
 	for i in range(NS):
-		tr += sample_1(S,m,L,a)
+		tr += sample_single_rollout(S,m,L,a)
 	return tr / float(NS)
 
-def wrap_action(a,m):
+def wrap_action_within_bounds(a,m):
 	while a > m:
 		a = a - 2*m
 	while a < -m:
 		a = a + 2*m
 	return a
 
-def convolve_ev(S,m,L,a,delta=1e-3):
+def compute_expected_value_curve(S,m,L,a,delta=1e-3):
 	num_points = int(6*m/delta)
 	big_grid = np.linspace(-3*m,3*m,num_points)
 
-	state = [get_v(S,m,wrap_action(a,m)) for a in big_grid]
+	state = [get_reward_for_action(S,m,wrap_action_within_bounds(a,m)) for a in big_grid]
 
 	#Get convolver
 	err = stats.norm(loc=0,scale=L)
@@ -85,9 +85,9 @@ def convolve_ev(S,m,L,a,delta=1e-3):
 
 def target_strategy(S, m,ps):
 	L = ps['noise_level']
-	return get_target(m, S, L)
+	return get_optimal_action_and_value(m, S, L)
 
-def get_N_states(m,low,high,N):
+def generate_random_states(m,low,high,N):
 	states = []
 
 	for n in range(N):
@@ -122,9 +122,9 @@ def newEV(s, m, Xs, a, N, expNum):
 		#Sample the action N times: 
 		for n in range(N):
 			#Get sampled action
-			sa = sample_action(s,m,x,a)
+			sa = sample_noisy_action(s,m,x,a)
 			#Get corresponding value
-			v = get_v(s,m,sa)
+			v = get_reward_for_action(s,m,sa)
 			#Add those to our lists
 			As.append(sa)
 			Vs.append(v)
@@ -181,10 +181,10 @@ def online_experiment(xskills,numSamples,expNum,s):
 
 	for x in xskills:
 		#Get convolve EV
-		cv = convolve_ev(s,10,x,a)
+		cv = compute_expected_value_curve(s,10,x,a)
 		cEV.append(cv)
 		#Get sample ev
-		sv = sample_N(s,10,x,numSamples,a)
+		sv = estimate_value_with_samples(s,10,x,numSamples,a)
 		sEV.append(sv)
 
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
 	# Execution skills to compute EV for
 	xskills = np.linspace(0.25, 5.0, num_x)
 
-	states = get_N_states(10,2,4,num_experiments)
+	states = generate_random_states(10,2,4,num_experiments)
 	
 
 	results = {}

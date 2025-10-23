@@ -20,7 +20,7 @@ def getCovMatrix(stdDevs,rho):
 	return covMatrix
 
 
-def getNoiseModel(covMatrix,mean=[0.0,0.0]):
+def draw_noise_sample(covMatrix,mean=[0.0,0.0]):
 
 	# Need to use rng.bit_generator._seed_seq.entropy instead of just rng to ensure same noises produced each time for given params 
 	N = multivariate_normal(mean=mean,cov=covMatrix)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 		# print(f"\tXskill: ({xs[0]}, {xs[1]}, {rho})")
 
 
-		N = getNoiseModel(covMatrix)
+		N = draw_noise_sample(covMatrix)
 
 
 		hits = 0.0

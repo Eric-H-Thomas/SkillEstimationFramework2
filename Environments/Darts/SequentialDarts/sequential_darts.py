@@ -10,7 +10,7 @@ import code
 from scipy.stats import multivariate_normal
 from scipy.signal import fftconvolve
 
-def getDomainName():
+def get_domain_name():
 	return "sequentialDarts"
 
 def getPlayerStartScore():
@@ -162,7 +162,7 @@ def score(slices,action):
 	return 0.0, double
 
 
-def getNoiseModel(rng,X):
+def draw_noise_sample(rng,X):
 
 	# X is squared already (x**2 = variance)
 	
@@ -227,7 +227,7 @@ def getSymmetricNormalDistribution(XS,resolution):
 	D = np.zeros((len(X),len(Y)))
 
 	# XS**2 to get variance
-	N = getNoiseModel(XS**2)
+	N = draw_noise_sample(XS**2)
 	
 	for i in range(len(X)):
 		for j in range(len(Y)):
@@ -401,7 +401,7 @@ def convolveEV(slices,X,resolution,returnZn = False):
 	# Return only info about targets & EVs that are actually within the board
 	Xs,Ys,EVs = getInfoOnBoardOnly(Xs,Ys,EV)
 
-	#code.interact("convolve_ev(): ", local=dict(globals(), **locals())) 
+	#code.interact("compute_expected_value_curve(): ", local=dict(globals(), **locals())) 
 
 
 	# Returns pdfs as well, used on script for testing
@@ -416,7 +416,7 @@ def sampleAction(XS,action,noiseModel=None):
 
 	# If noise model was not given, proceed to get it
 	if noiseModel == None:
-		N = getNoiseModel(XS**2)
+		N = draw_noise_sample(XS**2)
 	# Otherwise, use given noise model
 	else:
 		N = noiseModel
@@ -427,11 +427,11 @@ def sampleAction(XS,action,noiseModel=None):
 	# Add noise to planned action (This creates the noisy action)
 	na = [action[0] + noise[0], action[1] + noise[1]]
 
-	# code.interact("sample_action", local=locals())
+	# code.interact("sample_noisy_action", local=locals())
 
 	return na
 
-def actionDiff(action1, action2):
+def calculate_wrapped_action_difference(action1, action2):
 
 	x1 = action1[0]
 	y1 = action1[1]

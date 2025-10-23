@@ -139,7 +139,7 @@ def run(infoPerRow,xskills,lambdas,delta,possibleTargets,agentFolder):
 		x = eachAgent[0]
 		p = eachAgent[1]
 
-		N = sys.modules["domain"].getNoiseModel(mean=[0.0,0.0],X=x**2)
+		N = sys.modules["domain"].draw_noise_sample(mean=[0.0,0.0],X=x**2)
 
 		print(f"Agent -> X: {x} P: {p}")
 

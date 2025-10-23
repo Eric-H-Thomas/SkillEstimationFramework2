@@ -234,7 +234,7 @@ def predict_surface(model, dataset, gamestate, game_id, db=None, x_bins=104, y_b
 			)
 	return out
 
-def getDomainName():
+def get_domain_name():
 	return "soccer"
 
 
@@ -245,16 +245,16 @@ def plotPitch(info):
 	return ax,cmap,norm
 
 
-def getNoiseModel(mean=[0.0,0.0],X=0.0):
+def draw_noise_sample(mean=[0.0,0.0],X=0.0):
 	# X is squared already (x**2 = variance)
 	N = multivariate_normal(mean=mean,cov=X)
 	return N
 
-def sample_action(mean,L,a,noiseModel=None):
+def sample_noisy_action(mean,L,a,noiseModel=None):
 
 	# If noise model was not given, proceed to get it
 	if noiseModel == None:
-		N = getNoiseModel(mean,L**2)
+		N = draw_noise_sample(mean,L**2)
 	# Otherwise, use given noise model
 	else:
 		N = noiseModel
@@ -277,7 +277,7 @@ def getSymmetricNormalDistribution(XS,resolution,X,Y):
 
 
 	# XS**2 to get variance
-	N = getNoiseModel(mean,XS**2)
+	N = draw_noise_sample(mean,XS**2)
 	
 	for i in range(len(X)):
 		for j in range(len(Y)):
@@ -296,7 +296,7 @@ def getSymmetricNormalDistribution(XS,resolution,X,Y):
 	return D
 
 
-def testHits():
+def simulate_board_hits():
 
 	numTries = 10000.0
 
@@ -338,7 +338,7 @@ def testHits():
 		xs = round(xs,4)
 		print(f"\txskill: {xs}")
 
-		N = getNoiseModel(xs**2)
+		N = draw_noise_sample(xs**2)
 
 		hits = 0.0
 
@@ -404,4 +404,4 @@ def testHits():
 
 if __name__ == '__main__':
 	
-	testHits()
+	simulate_board_hits()

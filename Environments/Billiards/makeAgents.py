@@ -14,7 +14,7 @@ class AgentGenerator():
 		# Are not created dynamically
 
 		self.domainModule = domainModule
-		self.domain = domainModule.getDomainName()
+		self.domain = domainModule.get_domain_name()
 		self.agentTypes = agentTypes
 
 		# Empty for now - might use later

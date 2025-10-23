@@ -354,17 +354,17 @@ class RandomDartsExp(Experiment):
 
 			# Add noise to action + get respective reward
 			if self.env.domainName == "2d-multi":
-				noisy_action = self.env.domain.sample_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
+				noisy_action = self.env.domain.sample_noisy_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
 			else:
-				noisy_action = self.env.domain.sample_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
+				noisy_action = self.env.domain.sample_noisy_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
 				
 
 			if self.env.domainName == "1d":
-				observed_reward = self.env.domain.get_v(self.rng,state,noisy_action)
+				observed_reward = self.env.domain.get_reward_for_action(self.rng,state,noisy_action)
 			else:
-				observed_reward = self.env.domain.get_v(state,noisy_action)
+				observed_reward = self.env.domain.get_reward_for_action(state,noisy_action)
 			
-			trueDiff = self.env.domain.actionDiff(noisy_action,action)
+			trueDiff = self.env.domain.calculate_wrapped_action_difference(noisy_action,action)
 
 			self.noisyActions.append(noisy_action)
 			self.observedRewards.append(observed_reward)
@@ -379,26 +379,26 @@ class RandomDartsExp(Experiment):
 			for j in range(20):		
 
 				if self.env.domainName == "2d-multi":
-					na = self.env.domain.sample_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
+					na = self.env.domain.sample_noisy_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
 				else:
-					na = self.env.domain.sample_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
+					na = self.env.domain.sample_noisy_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
 				
 				if self.env.domainName == "1d":
-					ob = self.env.domain.get_v(self.rng,state,na)
+					ob = self.env.domain.get_reward_for_action(self.rng,state,na)
 				else:
-					ob = self.env.domain.get_v(state,na)
+					ob = self.env.domain.get_reward_for_action(state,na)
 		
 				self.resampledRewards[i].append(ob)
 
 
 			#Expected Reward
-			#tt, exp_reward = get_target(state, xskill)
+			#tt, exp_reward = get_optimal_action_and_value(state, xskill)
 			#tt = agent.get_action(i)
 
 			if self.env.domainName == "1d":
-				exp_reward = self.env.domain.get_v(self.rng,state,action)
+				exp_reward = self.env.domain.get_reward_for_action(self.rng,state,action)
 			else:
-				exp_reward = self.env.domain.get_v(state,action)
+				exp_reward = self.env.domain.get_reward_for_action(state,action)
 			self.expectedRewards.append(exp_reward)
 
 
@@ -691,7 +691,7 @@ class SequentialDartsExp(Experiment):
 
 		# print(f"Intended Action: {action}")
 		# print(f"Noisy Action: {noisyAction}")
-		self.trueDiffs.append(self.env.domain.actionDiff(noisyAction,action))
+		self.trueDiffs.append(self.env.domain.calculate_wrapped_action_difference(noisyAction,action))
 
 		# Save info
 		self.intendedActions.append(action)
@@ -2612,7 +2612,7 @@ class HockeyExp(Experiment):
 
 
 					# Add noise to action + get respective reward
-					noisy_action = self.env.domain.sample_action(self.rng,None,None,action,self.agentBounded.noiseModel)
+					noisy_action = self.env.domain.sample_noisy_action(self.rng,None,None,action,self.agentBounded.noiseModel)
 					# print("noisy action: ", noisy_action)
 
 					self.noisyActions.append(noisy_action)
@@ -2864,7 +2864,7 @@ class HockeyExp(Experiment):
 					# code.interact("...", local=dict(globals(), **locals()))
 
 					# Add noise to action + get respective reward
-					noisy_action = self.env.domain.sample_action(self.rng,None,None,action,self.agentBounded.noiseModel)
+					noisy_action = self.env.domain.sample_noisy_action(self.rng,None,None,action,self.agentBounded.noiseModel)
 					# print("noisy action: ", noisy_action)
 
 					self.noisyActions.append(noisy_action)

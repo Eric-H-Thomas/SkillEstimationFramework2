@@ -99,7 +99,7 @@ class Environment():
 
 
 		self.domain = domainModule																																																																													
-		self.domainName = self.domain.getDomainName()
+		self.domainName = self.domain.get_domain_name()
 		self.delta = args.delta
 		self.resultsFolder = args.resultsFolder
 
@@ -419,16 +419,16 @@ class Environment():
 
 		if self.domainName == "1d":
 			# Create the states
-			self.states = self.domain.get_N_states(rng,3,10,self.numObservations,0.0)
+			self.states = self.domain.generate_random_states(rng,3,10,self.numObservations,0.0)
 
 			# Create states with fewer regions
-			# states = get_N_states(1,2,self.numObservations,1.0)
+			# states = generate_random_states(1,2,self.numObservations,1.0)
 
 		elif self.domainName in ["2d","2d-multi"]:
 			# States will be list of slices
 			# If mode is normal, slices will be always the same
 			# Slices will vary for any other mode
-			self.states = self.domain.get_N_states(rng,self.numObservations,self.mode)
+			self.states = self.domain.generate_random_states(rng,self.numObservations,self.mode)
 
 
 	def resetEnv(self):
