@@ -7,12 +7,17 @@ from matplotlib import colors as mcolors
 import matplotlib
 import itertools
 import sys
-import time 
+import time
 import os
 import code
 from matplotlib.cm import ScalarMappable
 
 """One-dimensional darts environment utilities."""
+
+# The imports above pull in numerical routines, plotting helpers, and
+# general-purpose utilities used throughout the darts environment module.  They
+# enable deterministic sampling, statistical analysis, and comprehensive
+# visualization of the simulated games.
 
 # This module defines the 1D darts environment and helper utilities for the
 # broader skill estimation framework. Several other modules import values from
@@ -22,12 +27,20 @@ BOARD_LIMIT = 10
 # ``m`` is kept for compatibility with older code that accesses ``darts.m``
 # directly. Prefer ``BOARD_LIMIT`` within this module for clarity.
 m = BOARD_LIMIT
+
+# ``BOARD_LIMIT`` defines the half-width of the 1D dart board.  All actions are
+# considered modulo this limit so that players wrap around the board instead of
+# leaving the playing area.
  
 def get_domain_name():
     """Return the identifier used by the framework for this domain."""
 
     return "1d"
 
+
+# The noise model encapsulates the execution error of agents on the board.  It
+# is modeled as zero-mean Gaussian noise parameterized by the ``noise_std_dev``
+# argument supplied to the helper below.
 def draw_noise_sample(rng, noise_std_dev):
     """Sample a single noise value for an executed throw."""
 
@@ -38,13 +51,23 @@ def plot_states_with_agent_details(states, game_summaries, results_folder):
 
     colors = dict(mcolors.BASE_COLORS, **mcolors.CSS4_COLORS)
     color_cycle = list(colors.keys())
+    # We reuse matplotlib's built-in color dictionaries so that each agent gets
+    # a unique and consistent color across plots.
 
+    # ``states`` contains the list of reward boundaries for each evaluated
+    # configuration, whereas ``game_summaries`` bundles precomputed arrays of
+    # agent choices and results.  The function iterates through every state and
+    # overlays each agent's behavior on top of the reward landscape.
     for state_index in range(len(states)):
         figure = plt.figure()
         axis = plt.subplot(111)
 
         plot_reward_profile(states[state_index])
 
+        # ``game_summaries`` is expected to have entries of the form
+        # (agent_name, chosen_actions, achieved_rewards, ...).  The markers make
+        # it easy to compare intended decisions, actual outcomes, and empirical
+        # averages for each agent.
         for agent_index in range(len(game_summaries)):
             agent_name = game_summaries[agent_index][0].split("-X")[0].split("Agent")[0]
             agent_name_parts = game_summaries[agent_index][0].split("-")
@@ -143,6 +166,9 @@ def get_reward_for_action(rng, state_boundaries, action):
 
     is_low_region = True
     for boundary in state_boundaries:
+        # Because the boundary list is sorted, we can iterate until we find the
+        # first boundary that exceeds the action.  Each boundary toggles between
+        # the low and high reward regions.
         if action < boundary:
             break
         is_low_region = not is_low_region
@@ -154,6 +180,9 @@ def find_state_interval(state_boundaries, action):
 
     for index in range(len(state_boundaries)):
         if index != len(state_boundaries) - 1:
+            # We compare the action with consecutive boundaries to identify the
+            # interval in which it lies.  The returned tuple can then be used to
+            # access or update region-specific data structures.
             if action >= float(state_boundaries[index]) and action <= float(state_boundaries[index + 1]):
                 return index, index + 1
 
@@ -170,9 +199,14 @@ def is_action_within_interval(state_boundaries, action, left_index, right_index)
         return True
 
     if left_index == -BOARD_LIMIT:
+        # Negative indices may be represented with the sentinel ``-BOARD_LIMIT``
+        # to indicate the leftmost wrap-around segment.  We handle these
+        # separately to avoid index errors.
         return action >= -BOARD_LIMIT and action <= float(state_boundaries[right_index])
 
     if right_index == BOARD_LIMIT:
+        # Similarly, ``BOARD_LIMIT`` as the right index captures the final
+        # segment that wraps back to the start of the board.
         return action >= float(state_boundaries[left_index]) and action <= BOARD_LIMIT
 
     return False
@@ -182,6 +216,9 @@ def calculate_random_reward(state_boundaries):
 
     total_success_width = 0.0
     for index in range(0, len(state_boundaries), 2):
+        # Success regions occupy even/odd index pairs.  Summing their widths and
+        # dividing by the total board length yields the probability of hitting a
+        # reward when aiming completely at random.
         total_success_width += abs(state_boundaries[index] - state_boundaries[index + 1])
 
     board_width = 2 * BOARD_LIMIT
@@ -191,8 +228,11 @@ def wrap_action_within_bounds(action):
     """Wrap an action so it remains within the circular dart board."""
 
     while action > BOARD_LIMIT:
+        # If the action over-shoots the right edge we subtract full board widths
+        # until it lands back within the playable interval.
         action = action - 2 * BOARD_LIMIT
     while action < -BOARD_LIMIT:
+        # Likewise for actions that travel too far to the left.
         action = action + 2 * BOARD_LIMIT
     return action
 
@@ -200,8 +240,12 @@ def sample_noisy_action(rng, state_boundaries, noise_std_dev, action, noise_mode
     """Return the executed action after applying Gaussian execution noise."""
 
     if noise_model is None:
+        # Agents typically have Gaussian execution error, so we draw a fresh
+        # noise sample when a custom model is not provided.
         noise = draw_noise_sample(rng, noise_std_dev)
     else:
+        # ``noise_model`` can be supplied directly to bypass sampling, which is
+        # useful for deterministic tests.
         noise = noise_model
 
     noisy_action = action + noise
@@ -215,6 +259,7 @@ def calculate_wrapped_action_difference(action_1, action_2):
 
     difference = action_1 - action_2
     if difference > BOARD_LIMIT:
+        # Normalize the difference to remain within [-BOARD_LIMIT, BOARD_LIMIT].
         difference -= 2 * BOARD_LIMIT
     if difference < -BOARD_LIMIT:
         difference += 2 * BOARD_LIMIT
@@ -225,6 +270,8 @@ def sample_single_rollout(rng, state_boundaries, noise_std_dev, action):
     """Sample the reward obtained by executing ``action`` once."""
 
     noisy_action = sample_noisy_action(rng, state_boundaries, noise_std_dev, action)
+    # The returned reward is binary, representing whether the noisy action falls
+    # inside a winning region.
     return get_reward_for_action(rng, state_boundaries, noisy_action)
 
 
@@ -233,6 +280,8 @@ def estimate_value_with_samples(rng, state_boundaries, noise_std_dev, num_sample
 
     total_reward = 0.0
     for _ in range(num_samples):
+        # Averaging repeated rollouts converges to the true expected value as the
+        # number of samples grows.
         total_reward += sample_single_rollout(rng, state_boundaries, noise_std_dev, action)
     return total_reward / float(num_samples)
 
@@ -247,14 +296,23 @@ def compute_expected_value_curve(state_boundaries, noise_std_dev, delta=1e-2):
         for action in action_grid
     ]
 
+    # ``error_distribution`` models the execution noise as a continuous normal
+    # distribution.  We discretize it into a probability mass function aligned
+    # with ``action_grid`` so that we can convolve it with the discrete reward
+    # profile.
     error_distribution = stats.norm(loc=0, scale=noise_std_dev)
     error_pmf = error_distribution.pdf(action_grid) * delta
 
+    # Convolution applies the noise kernel to the deterministic state values to
+    # obtain the expected reward for each possible aiming location.
     convolved_values = np.convolve(state_values, error_pmf, 'same')
 
     left = int(num_points / 3)
     right = int(2 * left)
 
+    # Only the middle third of the convolution corresponds to actions within
+    # [-BOARD_LIMIT, BOARD_LIMIT]; the rest is discarded because it represents
+    # wrap-around padding.
     return convolved_values[left:right], action_grid[left:right]
 
 def generate_random_states(rng, low, high, count, min_width=0.0):
@@ -272,6 +330,8 @@ def generate_random_states(rng, low, high, count, min_width=0.0):
             candidate = rng.uniform(-BOARD_LIMIT, BOARD_LIMIT)
             valid_point = True
             for boundary in boundaries:
+                # Enforce a minimum distance between boundaries so that regions
+                # do not collapse into zero-width segments.
                 if abs(candidate - boundary) < min_width:
                     valid_point = False
                     break
@@ -284,10 +344,16 @@ def generate_random_states(rng, low, high, count, min_width=0.0):
 
     return _states
 
+# The helper functions below expose commonly used workflows to other modules.
+# They are organized roughly from low-level reward queries to higher-level
+# evaluation utilities.
+
 def get_optimal_action_and_value(rng, state_boundaries, noise_std_dev, resolution):
     """Return the action that maximizes expected reward and its value."""
 
     expected_values, actions = compute_expected_value_curve(state_boundaries, noise_std_dev, resolution)
+    # ``np.argmax`` returns the index of the highest expected value, which we
+    # use to look up both the optimal action and its corresponding reward.
     best_index = np.argmax(expected_values)
     return actions[best_index], expected_values[best_index]
 
@@ -314,6 +380,8 @@ def verify_expected_value_convolution(rng, xskills, state_boundaries):
         reward_sum = 0.0
         num_rollouts = 10_000
         for _ in range(num_rollouts):
+            # Sample repeated rollouts at the apparent best action to ensure the
+            # convolution-based EV curve matches empirical averages.
             noisy_action = sample_noisy_action(rng, state_boundaries, noise_std_dev, best_action)
             reward = get_reward_for_action(rng, state_boundaries, noisy_action)
             reward_sum += reward
@@ -334,8 +402,11 @@ def simulate_board_hits(rng, xskills, state_boundaries, num_trials, aim=""):
         expected_values, actions = compute_expected_value_curve(state_boundaries, noise_std_dev)
 
         if aim == "optimal":
+            # ``optimal`` aiming chooses the argmax of the expected value curve
+            # for each skill level.
             best_action = actions[np.argmax(expected_values)]
         else:
+            # Otherwise we default to aiming at the center of the board.
             best_action = 0.0
 
         hits = 0.0
@@ -344,6 +415,9 @@ def simulate_board_hits(rng, xskills, state_boundaries, num_trials, aim=""):
             noisy_action = sample_noisy_action(rng, state_boundaries, noise_std_dev, best_action)
 
             if not (noisy_action < -BOARD_LIMIT or noisy_action > BOARD_LIMIT):
+                # ``hits`` counts how often the noisy action lands back on the
+                # board.  Points that wrap around are still considered valid
+                # because ``sample_noisy_action`` performs the wrapping above.
                 hits += 1.0
 
         percent_hit = (hits / num_trials) * 100.0
@@ -357,6 +431,9 @@ def simulate_board_hits(rng, xskills, state_boundaries, num_trials, aim=""):
 # ---------------------------------------------------------------------------
 # Backwards compatibility aliases
 # ---------------------------------------------------------------------------
+# Several legacy modules import helpers using their historical camelCase names.
+# To preserve those integrations we expose aliases that reference the modern
+# snake_case implementations defined above.
 getDomainName = get_domain_name
 getNoiseModel = draw_noise_sample
 plot_state_allInfo = plot_states_with_agent_details
@@ -382,6 +459,10 @@ testHits = simulate_board_hits
 
 if __name__ == '__main__':
 
+    # The following section serves as an exploratory playground for generating
+    # plots, sampling random board configurations, and manually inspecting the
+    # environment dynamics.  It is not executed during normal package use but
+    # remains helpful for research workflows and interactive debugging.
     ##################################################
     # PARAMETERS FOR PLOTS
     ##################################################
@@ -399,13 +480,18 @@ if __name__ == '__main__':
     # seed = np.random.randint(0,1000000,1)
     seed = 10
     rng = np.random.default_rng(seed)
+    # ``rng`` is reused for every random draw so that the experiments can be
+    # reproduced when the seed is fixed.
 
     folder = f"Environments{os.sep}Darts{os.sep}RandomDarts{os.sep}"
-    
+
     if not os.path.exists(folder):
+        # Create the base output folder used to store figures.
         os.mkdir(folder)
 
     if not os.path.exists(folder+"Plots-States"):
+        # Subdirectories group figures by type so that batch runs remain
+        # organized.
         os.mkdir(folder+"Plots-States")
 
     if not os.path.exists(folder+f"Plots-States{os.sep}Wrap"):
@@ -414,6 +500,8 @@ if __name__ == '__main__':
 
     # xskills = np.round(np.linspace(0.5,4.5,num=5),4)
     xskills = np.round(np.linspace(0.5,20.0,num=10),4)
+    # ``xskills`` represents different execution variances to evaluate.  Higher
+    # numbers correspond to less precise agents.
 
     colors = ["tab:orange","tab:green","tab:red","tab:purple","tab:pink"]
     colors += ["tab:brown","tab:gray","tab:olive","tab:cyan","b"]
@@ -422,6 +510,8 @@ if __name__ == '__main__':
     num_states = 5
 
     states = generate_random_states(rng, 3, 5, num_states, 0.5)
+    # ``states`` now holds several randomly generated board layouts that can be
+    # iterated over to produce diagnostic plots.
 
     num_trials = 10_000
 
@@ -431,8 +521,11 @@ if __name__ == '__main__':
         hit_percentages = simulate_board_hits(rng, xskills, states[state_index], num_trials, aim="optimal")
         hit_percentages = simulate_board_hits(rng, xskills, states[state_index], num_trials, aim="middle")
 
-    
+
     code.interact("...", local=dict(globals(), **locals()))
+    # Dropping into an interactive session allows the researcher to inspect the
+    # generated data structures, tweak parameters, and re-run snippets without
+    # leaving the script.
 
 
     for noise_std_dev in xskills:
@@ -455,6 +548,9 @@ if __name__ == '__main__':
         print(f"avg: {average_reward} | EV: {expected_values[best_index]}")
 
         code.interact("...", local=dict(globals(), **locals()))
+        # The repeated ``code.interact`` calls are intentional: after each skill
+        # level is processed the user can pause, examine the computed metrics,
+        # and potentially adjust the flow before moving to the next iteration.
 
 
 
