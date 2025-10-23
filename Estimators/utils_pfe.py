@@ -7,7 +7,7 @@ from scipy.stats import multivariate_normal
 from Estimators.utils import *
 
 
-def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
+def draw_noise_sample(rng,mean=[0.0,0.0],X=0.0):
 
 	# X is squared already (x**2 = variance)
 	
@@ -39,7 +39,7 @@ def getNormalDistribution(rng,covMatrix,resolution,X,Y):
 	# not quite center of strikezone
 
 
-	N = getNoiseModel(rng,mean,covMatrix)
+	N = draw_noise_sample(rng,mean,covMatrix)
 	
 	D = N.pdf(XYD)
 

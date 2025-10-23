@@ -11,7 +11,7 @@ class AgentGenerator():
 	def __init__(self,domainModule,ids=[],types=[]):
 
 		self.domainModule = domainModule
-		self.domain = domainModule.getDomainName()
+		self.domain = domainModule.get_domain_name()
 
 		# Empty for now - might use later
 		self.xSkillsBeliefs = []

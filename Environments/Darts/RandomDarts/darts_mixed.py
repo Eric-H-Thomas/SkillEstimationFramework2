@@ -16,17 +16,17 @@ import code
 #It also has utilities to help agents in the domain
 m = 10
  
-def getDomainName():
+def get_domain_name():
     return "1d"
 
-def getNoiseModel(rng,L):
+def draw_noise_sample(rng,L):
 
     N = rng.normal(0.0,L)
     #print N.cov
 
     return N
 
-def plot_state_allInfo(states,gameInfo,results_folder,wrap):
+def plot_states_with_agent_details(states,gameInfo,results_folder,wrap):
 
     # gameInfo -> agent | intended actions | expected_rewards | noisy actions | rewards | resampled_rewards
 
@@ -41,7 +41,7 @@ def plot_state_allInfo(states,gameInfo,results_folder,wrap):
         fig = plt.figure()
         ax = plt.subplot(111)
 
-        plot_state(states[each])
+        plot_reward_profile(states[each])
 
         for a in range(len(gameInfo)): 
 
@@ -58,7 +58,7 @@ def plot_state_allInfo(states,gameInfo,results_folder,wrap):
             plt.plot(gameInfo[a][3][each], gameInfo[a][4][each], linestyle = 'None', marker = "P", color = colors[a])
             plt.plot(gameInfo[a][3][each], np.mean(gameInfo[a][5][each]), linestyle = 'None', marker = "*", color = colors[a])
 
-        plot_ev(states[each],float(noise),color = "k",wrap=wrap)
+        plot_expected_values(states[each],float(noise),color = "k",wrap=wrap)
 
         # Shrink current axis by 10%
         box = ax.get_position()
@@ -76,7 +76,7 @@ def plot_state_allInfo(states,gameInfo,results_folder,wrap):
         plt.clf()
         plt.close(fig)
 
-def plot_state(S,color="black"):
+def plot_reward_profile(S,color="black"):
     #Plot the underlying state
     #Get X and Y points
     low = True
@@ -97,7 +97,7 @@ def plot_state(S,color="black"):
     Y.extend([0.0,0.0])
     plt.plot(X,Y,label = "Reward", color = color)
 
-def getRewardsForPlot(S):
+def get_rewards_for_plot(S):
         
     evs = []
 
@@ -125,17 +125,17 @@ def getRewardsForPlot(S):
 
     return evs
 
-def plot_ev(S,L,color='r',label=None,wrap=True):
+def plot_expected_values(S,L,color='r',label=None,wrap=True):
     #Plot the actual expected value for each action in the space
     #using noise level L and NS number of monte-carlo samples for estimating the value
-    EV, A = convolve_ev(S,L,wrap=wrap)
+    EV, A = compute_expected_value_curve(S,L,wrap=wrap)
 
     if label is not None:
         plt.plot(A,EV,color,label=label)
     else:
         plt.plot(A,EV,color)
 
-def get_v(S,a,wrap=True):
+def get_reward_for_action(S,a,wrap=True):
     ''' Returns the value of a given state ''' 
     
     if not wrap:
@@ -155,7 +155,7 @@ def get_v(S,a,wrap=True):
     else:
         return 1.0
 
-def findRegion(S,a):
+def find_state_interval(S,a):
     ''' Returns the index of region (state interval) that contains the given action ''' 
     
     for each in range(len(S)):
@@ -172,7 +172,7 @@ def findRegion(S,a):
     elif a >= float(S[len(S)-1]) and a <= m:
         return len(S)-1, m
     
-def checkIfActionInRegion(S,a,l,r):
+def is_action_within_interval(S,a,l,r):
 
     # somewhere in the middle
     if a >= float(S[l]) and a <= float(S[r]):
@@ -193,7 +193,7 @@ def checkIfActionInRegion(S,a,l,r):
         else:
             return False
 
-def get_rand_reward(S):
+def calculate_random_reward(S):
     
     lenR = 0
 
@@ -210,20 +210,20 @@ def get_rand_reward(S):
 
     return rand_reward
 
-def wrap_action(a):
+def wrap_action_within_bounds(a):
     while a > m:
         a = a - 2*m
     while a < -m:
         a = a + 2*m
     return a
 
-def sample_action(rng,S,L,a,noiseModel=None,wrap=True):
+def sample_noisy_action(rng,S,L,a,noiseModel=None,wrap=True):
     # Noisy action
     # print 'Sampling 1 for ', a, L
 
     # If noise model was not given, proceed to get it
     if noiseModel == None:
-        noise = getNoiseModel(rng,L)
+        noise = draw_noise_sample(rng,L)
     # Otherwise, use given noise model
     else:
         noise = noiseModel
@@ -231,11 +231,11 @@ def sample_action(rng,S,L,a,noiseModel=None,wrap=True):
     na = a + noise
 
     if wrap:
-        na = wrap_action(na)
+        na = wrap_action_within_bounds(na)
 
     return na
 
-def actionDiff(a1,a2,wrap=True):
+def calculate_wrapped_action_difference(a1,a2,wrap=True):
     d = a1 - a2
 
     if wrap:
@@ -246,27 +246,27 @@ def actionDiff(a1,a2,wrap=True):
 
     return d
 
-def sample_1(rng,S,L,a,wrap):
+def sample_single_rollout(rng,S,L,a,wrap):
     # See where noisy action lands in S
-    return get_v(S,sample_action(rng,S,L,a,None,wrap),wrap)
+    return get_reward_for_action(S,sample_noisy_action(rng,S,L,a,None,wrap),wrap)
 
-def sample_N(rng,S,L,NS,a,wrap):
+def estimate_value_with_samples(rng,S,L,NS,a,wrap):
     # print 'Sampling N for', a, L
     tr = 0.0
     for i in range(NS):
-        tr += sample_1(rng,S,L,a,wrap)
+        tr += sample_single_rollout(rng,S,L,a,wrap)
     return tr / float(NS)
 
 # Current version
-def convolve_ev(S,L,delta=1e-2,wrap=True):
+def compute_expected_value_curve(S,L,delta=1e-2,wrap=True):
     # Get representation of function
     num_points = int(6*m/delta)
     big_grid = np.linspace(-3*m,3*m,num_points)
 
     if wrap:
-        state = [get_v(S,wrap_action(a),wrap) for a in big_grid]
+        state = [get_reward_for_action(S,wrap_action_within_bounds(a),wrap) for a in big_grid]
     else:   
-        state = [get_v(S,a,wrap) for a in big_grid]
+        state = [get_reward_for_action(S,a,wrap) for a in big_grid]
 
     # Get convolver
     err = stats.norm(loc=0,scale=L)
@@ -279,7 +279,7 @@ def convolve_ev(S,L,delta=1e-2,wrap=True):
 
     return conv_pmf[left:right], big_grid[left:right]
 
-def get_N_states(rng,low,high,N,min_width=0.0):
+def generate_random_states(rng,low,high,N,min_width=0.0):
     states = []
 
     for n in range(N):
@@ -307,11 +307,11 @@ def get_N_states(rng,low,high,N,min_width=0.0):
 
     return states
 
-def get_target(S,L,delta,wrap=True): 
+def get_optimal_action_and_value(S,L,delta,wrap=True): 
     ''' Get the target for a given state and xskill level '''   
 
     # Do convolution with resolution of "delta"
-    va, a = convolve_ev(S,L,delta,wrap)
+    va, a = compute_expected_value_curve(S,L,delta,wrap)
 
     # Get the index of the target with the given (max) value
     i = np.argmax(va)
@@ -319,10 +319,10 @@ def get_target(S,L,delta,wrap=True):
     # return target that will give max ev and the actual ev
     return a[i], va[i]
 
-def get_all_targets(S,L,delta,wrap=True):
+def get_expected_values_and_optimal_action(S,L,delta,wrap=True):
 
     # Do convolution with resolution of "delta"
-    va, a = convolve_ev(S,L,delta,wrap)
+    va, a = compute_expected_value_curve(S,L,delta,wrap)
 
     # Get the index of the target with the given (max) value
     i = np.argmax(va)
@@ -369,7 +369,7 @@ if __name__ == '__main__':
 
     numStates = 20
 
-    states = get_N_states(rng,3,5,numStates,0.5)
+    states = generate_random_states(rng,3,5,numStates,0.5)
 
     for i in range(numStates):
 
@@ -378,7 +378,7 @@ if __name__ == '__main__':
         ax = plt.gca()
         #ax = plt.subplot2grid((5,2), (0, 0))
 
-        plot_state(states[i], color = "tab:blue")
+        plot_reward_profile(states[i], color = "tab:blue")
 
         plt.margins(0.10) 
         ax.autoscale(True)
@@ -386,7 +386,7 @@ if __name__ == '__main__':
         plt.ylim(-0.1,1.1)
 
         for j in range(len(xskills)):
-            plot_ev(states[i],xskills[j],color=colors[j],label=xskills[j],wrap=wrap)
+            plot_expected_values(states[i],xskills[j],color=colors[j],label=xskills[j],wrap=wrap)
 
 
         plt.legend()
@@ -403,7 +403,7 @@ if __name__ == '__main__':
         from plotly import graph_objs as go
         import plotly as py
 
-        rewards = getRewardsForPlot(states[i])
+        rewards = get_rewards_for_plot(states[i])
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -428,7 +428,7 @@ if __name__ == '__main__':
 
 
 
-        rewards = getRewardsForPlot(states[i])
+        rewards = get_rewards_for_plot(states[i])
         # print(rewards)
 
         colors = ["w"]

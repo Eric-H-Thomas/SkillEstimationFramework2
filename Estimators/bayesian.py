@@ -101,7 +101,7 @@ class BayesianMethod():
 					
 					diffs = []
 					for efc in spaces.focalActions[str(otherArgs["s"])]:
-						diffs.append(domain.actionDiff(action,efc))
+						diffs.append(domain.calculate_wrapped_action_difference(action,efc))
 
 					size = len(diffs)
 					pdfs = scipy.stats.norm.pdf(diffs,loc=0,scale=x)

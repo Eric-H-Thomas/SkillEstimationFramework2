@@ -34,7 +34,7 @@ class Spaces():
 	def __init__(self,numObservations,domain,mode,delta):
 
 		self.domain = domain
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 		self.mode = mode
 		self.delta = delta
 
@@ -348,20 +348,20 @@ class SpacesRandomDarts(Spaces):
 		tt = time.perf_counter()
 
 		if self.domainName == "1d":
-			all_vs,ts,vs = self.domain.get_all_targets(rng,state,info,self.delta)
+			all_vs,ts,vs = self.domain.get_expected_values_and_optimal_action(rng,state,info,self.delta)
 			
 		elif self.domainName == "2d":
 			if returnZn:
-				all_vs,ts,vs,onBoardEVs,Zn = self.domain.get_all_targets(rng,state,info,self.delta,returnZn)
+				all_vs,ts,vs,onBoardEVs,Zn = self.domain.get_expected_values_and_optimal_action(rng,state,info,self.delta,returnZn)
 			else:
-				all_vs,ts,vs,onBoardEVs = self.domain.get_all_targets(rng,state,info,self.delta,returnZn)
+				all_vs,ts,vs,onBoardEVs = self.domain.get_expected_values_and_optimal_action(rng,state,info,self.delta,returnZn)
 		elif self.domainName == "2d-multi":
 			if returnZn:
-				all_vs,ts,vs,onBoardEVs,Zn = self.domain.get_all_targets(rng,state,info["mean"],info["covMatrix"],self.delta,returnZn)
+				all_vs,ts,vs,onBoardEVs,Zn = self.domain.get_expected_values_and_optimal_action(rng,state,info["mean"],info["covMatrix"],self.delta,returnZn)
 			else:
-				all_vs,ts,vs,onBoardEVs = self.domain.get_all_targets(rng,state,info["mean"],info["covMatrix"],self.delta,returnZn)
+				all_vs,ts,vs,onBoardEVs = self.domain.get_expected_values_and_optimal_action(rng,state,info["mean"],info["covMatrix"],self.delta,returnZn)
 
-		# print(f"Total time for get_all_targets: {time.perf_counter()-tt:.4f}")
+		# print(f"Total time for get_expected_values_and_optimal_action: {time.perf_counter()-tt:.4f}")
 		# print()
 
 		tempDict = {}

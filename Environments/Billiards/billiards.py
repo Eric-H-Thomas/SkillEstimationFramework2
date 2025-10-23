@@ -13,7 +13,7 @@ import json
 from Environments.Billiards.utilsBilliards import *
 
 
-def getDomainName():
+def get_domain_name():
 	return "billiards"
 	
 

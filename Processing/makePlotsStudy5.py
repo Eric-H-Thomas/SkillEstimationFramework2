@@ -35,7 +35,7 @@ def getCovMatrix(stdDevs,rho):
 	return covMatrix
 
 
-def getNoiseModel(rng,mean,covMatrix):
+def draw_noise_sample(rng,mean,covMatrix):
 	
 	# Need to use rng.bit_generator._seed_seq.entropy instead of just rng to ensure same noises produced each time for given params 
 	if type(rng.bit_generator._seed_seq.entropy) == np.ndarray:
@@ -100,7 +100,7 @@ def getPlots(numTries,xSkills,rhos):
 
 
 			covMatrix = getCovMatrix([xs,xs],rho)
-			N = getNoiseModel(rng,mean,covMatrix)
+			N = draw_noise_sample(rng,mean,covMatrix)
 
 
 			hits = 0

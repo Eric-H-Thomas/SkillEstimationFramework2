@@ -428,35 +428,6 @@ def simulate_board_hits(rng, xskills, state_boundaries, num_trials, aim=""):
     return hit_percentages
 
 
-# ---------------------------------------------------------------------------
-# Backwards compatibility aliases
-# ---------------------------------------------------------------------------
-# Several legacy modules import helpers using their historical camelCase names.
-# To preserve those integrations we expose aliases that reference the modern
-# snake_case implementations defined above.
-getDomainName = get_domain_name
-getNoiseModel = draw_noise_sample
-plot_state_allInfo = plot_states_with_agent_details
-plot_state = plot_reward_profile
-getRewardsForPlot = get_rewards_for_plot
-plot_ev = plot_expected_values
-get_v = get_reward_for_action
-findRegion = find_state_interval
-checkIfActionInRegion = is_action_within_interval
-get_rand_reward = calculate_random_reward
-wrap_action = wrap_action_within_bounds
-sample_action = sample_noisy_action
-actionDiff = calculate_wrapped_action_difference
-sample_1 = sample_single_rollout
-sample_N = estimate_value_with_samples
-convolve_ev = compute_expected_value_curve
-get_N_states = generate_random_states
-get_target = get_optimal_action_and_value
-get_all_targets = get_expected_values_and_optimal_action
-verifyConvolveEV = verify_expected_value_convolution
-testHits = simulate_board_hits
-
-
 if __name__ == '__main__':
 
     # The following section serves as an exploratory playground for generating

@@ -30,7 +30,7 @@ def getAngle(point1,point2):
 	return angle
 
 
-def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
+def draw_noise_sample(rng,mean=[0.0,0.0],X=0.0):
 
 	# X is squared already (x**2 = variance)
 	
@@ -47,7 +47,7 @@ def getNoiseModel(rng,mean=[0.0,0.0],X=0.0):
 	return N
 
 
-def testHits(folder):
+def simulate_board_hits(folder):
 
 	numTries = 10000.0
 
@@ -111,7 +111,7 @@ def testHits(folder):
 		xs = round(xs,4)
 		print(f"\txskill: {xs}")
 
-		N = getNoiseModel(rng,mean,xs**2)
+		N = draw_noise_sample(rng,mean,xs**2)
 
 		# D = N.pdf(grid)
 		# D /= np.sum(D)
@@ -349,7 +349,7 @@ if __name__ == '__main__':
 		pickle.dump(data,outfile)
 	# '''
 
-	# testHits(folder)
+	# simulate_board_hits(folder)
 
 
 	# code.interact("...", local=dict(globals(), **locals()))

@@ -27,7 +27,7 @@ class StateActionValueSpace():
 		self.resolution = delta
 		self.x = x
 
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 
 
 		# If mode == normal, list will have same state (normal board) * numObservations
@@ -57,7 +57,7 @@ class StateActionValueSpace():
 		self.valueIterFolder = valueIterFolder
 
 
-		toLoad = f"{valueIterFolder}ValueFunc-Domain{domain.getDomainName()}-Resolution{self.resolution}-Xskill{x:.4f}"
+		toLoad = f"{valueIterFolder}ValueFunc-Domain{domain.get_domain_name()}-Resolution{self.resolution}-Xskill{x:.4f}"
 
 		# Load file containing learned value function for xskill, if it exists already
 		if os.path.exists(toLoad):
@@ -311,7 +311,7 @@ class StateActionValueSpace():
 		if closestFound:
 			print(f"Initializing values to (previously learned) values of closest xskill {closestXskill}")
 			
-			toLoad = f"{self.valueIterFolder}ValueFunc-Domain{domain.getDomainName()}-Resolution{self.resolution}-Xskill{closestXskill:.4f}"
+			toLoad = f"{self.valueIterFolder}ValueFunc-Domain{domain.get_domain_name()}-Resolution{self.resolution}-Xskill{closestXskill:.4f}"
 			
 			ok = False
 
@@ -793,7 +793,7 @@ class StateActionSpaceBilliards():
 		self.agent = agent
 		self.x = x
 
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 
 		Shot.shot_list = []
 

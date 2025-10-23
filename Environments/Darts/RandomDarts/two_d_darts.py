@@ -10,10 +10,10 @@ import code
 from scipy.stats import multivariate_normal
 from scipy.signal import fftconvolve
 
-def getDomainName():
+def get_domain_name():
     return "2d"
 
-def getNoiseModel(rng,X):
+def draw_noise_sample(rng,X):
 
     # X is squared already (x**2 = variance)
 
@@ -52,7 +52,7 @@ def get_scores(slices,resolution):
     '''
     S = []
     for each in XYS:
-        S.append(get_v(slices,[each[0],each[1]]))
+        S.append(get_reward_for_action(slices,[each[0],each[1]]))
     '''
 
     # code.interact("get_scores(): ", local=dict(globals(), **locals())) 
@@ -67,7 +67,7 @@ def get_scoresPREV(slices,resolution):
     for i in range(len(X)):
         for j in range(len(Y)):
             action = [X[i],Y[j]]
-            # S[i,j] = get_v(slices,action)
+            # S[i,j] = get_reward_for_action(slices,action)
             S[i,j] = npscore(slices,action[0],action[1])
 
     # code.interact("get_scores(): ", local=dict(globals(), **locals())) 
@@ -95,7 +95,7 @@ def get_symmetric_normal_distribution(rng,XS,resolution):
         # print("Setting global XYD")
 
 
-    N = getNoiseModel(rng,XS**2)
+    N = draw_noise_sample(rng,XS**2)
     
 
     D = N.pdf(XYD)
@@ -120,7 +120,7 @@ def get_symmetric_normal_distributionPREV(rng,XS,resolution):
     Y = np.arange(-340.0, 341.0, resolution)
     D = np.zeros((len(X), len(Y)))
 
-    N = getNoiseModel(rng,XS**2)
+    N = draw_noise_sample(rng,XS**2)
     
     for i in range(len(X)):
         for j in range(len(Y)):
@@ -271,7 +271,7 @@ def getInfoOnBoardOnlyPREV(X,Xs,Ys,EV):
     return positionsOnBoardX, positionsOnBoardY, evsPositionsOnBoard
 
 
-def convolve_ev(rng,slices,X,resolution,returnZn=False):
+def compute_expected_value_curve(rng,slices,X,resolution,returnZn=False):
 
     # tt = perf_counter()
     XYn,Zn = get_symmetric_normal_distribution(rng,X,resolution)
@@ -307,7 +307,7 @@ def convolve_ev(rng,slices,X,resolution,returnZn=False):
     # plt.scatter(onBoardXs,onBoardYs,c=onBoardEVs)
     # plt.show()
 
-    # code.interact("convolve_ev(): ", local=dict(globals(), **locals())) 
+    # code.interact("compute_expected_value_curve(): ", local=dict(globals(), **locals())) 
 
 
     # Returns pdfs as well, used on script for testing
@@ -318,7 +318,7 @@ def convolve_ev(rng,slices,X,resolution,returnZn=False):
         return XYs,EVs,onBoardEVs
 
 
-def convolve_evPREV(rng,slices, X, resolution, returnZn = False):
+def compute_expected_value_curve_prev(rng,slices, X, resolution, returnZn = False):
 
     Xn,Yn,Zn = get_symmetric_normal_distribution(rng,X,resolution)
 
@@ -342,7 +342,7 @@ def convolve_evPREV(rng,slices, X, resolution, returnZn = False):
     # plt.scatter(onBoardXs,onBoardYs,c=onBoardEVs)
     # plt.show()
 
-    # code.interact("convolve_ev(): ", local=dict(globals(), **locals())) 
+    # code.interact("compute_expected_value_curve(): ", local=dict(globals(), **locals())) 
 
 
     # Returns pdfs as well, used on script for testing
@@ -352,7 +352,7 @@ def convolve_evPREV(rng,slices, X, resolution, returnZn = False):
     else:
         return Xs,Ys,EVs,onBoardEVs
 
-def get_N_states(rng,N,mode):
+def generate_random_states(rng,N,mode):
     states = []
 
     # For each state
@@ -395,16 +395,16 @@ def get_N_states(rng,N,mode):
     return states
 
 
-def get_target(rng,S,X,resolution,returnZn=False): 
+def get_optimal_action_and_value(rng,S,X,resolution,returnZn=False): 
     ''' Get the target for a given xskill level and resolution '''   
 
     if returnZn:
-        Xn, Yn, EV, onBoardEVs, Zn = convolve_ev(rng,S,X,resolution,returnZn)
+        Xn, Yn, EV, onBoardEVs, Zn = compute_expected_value_curve(rng,S,X,resolution,returnZn)
     else:
-        Xn, Yn, EV, onBoardEVs = convolve_ev(rng,S,X,resolution,returnZn)
+        Xn, Yn, EV, onBoardEVs = compute_expected_value_curve(rng,S,X,resolution,returnZn)
 
     
-    #code.interact("get_target(): ", local=dict(globals(), **locals())) 
+    #code.interact("get_optimal_action_and_value(): ", local=dict(globals(), **locals())) 
 
 
     #Get maximum of EV
@@ -423,14 +423,14 @@ def get_target(rng,S,X,resolution,returnZn=False):
         return [mx, my], EV[mi]
  
 
-def get_all_targets(rng,S,X,resolution,returnZn=False): 
+def get_expected_values_and_optimal_action(rng,S,X,resolution,returnZn=False): 
     ''' Get all the targets for a given xskill level and resolution
         as well as the one with the max EV '''
 
     if returnZn:
-        XY, EV, onBoardEVs, Zn = convolve_ev(rng,S,X,resolution,returnZn)
+        XY, EV, onBoardEVs, Zn = compute_expected_value_curve(rng,S,X,resolution,returnZn)
     else:
-        XY, EV, onBoardEVs = convolve_ev(rng,S,X,resolution,returnZn)
+        XY, EV, onBoardEVs = compute_expected_value_curve(rng,S,X,resolution,returnZn)
 
 
     #Get maximum of EV
@@ -451,14 +451,14 @@ def get_all_targets(rng,S,X,resolution,returnZn=False):
     else:
         return EV,ts,EV[mi],onBoardEVs
 
-def get_all_targetsPREV(rng,S,X,resolution,returnZn=False): 
+def get_expected_values_and_optimal_action_prev(rng,S,X,resolution,returnZn=False):
     ''' Get all the targets for a given xskill level and resolution
         as well as the one with the max EV '''
 
     if returnZn:
-        Xn, Yn, EV, onBoardEVs, Zn = convolve_ev(rng,S,X,resolution,returnZn)
+        Xn, Yn, EV, onBoardEVs, Zn = compute_expected_value_curve(rng,S,X,resolution,returnZn)
     else:
-        Xn, Yn, EV, onBoardEVs = convolve_ev(rng,S,X,resolution,returnZn)
+        Xn, Yn, EV, onBoardEVs = compute_expected_value_curve(rng,S,X,resolution,returnZn)
 
 
     #Get maximum of EV
@@ -490,7 +490,7 @@ def wrap_angle_360(angle):
     return angle
 
 # Previously "score()"
-def get_v(slices,action,testing=False):
+def get_reward_for_action(slices,action,testing=False):
     """ 
     Return the score for location (x,y) on the dartboard. 
     Units are mm    
@@ -606,11 +606,11 @@ def npscore(slices,x,y,return_doub=False):
     return ans 
 
 
-def sample_action(rng,S,X,a,noiseModel=None):
+def sample_noisy_action(rng,S,X,a,noiseModel=None):
 
     # If noise model was not given, proceed to get it
     if noiseModel == None:
-        N = getNoiseModel(rng,X**2)
+        N = draw_noise_sample(rng,X**2)
     # Otherwise, use given noise model
     else:
         N = noiseModel
@@ -622,12 +622,12 @@ def sample_action(rng,S,X,a,noiseModel=None):
     # Add noise to planned action (This creates the noisy action)
     na = [a[0]+noise[0],a[1]+noise[1]]
 
-    # code.interact("sample_action() ", local=dict(globals(), **locals()))
+    # code.interact("sample_noisy_action() ", local=dict(globals(), **locals()))
 
 
     return na
 
-def actionDiff(action1,action2):
+def calculate_wrapped_action_difference(action1,action2):
 
     x1 = action1[0]
     y1 = action1[1]
@@ -708,7 +708,7 @@ def label_regions(slices,color="black"):
     plt.text(0,0,str(slices[0]),fontsize=12,horizontalalignment='center', color = color)
 
 
-def testHits(numTries):
+def simulate_board_hits(numTries):
 
     # Representation of a state (0 since the state is the same every time)
     S = 0
@@ -745,14 +745,14 @@ def testHits(numTries):
 
             action = [x, y]
 
-            nx, ny = sample_action(S, xs, action)
+            nx, ny = sample_noisy_action(S, xs, action)
             noisyAction = [nx, ny]
 
             '''
-            print("\t\tsample_action(): ")
+            print("\t\tsample_noisy_action(): ")
             print("\t\tnx: ", nx)
             print("\t\tny: ", ny)
-            print("\t\tscore: ", get_v(S, noisyAction))
+            print("\t\tscore: ", get_reward_for_action(S, noisyAction))
             print("\n")
             '''
 
@@ -805,7 +805,7 @@ def drawBoardWithEVsForDiffXskillsAndResolutions():
     rng = np.random.default_rng(np.random.randint(0,1000))
     
     # Representation of a state (0 since the state is the same every time)
-    S = get_N_states(rng,numStates,mode)
+    S = generate_random_states(rng,numStates,mode)
 
     # xSkills = [1.0, 5.0, 26.9, 64.6, 100.0]
     # xSkills = [30.928]
@@ -828,28 +828,28 @@ def drawBoardWithEVsForDiffXskillsAndResolutions():
                 state = S[s]
                 print("slices main: ", state)
 
-                # all_ts, EV, xy, ev, Zn = get_all_targets(rng,S,xs,res, returnZn = True)
-                EV, xy, ev, onBoardEVs = get_all_targets(rng,state,xs,res)
+                # all_ts, EV, xy, ev, Zn = get_expected_values_and_optimal_action(rng,S,xs,res, returnZn = True)
+                EV, xy, ev, onBoardEVs = get_expected_values_and_optimal_action(rng,state,xs,res)
 
                 '''
-                print "\t\tget_target(): "
+                print "\t\tget_optimal_action_and_value(): "
                 print "\t\tx: ", xy[0]
                 print "\t\ty: ", xy[1]
                 print "\t\tev: ", ev
-                print "\t\tscore: ", get_v(S, [xy[0],xy[1]])
+                print "\t\tscore: ", get_reward_for_action(S, [xy[0],xy[1]])
                 print "\n"
                 '''
 
                 targets_x.append(xy[0])
                 targets_y.append(xy[1])
 
-                nx, ny = sample_action(rng,S, xs,[xy[0],xy[1]])
+                nx, ny = sample_noisy_action(rng,S, xs,[xy[0],xy[1]])
 
                 '''
-                print "\t\tsample_action(): "
+                print "\t\tsample_noisy_action(): "
                 print "\t\tnx: ", nx
                 print "\t\tny: ", ny
-                print "\t\tscore: ", get_v(S, [nx,ny])
+                print "\t\tscore: ", get_reward_for_action(S, [nx,ny])
                 print "\n"
                 '''
 
@@ -897,7 +897,7 @@ if __name__ == "__main__":
     exit()
     numTries = 10_000
 
-    xSkills, allPercentHits = testHits(numTries)
+    xSkills, allPercentHits = simulate_board_hits(numTries)
 
 
 

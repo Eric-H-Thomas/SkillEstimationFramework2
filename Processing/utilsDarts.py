@@ -496,7 +496,7 @@ def pconf(rng,resultsFolder,domain,domainModule,spaceModule,mode,args,wrap):
 				args.resolution = 1e-1
 
 				# Get the states to use for evaluation
-				states = domainModule.get_N_states(rng,3,10,numSamples)
+				states = domainModule.generate_random_states(rng,3,10,numSamples)
 
 			else: # 2D
 
@@ -513,7 +513,7 @@ def pconf(rng,resultsFolder,domain,domainModule,spaceModule,mode,args,wrap):
 				args.resolution = 5.0
 
 				# Get the states to use for evaluation
-				states = domainModule.get_N_states(rng,numSamples,args.mode)
+				states = domainModule.generate_random_states(rng,numSamples,args.mode)
 
 		elif domain == "sequentialDarts":
 			

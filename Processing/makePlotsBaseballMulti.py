@@ -945,7 +945,7 @@ def plotDistribution():
 							info2 = f"X: {estX} | R: {estR}"
 
 
-						distrEst = sys.modules["domain"].getNoiseModel(rng,mean=[0.0,0.0],covMatrix=estimatedCovMatrix)
+						distrEst = sys.modules["domain"].draw_noise_sample(rng,mean=[0.0,0.0],covMatrix=estimatedCovMatrix)
 
 						pdfEst = sys.modules["domain"].getNormalDistribution(rng,estimatedCovMatrix,delta,spaces.targetsPlateXFeet,spaces.targetsPlateZFeet)
 

@@ -998,8 +998,8 @@ def plotDistribution(givenProcessedRFsAgentNames,metric):
 
 					rng = np.random.default_rng(np.random.randint(1,1000000000))
 
-					distrTrue = domainModule.getNoiseModel(rng,mean=[0.0,0.0],covMatrix=trueCovMatrix)
-					distrEst = domainModule.getNoiseModel(rng,mean=[0.0,0.0],covMatrix=estimatedCovMatrix)
+					distrTrue = domainModule.draw_noise_sample(rng,mean=[0.0,0.0],covMatrix=trueCovMatrix)
+					distrEst = domainModule.draw_noise_sample(rng,mean=[0.0,0.0],covMatrix=estimatedCovMatrix)
 
 					
 					XYD,pdfTrue = domainModule.get_symmetric_normal_distribution(rng,[0.0,0.0],trueCovMatrix,delta)

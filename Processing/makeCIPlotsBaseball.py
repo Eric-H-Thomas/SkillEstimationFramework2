@@ -198,7 +198,7 @@ def getCIsMinMaxXskill(minX,maxX):
 		for s in range(numSamples):
 
 			mean = [0.0,0.0]
-			executedActions.append(sys.modules["domain"].sample_action(mean,x,middleAction))
+			executedActions.append(sys.modules["domain"].sample_noisy_action(mean,x,middleAction))
 
 		executedActions = np.asarray(executedActions)
 
@@ -434,7 +434,7 @@ def getBoardPlotsAndCI(pitcherID,pitchType,saveAt,numSamples=1000):
 
 				mean = [0.0,0.0]
 				# mean = maxUtilityAction
-				executedActions.append(sys.modules["domain"].sample_action(mean,x,action))
+				executedActions.append(sys.modules["domain"].sample_noisy_action(mean,x,action))
 
 			executedActions = np.asarray(executedActions)
 

@@ -21,7 +21,7 @@ class AgentGenerator():
 	def __init__(self,domainModule,agentTypes,**infoParams):
 
 		self.domain = domainModule
-		self.domainName = self.domain.getDomainName()
+		self.domainName = self.domain.get_domain_name()
 		self.agentTypes = agentTypes
 		
 		self.xSkillsGiven = infoParams["xSkillsGiven"]

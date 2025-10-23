@@ -178,7 +178,7 @@ def wrap_angle_360(angle):
 		angle -= 360
 	return angle
 
-def actionDiff(a1,a2):
+def calculate_wrapped_action_difference(a1,a2):
 	return abs(wrap_angle_180(a1-a2))
 
 
@@ -191,7 +191,7 @@ def getClosest(listP,p):
 	diffList = []
 	
 	for each in listP:
-		diff = actionDiff(p,each)
+		diff = calculate_wrapped_action_difference(p,each)
 		diffList.append(diff)
 
 	#Find the min on the list, get the index its position and return the value at that position

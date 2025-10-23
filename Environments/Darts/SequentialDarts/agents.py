@@ -19,9 +19,9 @@ class Agent():
 		self.name = name
 		self.params = params
 
-		self.domainName = domain.getDomainName()
+		self.domainName = domain.get_domain_name()
 
-		self.noiseModel = domain.getNoiseModel(params['noise_level']**2)
+		self.noiseModel = domain.draw_noise_sample(params['noise_level']**2)
 
 		self.trueRewards = []
 
@@ -244,7 +244,7 @@ class TrickerAgent(Agent):
 
 		# Find distances
 		for ti in possibleTargets:
-			dist.append(domain.actionDiff(ti,ts))
+			dist.append(domain.calculate_wrapped_action_difference(ti,ts))
 
 
 		# get the max distance
@@ -504,8 +504,8 @@ class RandomAgent(Agent):
 			rs = []
 
 			for j in range(self.params["num_samples"]):
-				na = domain.sample_action(S, self.params["noise_level"], a, noiseModel = None)
-				rs.append(domain.get_v(S, na))
+				na = domain.sample_noisy_action(S, self.params["noise_level"], a, noiseModel = None)
+				rs.append(domain.get_reward_for_action(S, na))
 
 			rewards.append(sum(rs)/float(self.params["num_samples"]))
 
