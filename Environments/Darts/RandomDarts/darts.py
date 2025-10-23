@@ -209,6 +209,7 @@ def sample_noisy_action(rng, state_boundaries, noise_std_dev, action, noise_mode
 
     return noisy_action
 
+# Note: the actions passed into this function are assumed to already lie in [-BOARD_LIMIT, BOARD_LIMIT]
 def calculate_wrapped_action_difference(action_1, action_2):
     """Return the difference between two actions on the wrapped board."""
 
@@ -259,7 +260,7 @@ def compute_expected_value_curve(state_boundaries, noise_std_dev, delta=1e-2):
 def generate_random_states(rng, low, high, count, min_width=0.0):
     """Generate ``count`` random dart board states."""
 
-    states = []
+    _states = []
 
     for _ in range(count):
         num_regions = rng.integers(low, high) * 2
@@ -279,9 +280,9 @@ def generate_random_states(rng, low, high, count, min_width=0.0):
                 region_count += 1
 
         boundaries = np.sort(boundaries)
-        states.append(boundaries.tolist())
+        _states.append(boundaries.tolist())
 
-    return states
+    return _states
 
 def get_optimal_action_and_value(rng, state_boundaries, noise_std_dev, resolution):
     """Return the action that maximizes expected reward and its value."""

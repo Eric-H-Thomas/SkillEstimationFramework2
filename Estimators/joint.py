@@ -232,7 +232,7 @@ class JointMethodFlip():
 	
 		return results
 
-
+# Note: JEEDS is the same thing as JointMethodQRE
 class JointMethodQRE():
 
 	slots = ["xskills","numXskills","numPskills","domainName","names",

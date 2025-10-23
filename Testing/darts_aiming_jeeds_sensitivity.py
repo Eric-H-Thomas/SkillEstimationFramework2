@@ -1,11 +1,11 @@
-"""Explore how JEEDS skill estimates react to sub-optimal aiming choices.
+"""Explore how JEEDS skill estimates react to suboptimal aiming choices.
 
 This script implements the experiment described in the accompanying task:
 
 1. Generate a single 1-D darts reward surface.
 2. For every potential aiming location on a fixed grid, simulate an agent that
    always *intends* to hit that location. The agent's execution skill is
-   modelled as Gaussian noise around the intended aim (using the domain's
+   modeled as Gaussian noise around the intended aim (using the domain's
    wrapping behaviour).
 3. Collect samples of noisy dart landings and estimate execution skill using the
    production JEEDS implementation (via the joint QRE estimator). Even though
