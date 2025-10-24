@@ -248,8 +248,12 @@ class TrickerAgent(Agent):
 
 			possibleTargets = listedTargets[possibleEvsIndexes]
 
+			diff_fn = getattr(domain, "calculate_wrapped_action_difference", None)
+			if diff_fn is None:
+				diff_fn = getattr(domain, "calculate_action_difference")
+
 			for eachPossibleTarget in possibleTargets:
-				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
+				dist.append(diff_fn(eachPossibleTarget, ts))
 
 		###############################################################################
 		elif self.domainName == "2d":
@@ -258,9 +262,13 @@ class TrickerAgent(Agent):
 			possibleTargetsY = listedTargets[:,1][possibleEvsIndexes]
 
 			# Find distances
+			diff_fn = getattr(domain, "calculate_wrapped_action_difference", None)
+			if diff_fn is None:
+				diff_fn = getattr(domain, "calculate_action_difference")
+
 			for i in range(len(possibleTargetsX)):
 				eachPossibleTarget = [possibleTargetsX[i],possibleTargetsY[i]]
-				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
+				dist.append(diff_fn(eachPossibleTarget, ts))
 
 
 

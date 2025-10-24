@@ -321,10 +321,14 @@ class TrickerAgent(Agent):
 			possibleTargetsX = listedTargets[:,0][possibleEvsIndexes]
 			possibleTargetsY = listedTargets[:,1][possibleEvsIndexes]
 
+			diff_fn = getattr(domain, "calculate_wrapped_action_difference", None)
+			if diff_fn is None:
+				diff_fn = getattr(domain, "calculate_action_difference")
+
 			# Find distances
 			for i in range(len(possibleTargetsX)):
 				eachPossibleTarget = [possibleTargetsX[i],possibleTargetsY[i]]
-				dist.append(domain.calculate_wrapped_action_difference(eachPossibleTarget,ts))
+				dist.append(diff_fn(eachPossibleTarget, ts))
 
 
 		# Get the max distance

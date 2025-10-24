@@ -364,7 +364,11 @@ class RandomDartsExp(Experiment):
 			else:
 				observed_reward = self.env.domain.get_reward_for_action(state,noisy_action)
 			
-			trueDiff = self.env.domain.calculate_wrapped_action_difference(noisy_action,action)
+		diff_fn = getattr(self.env.domain, "calculate_wrapped_action_difference", None)
+		if diff_fn is None:
+			diff_fn = getattr(self.env.domain, "calculate_action_difference")
+
+			trueDiff = diff_fn(noisy_action, action)
 
 			self.noisyActions.append(noisy_action)
 			self.observedRewards.append(observed_reward)
@@ -691,7 +695,10 @@ class SequentialDartsExp(Experiment):
 
 		# print(f"Intended Action: {action}")
 		# print(f"Noisy Action: {noisyAction}")
-		self.trueDiffs.append(self.env.domain.calculate_wrapped_action_difference(noisyAction,action))
+		diff_fn = getattr(self.env.domain, "calculate_wrapped_action_difference", None)
+		if diff_fn is None:
+			diff_fn = getattr(self.env.domain, "calculate_action_difference")
+		self.trueDiffs.append(diff_fn(noisyAction, action))
 
 		# Save info
 		self.intendedActions.append(action)

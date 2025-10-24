@@ -235,7 +235,7 @@ def sample_noisy_action(rng,S,L,a,noiseModel=None,wrap=True):
 
     return na
 
-def calculate_wrapped_action_difference(a1,a2,wrap=True):
+def calculate_action_difference(a1,a2,wrap=True):
     d = a1 - a2
 
     if wrap:

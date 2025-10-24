@@ -465,7 +465,7 @@ def sample_noisy_action(rng,S,mean,covMatrix,a,noiseModel=None):
 
 	return na
 
-def calculate_wrapped_action_difference(action1,action2):
+def calculate_action_difference(action1,action2):
 
 	'''
 	x1 = action1[0]
