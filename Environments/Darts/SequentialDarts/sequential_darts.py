@@ -431,7 +431,7 @@ def sampleAction(XS,action,noiseModel=None):
 
 	return na
 
-def calculate_wrapped_action_difference(action1, action2):
+def calculate_action_difference(action1, action2):
 
 	x1 = action1[0]
 	y1 = action1[1]

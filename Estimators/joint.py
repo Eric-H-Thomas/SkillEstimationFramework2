@@ -153,8 +153,12 @@ class JointMethodFlip():
 
 
 				# Update probs - flip planning component like
-				if self.domainName == "1d": 
-					self.probs[xi][pi] *= ((p*scipy.stats.norm.pdf(spaces.domain.calculate_wrapped_action_difference(action,targetAction),loc=0,scale=x))+((1-p)/spaces.sizeActionSpace))
+				if self.domainName == "1d":
+					diff_fn = getattr(spaces.domain, "calculate_wrapped_action_difference", None)
+					if diff_fn is None:
+						diff_fn = getattr(spaces.domain, "calculate_action_difference")
+					action_diff = diff_fn(action, targetAction)
+					self.probs[xi][pi] *= ((p*scipy.stats.norm.pdf(action_diff,loc=0,scale=x))+((1-p)/spaces.sizeActionSpace))
 				
 				elif self.domainName == "2d":
 					self.probs[xi][pi] *= ((p*(multivariate_normal.pdf(x=action,mean=targetAction,cov=(x**2))*(spaces.delta**2)))+((1-p)/spaces.sizeActionSpace))

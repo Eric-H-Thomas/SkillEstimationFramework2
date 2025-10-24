@@ -244,7 +244,10 @@ class TrickerAgent(Agent):
 
 		# Find distances
 		for ti in possibleTargets:
-			dist.append(domain.calculate_wrapped_action_difference(ti,ts))
+			diff_fn = getattr(domain, "calculate_wrapped_action_difference", None)
+			if diff_fn is None:
+				diff_fn = getattr(domain, "calculate_action_difference")
+			dist.append(diff_fn(ti, ts))
 
 
 		# get the max distance

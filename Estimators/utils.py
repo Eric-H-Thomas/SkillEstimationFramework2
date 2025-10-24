@@ -168,7 +168,10 @@ def getPDFsAndEVsBilliardsFocalEV(spaces,xskills,action,otherArgs):
 			vi = Vs[i]
 			
 			# Get the distance of this action from the intended one
-			d = spaces.domain.calculate_wrapped_action_difference(action,ai)
+			diff_fn = getattr(spaces.domain, "calculate_wrapped_action_difference", None)
+			if diff_fn is None:
+				diff_fn = getattr(spaces.domain, "calculate_action_difference")
+			d = diff_fn(action, ai)
 			
 			# Get the probability of that action under this x 
 			W  = g.pdf(d)
