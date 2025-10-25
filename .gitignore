@@ -17,3 +17,8 @@ slurm-*.out
 
 # OS cruft
 .DS_Store
+
+# Experiment outputs
+Experiments/**/times/
+Experiments/**/plots/
+Experiments/**/logs/
