@@ -27,8 +27,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
+
+from contextlib import nullcontext, redirect_stdout
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -151,23 +154,28 @@ def estimate_skill_with_jeeds(
     spaces: SpacesRandomDarts,
     results_folder: str,
     tag: str,
+    suppress_output: bool = True,
 ) -> float:
     """Run the official JEEDS estimator on the provided samples."""
 
-    estimator.reset()
-    state_key = str(state)
-    for sample in samples:
-        estimator.addObservation(
-            rng,
-            spaces,
-            state,
-            float(sample),
-            resultsFolder=results_folder,
-            tag=tag,
-            s=state_key,
-        )
+    stream = io.StringIO()
+    ctx = redirect_stdout(stream) if suppress_output else nullcontext()
 
-    results = estimator.getResults()
+    with ctx:
+        estimator.reset()
+        state_key = str(state)
+        for sample in samples:
+            estimator.addObservation(
+                rng,
+                spaces,
+                state,
+                float(sample),
+                resultsFolder=results_folder,
+                tag=tag,
+                s=state_key,
+            )
+
+        results = estimator.getResults()
     map_key = f"{estimator.methodType}-MAP-{estimator.numXskills}-{estimator.numPskills}-xSkills"
     estimates = results.get(map_key, [])
     if not estimates:
@@ -204,6 +212,18 @@ def run_experiment(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    total_iterations = len(true_skills) * len(aims)
+    completed_iterations = 0
+
+    def update_progress() -> None:
+        if total_iterations:
+            percent = (completed_iterations / total_iterations) * 100
+            print(
+                f"\rProgress: {percent:5.1f}% ({completed_iterations}/{total_iterations})",
+                end="",
+                flush=True,
+            )
+
     for true_skill in true_skills:
         # Pre-compute the EV surface under the true skill to avoid redundant
         # convolutions inside the aiming loop.
@@ -239,6 +259,12 @@ def run_experiment(args: argparse.Namespace) -> None:
                     float(abs_error),
                 )
             )
+
+            completed_iterations += 1
+            update_progress()
+
+    if total_iterations:
+        print()
 
     # Persist the numerical results for subsequent analysis in spreadsheets or
     # notebooks.
