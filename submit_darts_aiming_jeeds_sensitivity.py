@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 import subprocess
 import sys
@@ -71,6 +72,12 @@ def build_slurm_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path where Slurm should write stderr for the job.",
     )
+    parser.add_argument(
+        "--num-jobs",
+        type=int,
+        default=10,
+        help="Number of parallel jobs to launch for the experiment.",
+    )
     return parser
 
 
@@ -84,7 +91,11 @@ def print_help_and_exit(slurm_parser: argparse.ArgumentParser) -> None:
     raise SystemExit(0)
 
 
-def build_sbatch_command(slurm_args: argparse.Namespace, forwarded_args: Sequence[str]) -> list[str]:
+def build_sbatch_command(
+    slurm_args: argparse.Namespace,
+    forwarded_args: Sequence[str],
+    extra_directives: Sequence[str] | None = None,
+) -> list[str]:
     script_path = Path(__file__).resolve().parent / "Testing" / "darts_aiming_jeeds_sensitivity.py"
 
     python_executable = shlex.quote(sys.executable)
@@ -115,8 +126,22 @@ def build_sbatch_command(slurm_args: argparse.Namespace, forwarded_args: Sequenc
     if slurm_args.error:
         sbatch_cmd.append(f"--error={slurm_args.error}")
 
+    if extra_directives:
+        sbatch_cmd.extend(extra_directives)
+
     sbatch_cmd.append(f"--wrap={wrapped_cmd}")
     return sbatch_cmd
+
+
+def format_command(parts: Sequence[str]) -> str:
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def parse_job_id(output: str) -> str:
+    match = re.search(r"Submitted batch job (\d+)", output)
+    if not match:
+        raise RuntimeError(f"Unable to parse Slurm job ID from output: {output.strip()!r}")
+    return match.group(1)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -126,13 +151,46 @@ def main(argv: Sequence[str] | None = None) -> None:
     if slurm_args.help:
         print_help_and_exit(slurm_parser)
 
+    if slurm_args.num_jobs < 1:
+        raise SystemExit("--num-jobs must be at least 1.")
+
+    forwarded_args = list(remaining)
+    if any(arg == "--num-jobs" or arg.startswith("--num-jobs=") for arg in forwarded_args):
+        raise SystemExit("Pass --num-jobs to the submission script rather than forwarding it.")
+
+    forwarded_args.extend(["--num-jobs", str(slurm_args.num_jobs)])
+
     # Validate the forwarded arguments using the original parser.
-    _ = darts_script.parse_args(list(remaining))
+    _ = darts_script.parse_args(list(forwarded_args))
 
-    sbatch_cmd = build_sbatch_command(slurm_args, remaining)
+    if slurm_args.num_jobs == 1:
+        sbatch_cmd = build_sbatch_command(slurm_args, forwarded_args)
+        print("Submitting job with command:\n  " + format_command(sbatch_cmd))
+        result = subprocess.run(sbatch_cmd, check=True, capture_output=True, text=True)
+        if result.stdout:
+            print(result.stdout.strip())
+        return
 
-    print("Submitting job with command:\n  " + " ".join(shlex.quote(part) for part in sbatch_cmd))
-    subprocess.run(sbatch_cmd, check=True)
+    array_directives = [f"--array=0-{slurm_args.num_jobs - 1}"]
+    array_cmd = build_sbatch_command(slurm_args, forwarded_args, extra_directives=array_directives)
+    print("Submitting job array with command:\n  " + format_command(array_cmd))
+    array_result = subprocess.run(array_cmd, check=True, capture_output=True, text=True)
+    if array_result.stdout:
+        print(array_result.stdout.strip())
+    array_job_id = parse_job_id(array_result.stdout)
+
+    aggregator_forwarded = list(forwarded_args)
+    aggregator_forwarded.append("--aggregate-results")
+
+    aggregator_args = argparse.Namespace(**vars(slurm_args))
+    aggregator_args.job_name = f"{slurm_args.job_name}-agg"
+
+    dependency = [f"--dependency=afterok:{array_job_id}"]
+    aggregator_cmd = build_sbatch_command(aggregator_args, aggregator_forwarded, extra_directives=dependency)
+    print("Submitting aggregation job with command:\n  " + format_command(aggregator_cmd))
+    aggregator_result = subprocess.run(aggregator_cmd, check=True, capture_output=True, text=True)
+    if aggregator_result.stdout:
+        print(aggregator_result.stdout.strip())
 
 
 if __name__ == "__main__":
