@@ -1,6 +1,6 @@
 import numpy as np
 import json,pickle
-import os,imp,sys
+import os,sys
 import code,time
 
 from scipy.signal import convolve2d

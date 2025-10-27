@@ -368,6 +368,15 @@ def run_experiment(args: argparse.Namespace) -> None:
     jeeds_estimator, spaces = create_jeeds_components(candidate_skills, args.delta, args.num_planning_skills)
 
     total_combinations = len(true_skills) * len(aims)
+
+    # When partitioning work across multiple jobs we ensure that every
+    # aim/skill combination consumes a deterministic stream of random numbers
+    # derived from the global seed. This guarantees reproducible results
+    # regardless of how combinations are sharded across jobs.
+    if total_combinations:
+        combination_seeds = np.random.SeedSequence(args.seed + 1).spawn(total_combinations)
+    else:
+        combination_seeds = []
     start_idx, end_idx = compute_chunk_bounds(total_combinations, num_jobs, job_index)
 
     # Each record stores (true skill, aim, percent optimality, estimated skill,
@@ -405,14 +414,18 @@ def run_experiment(args: argparse.Namespace) -> None:
 
         for aim_idx in combos_by_skill[skill_idx]:
             aim_value = float(aims[aim_idx])
-            samples = simulate_executions(rng, state, true_skill, aim_value, args.num_samples)
+
+            linear_idx = skill_idx * num_aims + aim_idx
+            combo_rng = np.random.default_rng(combination_seeds[linear_idx])
+
+            samples = simulate_executions(combo_rng, state, true_skill, aim_value, args.num_samples)
 
             # Measure how much value the chosen aim sacrifices relative to the
             # optimal aim at this true skill level.
             percent = percent_optimality(aim_value, evs_true, actions_true)
 
             estimated_skill = estimate_skill_with_jeeds(
-                rng,
+                combo_rng,
                 samples,
                 state,
                 jeeds_estimator,
