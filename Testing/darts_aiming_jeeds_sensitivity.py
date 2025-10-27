@@ -28,6 +28,9 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import math
+import os
+from collections import defaultdict
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
@@ -39,6 +42,15 @@ import numpy as np
 from Environments.Darts.RandomDarts import darts
 from Estimators.joint import JointMethodQRE
 from setupSpaces import SpacesRandomDarts
+
+
+CSV_HEADER = [
+    "true_skill",
+    "aim",
+    "percent_optimality",
+    "estimated_skill",
+    "absolute_error",
+]
 
 
 def generate_reward_surface(
@@ -184,7 +196,151 @@ def estimate_skill_with_jeeds(
     return float(estimates[-1])
 
 
+def determine_job_index(job_index: int | None, num_jobs: int) -> int:
+    """Resolve the job index, defaulting to Slurm's array task ID when present."""
+
+    if num_jobs < 1:
+        raise ValueError("num_jobs must be at least 1 to partition work.")
+
+    if job_index is None:
+        env_value = os.getenv("SLURM_ARRAY_TASK_ID")
+        if env_value is not None:
+            job_index = int(env_value)
+        else:
+            job_index = 0
+
+    if not 0 <= job_index < num_jobs:
+        raise ValueError(
+            f"Job index {job_index} is outside the valid range [0, {num_jobs - 1}]."
+        )
+
+    return job_index
+
+
+def compute_chunk_bounds(total_items: int, num_jobs: int, job_index: int) -> Tuple[int, int]:
+    """Return the half-open interval [start, end) processed by a job."""
+
+    if total_items < 0:
+        raise ValueError("total_items must be non-negative.")
+    if num_jobs < 1:
+        raise ValueError("num_jobs must be at least 1.")
+
+    chunk_size = math.ceil(total_items / num_jobs) if total_items else 0
+    start = job_index * chunk_size
+    end = min(start + chunk_size, total_items)
+    return start, end
+
+
+def partial_filename(job_index: int, num_jobs: int) -> str:
+    """Return the filename for a shard produced by ``job_index``."""
+
+    width = max(2, len(str(max(num_jobs - 1, 0))))
+    return f"jeeds_skill_vs_aim_part_{job_index:0{width}d}-of-{num_jobs:0{width}d}.csv"
+
+
+def write_records_to_csv(path: Path, records: Sequence[Tuple[float, float, float, float, float]]) -> None:
+    """Persist experiment records to ``path`` with the standard header."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(CSV_HEADER)
+        for record in records:
+            writer.writerow(record)
+
+
+def create_scatter_plot(records: Sequence[Tuple[float, float, float, float, float]], output_path: Path) -> None:
+    """Create the visualization summarizing JEEDS estimation error."""
+
+    if not records:
+        raise ValueError("At least one record is required to create the scatter plot.")
+
+    percents = [record[2] for record in records]
+    skills = [record[0] for record in records]
+    errors = [record[4] for record in records]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    scatter = ax.scatter(percents, skills, c=errors, cmap="viridis", s=50)
+    ax.set_xlabel("Percent optimality of chosen aim")
+    ax.set_ylabel("True execution skill (sigma)")
+    ax.set_title("JEEDS skill estimation error vs. aiming optimality")
+    ax.set_xlim(-0.05, 1.05)
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+
+    cbar = fig.colorbar(scatter, ax=ax)
+    cbar.set_label(r"Absolute error |$\hat{\sigma} - \sigma$|")
+
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def produce_final_artifacts(records: Sequence[Tuple[float, float, float, float, float]], output_dir: Path) -> None:
+    """Write the combined CSV and scatter plot to ``output_dir``."""
+
+    if not records:
+        raise RuntimeError("No experiment records available to write final artifacts.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = output_dir / "jeeds_skill_vs_aim.csv"
+    write_records_to_csv(csv_path, records)
+
+    figure_path = output_dir / "jeeds_skill_vs_aim.png"
+    create_scatter_plot(records, figure_path)
+
+    print(f"Saved CSV results to {csv_path}")
+    print(f"Saved visualization to {figure_path}")
+
+
+def aggregate_partial_results(args: argparse.Namespace) -> None:
+    """Load per-job CSV shards and generate the final artifacts."""
+
+    if args.num_jobs < 1:
+        raise ValueError("num_jobs must be at least 1 when aggregating results.")
+
+    output_dir = Path(args.output_dir)
+    partial_dir = output_dir / args.partial_subdir
+
+    expected_files = [partial_dir / partial_filename(idx, args.num_jobs) for idx in range(args.num_jobs)]
+    if not expected_files:
+        raise RuntimeError("No partial results were expected; nothing to aggregate.")
+
+    aggregated: List[Tuple[float, float, float, float, float]] = []
+    for path in expected_files:
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Missing partial results file '{path}'. Ensure all jobs completed successfully."
+            )
+
+        with path.open("r", newline="") as handle:
+            reader = csv.reader(handle)
+            header = next(reader, None)
+            if header != CSV_HEADER:
+                raise ValueError(f"Unexpected CSV header in {path}: {header}")
+            for row in reader:
+                if not row:
+                    continue
+                aggregated.append(tuple(float(value) for value in row))
+
+    if not aggregated:
+        raise RuntimeError("Partial results files contained no experiment rows to aggregate.")
+
+    aggregated.sort(key=lambda record: (record[0], record[1], record[2]))
+
+    print(f"Aggregating {len(aggregated)} records from {len(expected_files)} partial files.")
+    produce_final_artifacts(aggregated, output_dir)
+
+
 def run_experiment(args: argparse.Namespace) -> None:
+    if args.aggregate_results:
+        aggregate_partial_results(args)
+        return
+
+    num_jobs = args.num_jobs
+    job_index = determine_job_index(args.job_index, num_jobs)
+
     # Use a dedicated RNG so repeated runs with the same seed are reproducible.
     rng = np.random.default_rng(args.seed)
 
@@ -203,38 +359,49 @@ def run_experiment(args: argparse.Namespace) -> None:
     ensure_jeeds_logging_dirs(args.jeeds_results_folder)
     jeeds_estimator, spaces = create_jeeds_components(candidate_skills, args.delta, args.num_planning_skills)
 
+    total_combinations = len(true_skills) * len(aims)
+    start_idx, end_idx = compute_chunk_bounds(total_combinations, num_jobs, job_index)
+
     # Each record stores (true skill, aim, percent optimality, estimated skill,
     # absolute error). Keeping the raw data allows downstream analysis without
     # re-running the simulation.
     records: List[Tuple[float, float, float, float, float]] = []
 
-    # Ensure the requested output directory exists before writing artifacts.
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    total_iterations = len(true_skills) * len(aims)
     completed_iterations = 0
+    total_iterations = end_idx - start_idx
 
     def update_progress() -> None:
         if total_iterations:
             percent = (completed_iterations / total_iterations) * 100
             print(
-                f"\rProgress: {percent:5.1f}% ({completed_iterations}/{total_iterations})",
+                f"\rJob {job_index + 1}/{num_jobs}: {percent:5.1f}% "
+                f"({completed_iterations}/{total_iterations})",
                 end="",
                 flush=True,
             )
 
-    for true_skill in true_skills:
+    # Group the chunk's combinations by true-skill index so we only convolve
+    # expected values for the skills needed in this partition.
+    combos_by_skill: dict[int, List[int]] = defaultdict(list)
+    num_aims = len(aims)
+    for linear_idx in range(start_idx, end_idx):
+        skill_idx, aim_idx = divmod(linear_idx, num_aims)
+        combos_by_skill[skill_idx].append(aim_idx)
+
+    for skill_idx in sorted(combos_by_skill):
+        true_skill = float(true_skills[skill_idx])
+
         # Pre-compute the EV surface under the true skill to avoid redundant
         # convolutions inside the aiming loop.
         evs_true, actions_true = convolve_expected_values(state, true_skill, args.delta)
 
-        for aim in aims:
-            samples = simulate_executions(rng, state, true_skill, float(aim), args.num_samples)
+        for aim_idx in combos_by_skill[skill_idx]:
+            aim_value = float(aims[aim_idx])
+            samples = simulate_executions(rng, state, true_skill, aim_value, args.num_samples)
 
             # Measure how much value the chosen aim sacrifices relative to the
             # optimal aim at this true skill level.
-            percent = percent_optimality(float(aim), evs_true, actions_true)
+            percent = percent_optimality(aim_value, evs_true, actions_true)
 
             estimated_skill = estimate_skill_with_jeeds(
                 rng,
@@ -252,8 +419,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             # Collect a row of results that will later be written to disk.
             records.append(
                 (
-                    float(true_skill),
-                    float(aim),
+                    true_skill,
+                    aim_value,
                     float(percent),
                     float(estimated_skill),
                     float(abs_error),
@@ -266,55 +433,24 @@ def run_experiment(args: argparse.Namespace) -> None:
     if total_iterations:
         print()
 
-    # Persist the numerical results for subsequent analysis in spreadsheets or
-    # notebooks.
-    csv_path = output_dir / "jeeds_skill_vs_aim.csv"
-    with csv_path.open("w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow([
-            "true_skill",
-            "aim",
-            "percent_optimality",
-            "estimated_skill",
-            "absolute_error",
-        ])
-        # Dump all experiment rows in one go.
-        writer.writerows(records)
+    output_dir = Path(args.output_dir)
 
-    # Prepare scatter plot summarizing how estimation error varies with aim and
-    # true skill.
-    # Extract columns for plotting: aim optimality (x-axis), true skill (y-axis),
-    # and estimation error (colour map).
-    percents = [record[2] for record in records]
-    skills = [record[0] for record in records]
-    errors = [record[4] for record in records]
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    # Encode estimation error as colour so the plot simultaneously conveys how
-    # aim optimality and true skill interact to influence the JEEDS estimator.
-    scatter = ax.scatter(percents, skills, c=errors, cmap="viridis", s=50)
-    ax.set_xlabel("Percent optimality of chosen aim")
-    ax.set_ylabel("True execution skill (sigma)")
-    ax.set_title("JEEDS skill estimation error vs. aiming optimality")
-    ax.set_xlim(-0.05, 1.05)
-    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-
-    cbar = fig.colorbar(scatter, ax=ax)
-    # Annotate the colour bar so viewers can interpret estimation errors.
-    cbar.set_label(r"Absolute error |$\hat{\sigma} - \sigma$|")
-
-    # Reduce whitespace and prevent label clipping in the saved figure.
-    fig.tight_layout()
-
-    # Persist the visualization alongside the CSV for quick inspection.
-    figure_path = output_dir / "jeeds_skill_vs_aim.png"
-    fig.savefig(figure_path, dpi=300)
-    # Explicitly close the figure to free memory when running headless batches.
-    plt.close(fig)
-
-    # Provide paths so users can quickly locate generated artifacts.
-    print(f"Saved CSV results to {csv_path}")
-    print(f"Saved visualization to {figure_path}")
+    if args.num_jobs == 1:
+        produce_final_artifacts(records, output_dir)
+    else:
+        partial_dir = output_dir / args.partial_subdir
+        partial_path = partial_dir / partial_filename(job_index, num_jobs)
+        write_records_to_csv(partial_path, records)
+        print(f"Saved partial results to {partial_path}")
+        if not records:
+            print(
+                "Warning: this job's assignment did not include any aim/skill "
+                "combinations."
+            )
+        print(
+            "Run the aggregation step once all jobs have finished using the "
+            "--aggregate-results flag."
+        )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -403,6 +539,29 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=str,
         default="darts_aiming_jeeds_sensitivity",
         help="Tag appended to JEEDS timing log filenames.",
+    )
+    parser.add_argument(
+        "--num-jobs",
+        type=int,
+        default=1,
+        help="Total number of jobs into which the experiment is partitioned.",
+    )
+    parser.add_argument(
+        "--job-index",
+        type=int,
+        default=None,
+        help="Zero-based index of the current job when running in parallel.",
+    )
+    parser.add_argument(
+        "--partial-subdir",
+        type=str,
+        default="partials",
+        help="Subdirectory (under output-dir) where per-job CSV shards are stored.",
+    )
+    parser.add_argument(
+        "--aggregate-results",
+        action="store_true",
+        help="Aggregate per-job CSV shards and recreate the final plot.",
     )
 
     return parser.parse_args(argv)
