@@ -65,6 +65,12 @@
 
 ---
 
+**ADDITIONAL EXPERIMENTS**
+
+The repository also includes a suite of scripts that measure how the JEEDS estimator reacts to suboptimal aiming in the darts domain. They support sharded local runs, Slurm submissions, and a verification harness for the parallel path. See [Testing/jeeds_aiming_sensitivity.md](Testing/jeeds_aiming_sensitivity.md) for a detailed overview of the workflow and usage examples.
+
+---
+
 **TO PROCESS RESULTS**
 
 1. Execute the following command to process results once experiments are done:
