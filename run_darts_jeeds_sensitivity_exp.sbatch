@@ -16,7 +16,14 @@ export MPLBACKEND=Agg
 # Determine how this invocation should partition work. ``SLURM_ARRAY_TASK_ID``
 # allows the script to be used as part of a Slurm job array, while manual
 # invocations can override the values via ``JOB_INDEX``/``NUM_JOBS``.
-NUM_JOBS="${NUM_JOBS:-1}"
+if [[ -n "${SLURM_ARRAY_TASK_COUNT:-}" ]]; then
+  if [[ -n "${NUM_JOBS+x}" && "${NUM_JOBS}" != "${SLURM_ARRAY_TASK_COUNT}" ]]; then
+    echo "Warning: NUM_JOBS (${NUM_JOBS}) does not match SLURM_ARRAY_TASK_COUNT (${SLURM_ARRAY_TASK_COUNT}). Using the array size instead." >&2
+  fi
+  NUM_JOBS="${SLURM_ARRAY_TASK_COUNT}"
+else
+  NUM_JOBS="${NUM_JOBS:-1}"
+fi
 JOB_INDEX="${JOB_INDEX:-${SLURM_ARRAY_TASK_ID:-0}}"
 
 python_args=(
