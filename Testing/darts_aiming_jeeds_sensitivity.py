@@ -30,6 +30,7 @@ import csv
 import io
 import math
 import os
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
@@ -38,6 +39,13 @@ from contextlib import nullcontext, redirect_stdout
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+# Ensure the repository root is importable when the script is executed directly.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 
 from Environments.Darts.RandomDarts import darts
 from Estimators.joint import JointMethodQRE
