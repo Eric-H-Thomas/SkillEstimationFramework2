@@ -45,6 +45,14 @@ Any arguments after `--` are passed through to `darts_aiming_jeeds_sensitivity.p
 
 This Slurm script encodes a high-resolution experiment configuration for repeated use. It is intended to be submitted either directly via `sbatch run_darts_jeeds_sensitivity_exp.sbatch` or through the submission helper. The script respects the `NUM_JOBS`, `JOB_INDEX`, and `AGGREGATE_RESULTS` environment variables so it can participate in job arrays while still supporting manual overrides.
 
+To split the work across 20 jobs on a Slurm cluster, launch it as an array and forward the array size via `NUM_JOBS` so each task processes a distinct shard:
+
+```bash
+sbatch --array=0-19 --export=NUM_JOBS=20 run_darts_jeeds_sensitivity_exp.sbatch
+```
+
+Each array task reads `JOB_INDEX` from `SLURM_ARRAY_TASK_ID` and runs the experiment with `--num-jobs 20 --job-index <task-id>`, ensuring the 20 shards jointly cover the full workload.
+
 ## Parallel verification (`Testing/verify_parallelized_jeeds.py`)
 
 This diagnostic script confirms that slicing the experiment across multiple jobs produces identical results to the single-job path. It runs a shortened configuration serially and in parallel, aggregates the shards, and diffs the resulting CSVs. Run it whenever you change the sharding logic or upgrade dependencies that might alter floating-point behaviour.
