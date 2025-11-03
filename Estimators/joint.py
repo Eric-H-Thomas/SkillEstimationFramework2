@@ -236,6 +236,9 @@ class JointMethodFlip():
 	
 		return results
 
+# TODO: In our darts_aiming_jeeds_sensitivity script, we aren't using the parameters givenPrior, minLambda, or
+#  otherArgs. Check what these are for and ensure that we are correct in not using them.
+
 # Note: JEEDS is the same thing as JointMethodQRE
 class JointMethodQRE():
 

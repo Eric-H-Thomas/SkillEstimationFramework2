@@ -148,7 +148,6 @@ def ensure_jeeds_logging_dirs(results_folder: str) -> None:
     base_path = Path("Experiments") / results_folder / "times" / "estimators"
     base_path.mkdir(parents=True, exist_ok=True)
 
-
 def create_jeeds_components(
     candidate_skills: Iterable[float],
     delta: float,
@@ -165,7 +164,8 @@ def create_jeeds_components(
     estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, darts.get_domain_name())
     return estimator, spaces
 
-
+# TODO: Figure out what exactly "state" is (I think it's the darts reward surface) and consider renaming it something
+#   more intuitive.
 def estimate_skill_with_jeeds(
     rng: np.random.Generator,
     samples: np.ndarray,

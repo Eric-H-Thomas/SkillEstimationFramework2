@@ -22,3 +22,9 @@ slurm-*.out
 Experiments/**/times/
 Experiments/**/plots/
 Experiments/**/logs/
+/.idea/dictionaries
+/.idea
+*.so
+*.results
+/Experiments/1d/testResultsFolder
+/Testing/results
