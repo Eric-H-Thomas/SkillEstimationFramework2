@@ -26,9 +26,12 @@ else
 fi
 JOB_INDEX="${JOB_INDEX:-${SLURM_ARRAY_TASK_ID:-0}}"
 
+SEED="${SEED:-7}"
+OUTPUT_DIR="${OUTPUT_DIR:-Testing/results/high_res}"
+
 python_args=(
   -m Testing.darts_aiming_jeeds_sensitivity
-  --seed 7
+  --seed "${SEED}"
   --num-samples 100
   --num-aim-points 50
   --num-true-skills 40
@@ -39,7 +42,7 @@ python_args=(
   --grid-max-skill 3.5
   --num-planning-skills 100
   --delta 5e-3
-  --output-dir Testing/results/high_res
+  --output-dir "${OUTPUT_DIR}"
   --num-jobs "${NUM_JOBS}"
   --job-index "${JOB_INDEX}"
 )
