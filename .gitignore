@@ -28,3 +28,7 @@ Experiments/**/logs/
 *.results
 /Experiments/1d/testResultsFolder
 /Testing/results
+*.csv
+*.png
+/Testing/Experiments/Testing/parallel_verification_parallel/times/estimators
+/Testing/Experiments/Testing/parallel_verification_serial/times/estimators

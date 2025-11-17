@@ -21,7 +21,7 @@ def prepare_args() -> darts_script.argparse.Namespace:  # type: ignore[attr-defi
     """Create a baseline ``Namespace`` with experiment defaults."""
 
     # Reuse the module's argument parser so we stay in sync with future updates.
-    args = darts_script.parse_args([])
+    args = darts_script.parse_args([]) # Here, we pass in an empty list of args to get the darts script's default values
 
     # Tighten the configuration so the verification runs quickly.
     args.seed = 0
@@ -96,6 +96,7 @@ def compare_csv_outputs(serial_csv: Path, parallel_csv: Path) -> None:
 
 
 def main() -> None:
+    # Define output directory paths
     base_dir = Path("Testing/parallel_verification")
     serial_dir = base_dir / "serial"
     parallel_dir = base_dir / "parallel"
@@ -104,14 +105,18 @@ def main() -> None:
     serial_jeeds = experiments_dir / "Testing" / "parallel_verification_serial"
     parallel_jeeds = experiments_dir / "Testing" / "parallel_verification_parallel"
 
+    # Recursively clean out the output directories
     clean_output_directories(serial_dir, parallel_dir, serial_jeeds, parallel_jeeds)
 
+    # Import the default arguments from darts_aiming_jeeds_sensitivity.py and adjust the hyperparameters to make
+    # the test space smaller
     args = prepare_args()
 
+    # Run the experiment once serially and once in parallel
     run_serial_experiment(args, serial_dir, "Testing/parallel_verification_serial")
-
     run_parallel_experiment(args, parallel_dir, "Testing/parallel_verification_parallel", num_jobs=10)
 
+    # Check that the output files were created
     serial_csv = serial_dir / "jeeds_skill_vs_aim.csv"
     parallel_csv = parallel_dir / "jeeds_skill_vs_aim.csv"
 
@@ -120,6 +125,7 @@ def main() -> None:
     if not parallel_csv.exists():
         raise SystemExit(f"Expected parallel CSV at {parallel_csv} was not created.")
 
+    # Check that the two output files match
     compare_csv_outputs(serial_csv, parallel_csv)
 
     print("Parallelization check succeeded: CSV outputs match.")
