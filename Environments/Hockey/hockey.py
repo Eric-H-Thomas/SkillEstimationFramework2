@@ -1,9 +1,33 @@
-"""Utility functions for generating hockey EV plots.
+"""High-level utilities for analyzing hockey experiments.
 
-This module contains helper utilities for plotting the expected value (EV)
-calculation used in the hockey environment.  The functionality largely mirrors
-its legacy implementation but adds extensive inline documentation to help new
-contributors understand the control flow and math behind each step.
+This module is responsible for producing the expected-value (EV) heatmaps used
+throughout the ``hockey-multi`` environment.  It is invoked by the
+``runExpHockey.py`` and ``runExpGiven.py`` drivers after they serialize
+experiment data under ``Experiments/hockey-multi``.  The script dynamically
+loads :mod:`setupSpaces` so it can instantiate ``SpacesHockey`` and apply the
+same discretized target grid that is used during simulation, ensuring the plots
+line up with the environment configuration.
+
+Functions
+---------
+``get_domain_name``
+    Framework hook that identifies the domain name as ``"hockey-multi"``.
+``getCovMatrix``
+    Builds a covariance matrix given per-axis standard deviations and a shared
+    correlation coefficient.
+``draw_noise_sample``
+    Creates a seeded multivariate normal distribution used for sampling noisy
+    shot executions.
+``sample_noisy_action``
+    Adds Gaussian noise to a commanded action vector, optionally using a cached
+    distribution.
+``getNormalDistribution``
+    Evaluates the probability density over the angular grid (and optionally
+    persists debug contour plots).
+``plotEVs``
+    Entry point when running the module as a script; loads stored experiment
+    data, evaluates EV surfaces for several ``xskill`` settings, and exports the
+    resulting heatmaps per player attempt.
 """
 
 from __future__ import annotations
