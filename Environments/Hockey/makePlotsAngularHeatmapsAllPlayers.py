@@ -17,13 +17,6 @@ Workflow
 3. For each combination, invoke ``makePlots()`` from ``makePlotsAngularHeatmaps``
 4. Generate complete heatmap visualizations for each player and shot type
 
-Dependencies
-------------
-Requires ``statsAfterFiltering.json`` to exist in the experiment's Data/JSON/
-directory. This file should be created by running ``getStatsJson.py`` first,
-which analyzes the experiment data and determines which player-shot combinations
-have sufficient data for visualization.
-
 Command-Line Usage
 ------------------
 When run as a script, expects one argument:
@@ -31,6 +24,12 @@ When run as a script, expects one argument:
 
 Example:
     python makePlotsAngularHeatmapsAllPlayers.py my_experiment
+
+Input Requirements
+------------------
+Requires:
+1. ``statsAfterFiltering.json`` in Data/JSON/ (created by getStatsJson.py)
+2. Angular heatmap data files in Data/AngularHeatmaps/ (created by getAngularHeatmapsPerPlayer.py)
 
 Output
 ------
