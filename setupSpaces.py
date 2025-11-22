@@ -1,3 +1,39 @@
+"""
+Centralized helpers for building and caching state-action "spaces" used across
+different skill estimation experiments.
+
+The module exposes several classes (e.g., ``SpacesRandomDarts``,
+``SpacesSequentialDarts``, ``SpacesBilliards``, ``SpacesBaseball``,
+``SpacesHockey``, and ``SpacesSoccer``) that each manage the expected value
+surfaces and action sets for a specific environment. Each class wraps the
+domain-specific logic required to populate convolution results, reuse cached
+results between runs, and expose convenience helpers for experiment code.
+
+Functions/classes in this file
+------------------------------
+* ``Spaces`` – Base class holding common attributes (domain, mode, delta, etc.)
+  and helper methods for managing convolution storage.
+* ``SpacesRandomDarts`` – Manages state-action spaces for single-shot darts
+  experiments, caching convolutions of skill parameters against the board.
+* ``SpacesSequentialDarts`` – Similar to ``SpacesRandomDarts`` but tailored for
+  sequential darts experiments with policy iteration artifacts.
+* ``SpacesBilliards`` – Handles billiards targeting experiments with multiple
+  agent types and success-rate caches.
+* ``SpacesBaseball`` – Builds expected reward surfaces for baseball pitch
+  prediction/swing models and orchestrates data loading.
+* ``SpacesHockey`` – Prepares hockey shot-selection surfaces and caches
+  per-player expected values.
+* ``SpacesSoccer`` – Manages soccer shot probability grids and cached
+  estimations for different players.
+
+Integration notes
+-----------------
+Other experiment scripts (e.g., ``runExpBaseball.py`` or domain-specific
+``runExp*.py`` files) instantiate these classes to prepare the action spaces
+used by estimators. This file centralizes all space setup logic so experiments
+can focus on simulation flow while reusing cached computations when possible.
+"""
+
 import numpy as np
 import json,pickle
 import os,sys
@@ -29,42 +65,57 @@ if "spacesUtils" not in sys.modules:
 
 class Spaces():
 
-	__slots__ = ["domain","domainName","mode","delta","numObservations"]
+        """Lightweight base class shared by all environment-specific spaces."""
 
-	def __init__(self,numObservations,domain,mode,delta):
+        __slots__ = ["domain","domainName","mode","delta","numObservations"]
 
-		self.domain = domain
-		self.domainName = domain.get_domain_name()
-		self.mode = mode
-		self.delta = delta
+        def __init__(self,numObservations,domain,mode,delta):
+                """Store domain metadata and simulation parameters.
 
-		self.numObservations = numObservations
+                Args:
+                        numObservations: Number of observations available to the estimator.
+                        domain: Domain object providing environment-specific utilities.
+                        mode: String identifying which reward model to use.
+                        delta: Resolution used when enumerating target grids.
+                """
+
+                self.domain = domain
+                self.domainName = domain.get_domain_name()
+                self.mode = mode
+                self.delta = delta
+
+                self.numObservations = numObservations
 
 
 class SpacesRandomDarts(Spaces):
 
-	__slots__ = ["convolutionsPerXskill","listedTargets","sizeActionSpace","focalActions","all_ts"]
-	
+        """Cache and serve convolution results for single-throw darts spaces."""
 
-	def __init__(self,numObservations,domain,mode,delta,numSamples=1000,expectedRFolder=None):
+        __slots__ = ["convolutionsPerXskill","listedTargets","sizeActionSpace","focalActions","all_ts"]
 
-		super().__init__(numObservations,domain,mode,delta)
-		
-		self.convolutionsPerXskill = {}
-		self.focalActions = {}
+
+        def __init__(self,numObservations,domain,mode,delta,numSamples=1000,expectedRFolder=None):
+
+                super().__init__(numObservations,domain,mode,delta)
+
+                # Map x-skill keys to convolution dictionaries keyed by state string
+                self.convolutionsPerXskill = {}
+                # Track optimal actions per state for downstream estimators
+                self.focalActions = {}
 
 
 		if self.domainName == "1d":
 			
-			numPoints = int(6*self.domain.m/self.delta)
-			grid = np.linspace(-3*self.domain.m,3*self.domain.m,numPoints)
-			
-			left = int(numPoints/3)
-			right = int(2*left)
+                        numPoints = int(6*self.domain.m/self.delta)
+                        grid = np.linspace(-3*self.domain.m,3*self.domain.m,numPoints)
 
-			self.listedTargets = grid[left:right]
+                        left = int(numPoints/3)
+                        right = int(2*left)
 
-			self.sizeActionSpace = 2*(self.domain.m)
+                        # Trim to on-board locations only and derive action space size
+                        self.listedTargets = grid[left:right]
+
+                        self.sizeActionSpace = 2*(self.domain.m)
 		
 
 		# Assuming set of listed targets is always the same 
@@ -81,14 +132,15 @@ class SpacesRandomDarts(Spaces):
 					self.listedTargets.append([ts[ii],ts[jj]])
 			'''
 
-			XS = np.arange(-170.0,171.0,self.delta)
-			YS = np.arange(-170.0,171.0,self.delta)
+                        XS = np.arange(-170.0,171.0,self.delta)
+                        YS = np.arange(-170.0,171.0,self.delta)
 
-			XXS,YYS = np.meshgrid(XS,YS,indexing="ij")
-			tempXYS = np.vstack([XXS.ravel(),YYS.ravel()])
+                        # Build full grid of board coordinates
+                        XXS,YYS = np.meshgrid(XS,YS,indexing="ij")
+                        tempXYS = np.vstack([XXS.ravel(),YYS.ravel()])
 
-			listedTargets = np.dstack(tempXYS)[0]
-			self.listedTargets = np.array(listedTargets)
+                        listedTargets = np.dstack(tempXYS)[0]
+                        self.listedTargets = np.array(listedTargets)
 
 
 			# Size of action space = area of rectangle = length * width
@@ -103,11 +155,14 @@ class SpacesRandomDarts(Spaces):
 		# code.interact("(): ", local=dict(globals(), **locals())) 
 
 
-	def initInfoForExps(self):
-		pass
+        def initInfoForExps(self):
+                """Placeholder for subclasses that need precomputation before experiments."""
+                pass
 
 
-	def reset(self):
+        def reset(self):
+
+                """Clear caches so a fresh experiment run can rebuild convolutions."""
 
 		# For all domains, to redo convs at start of new exp with new seed
 		self.convolutionsPerXskill.clear() 
@@ -115,7 +170,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# @profile
-	def addSpace(self,rng,givenInfo,S,returnZn=False):
+        def addSpace(self,rng,givenInfo,S,returnZn=False):
+
+                """Compute and cache convolution results for a given state/action profile."""
 
 		# print("STATE: ", S)
 
@@ -141,11 +198,14 @@ class SpacesRandomDarts(Spaces):
 			self.doConvolution(rng,givenInfo,S,returnZn)
 
 
-	def getKey(self,info,r):
-		return "|".join(map(str,info))+f"|{r}"
+        def getKey(self,info,r):
+                """Create a deterministic key from skill parameters and a rho value."""
+                return "|".join(map(str,info))+f"|{r}"
 
 
-	def updateSpaceParticles(self,rng,each,state,otherArgs,fromEstimator=False):
+        def updateSpaceParticles(self,rng,each,state,otherArgs,fromEstimator=False):
+
+                """Update cache entries when particles change in the multi-2D domain."""
 		
 		if self.domainName == "2d-multi":
 
@@ -169,7 +229,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# Singular (one at a time (params & state))
-	def deleteSpaceParticles(self,each,state):
+        def deleteSpaceParticles(self,each,state):
+
+                """Remove cached convolutions for a departing particle/state combination."""
 
 		if self.domainName == "2d-multi":
 
@@ -193,7 +255,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# Singular (one at a time (params & state))
-	def deleteSpace(self,each,state):
+        def deleteSpace(self,each,state):
+
+                """Remove cached convolutions for a given skill/state pair."""
 
 		if self.domainName == "2d-multi":
 			temp, tempR = each[:-1],each[-1]
@@ -209,7 +273,9 @@ class SpacesRandomDarts(Spaces):
 		# code.interact("deleteSpaceParticles()...", local=dict(globals(), **locals()))	
 
 
-	def updateSpace(self,rng,givenXskillsStart,states,fromEstimator=False):
+        def updateSpace(self,rng,givenXskillsStart,states,fromEstimator=False):
+
+                """Ensure convolution spaces exist for provided skill/state combinations."""
 		
 		if self.domainName == "2d-multi":
 			rhos = givenXskillsStart[1]
@@ -256,7 +322,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# Singular (one at a time (params & state))
-	def setFocalActions(self,givenInfo,state):
+        def setFocalActions(self,givenInfo,state):
+
+                """Record optimal actions for a state so estimators can reuse them."""
 		
 		if str(state) not in self.focalActions:
 			self.focalActions[str(state)] = []
@@ -271,7 +339,9 @@ class SpacesRandomDarts(Spaces):
 		# code.interact("Setting focal actions...", local=dict(globals(), **locals()))
 
 	
-	def get(self,rng,S,info,toSend):
+        def get(self,rng,S,info,toSend):
+
+                """Retrieve convolution info, computing it if absent in the cache."""
 
 		# Verify if info for the convolution of the given state, xskill and delta exists
 		if self.domainName == "2d-multi":
@@ -305,7 +375,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# Singular (one at a time (params & state))
-	def getSpace(self,rng,params,S,returnZn=False):
+        def getSpace(self,rng,params,S,returnZn=False):
+
+                """Convenience wrapper to fetch convolution info based on parameters."""
 
 		if self.domainName == "2d-multi":	
 			# [x1,x2,rho]
@@ -320,7 +392,9 @@ class SpacesRandomDarts(Spaces):
 			return self.get(rng,S,info,toSend)
 
 		
-	def verifyIfExists(self,X,S):
+        def verifyIfExists(self,X,S):
+
+                """Check whether a convolution already exists for the given state/skill."""
 
 		if type(X) == list:
 			info = self.getKey(X[:-1],X[-1])
@@ -339,7 +413,9 @@ class SpacesRandomDarts(Spaces):
 
 
 	# @profile
-	def doConvolution(self,rng,info,state,returnZn=False):
+        def doConvolution(self,rng,info,state,returnZn=False):
+
+                """Call into the domain to build expected value grids and cache results."""
 
 		# print("doConvolution() - STATE: ",state)
 		# print(info)
@@ -452,17 +528,20 @@ class SpacesRandomDarts(Spaces):
 
 	# Method will be called after calling verifyIfExists()
 	# Info will always exist (and keys as well) - (thus, won't cause error of info not existing)
-	def getConvInfo(self,X,S):
-		return self.convolutionsPerXskill[X][str(S)]
+        def getConvInfo(self,X,S):
+                """Assumes presence validated; returns cached convolution info."""
+                return self.convolutionsPerXskill[X][str(S)]
 
 
 class SpacesSequentialDarts(Spaces):
 
-	__slots__ = ["mode","numSamples","expectedRFolder","expectedRewardsPerXskill",
-				"valueIterFolder","possibleTargets","spacesPerXskill",
-				"estimatorXskills","allPIsForXskillsPerState",
-				"allCovs","allCovsGivenXskillOptimalTargets","allCovsGivenXskillDomainTargets",
-				"sizeActionSpace","totalTargetActions","possibleTargets"]
+        """Manages cached policy/value info for sequential darts experiments."""
+
+        __slots__ = ["mode","numSamples","expectedRFolder","expectedRewardsPerXskill",
+                                "valueIterFolder","possibleTargets","spacesPerXskill",
+                                "estimatorXskills","allPIsForXskillsPerState",
+                                "allCovs","allCovsGivenXskillOptimalTargets","allCovsGivenXskillDomainTargets",
+                                "sizeActionSpace","totalTargetActions","possibleTargets"]
 
 	def __init__(self,numObservations,domain,mode,delta,numSamples=1000,expectedRFolder=None,valueIterFolder=None):
 
@@ -591,10 +670,12 @@ class SpacesSequentialDarts(Spaces):
 
 class SpacesBilliards(Spaces):
 
-	__slots__ = ["numSamples","successRatesFolder","agentTypes",
-				"spacesPerXskill","agentToXskillID","agentIdToXskill",
-				"xskilltoAgentId","agentIdToType","successRatesPerSkill",
-				"sizeActionSpace"]
+        """Cache success rates for billiards shots across different agent types."""
+
+        __slots__ = ["numSamples","successRatesFolder","agentTypes",
+                                "spacesPerXskill","agentToXskillID","agentIdToXskill",
+                                "xskilltoAgentId","agentIdToType","successRatesPerSkill",
+                                "sizeActionSpace"]
 
 	def __init__(self,numObservations,domain,delta,numSamples,successRatesFolder,agentTypes):
 		
@@ -695,16 +776,18 @@ class SpacesBilliards(Spaces):
 
 class SpacesBaseball(Spaces):
 
-	__slots__ = ["numSamples","expectedRFolder","allData","dataLoaded",
-				"minPlateX","maxPlateX","minPlateZ","maxPlateZ",
-				"targetsPlateXFeet","targetsPlateZFeet",
-				"targetsPlateXInches","targetsPlateZInches",
-				"modelTargetsPlateX","modelTargetsPlateZ",
-				"model","possibleTargetsFeet","possibleTargetsForModel",
-				"expectedRewardsPerXskill","xswingFeats", "spacesPerXskill",
-				"estimatorXskills","allCovs","batterIndices","sizeActionSpace",
-				"defaultFocalActions","infoPerRow","focalActionMiddle","pdfsPerXskill",
-				"evsPerXskill","indexes"]
+        """Prepare expected reward grids and model inputs for baseball experiments."""
+
+        __slots__ = ["numSamples","expectedRFolder","allData","dataLoaded",
+                                "minPlateX","maxPlateX","minPlateZ","maxPlateZ",
+                                "targetsPlateXFeet","targetsPlateZFeet",
+                                "targetsPlateXInches","targetsPlateZInches",
+                                "modelTargetsPlateX","modelTargetsPlateZ",
+                                "model","possibleTargetsFeet","possibleTargetsForModel",
+                                "expectedRewardsPerXskill","xswingFeats", "spacesPerXskill",
+                                "estimatorXskills","allCovs","batterIndices","sizeActionSpace",
+                                "defaultFocalActions","infoPerRow","focalActionMiddle","pdfsPerXskill",
+                                "evsPerXskill","indexes"]
 
 	# @profile
 	def __init__(self,args,numObservations,domain,delta,numSamples,expectedRFolder,learningRate,epochs,parallel=False):		
@@ -1527,14 +1610,16 @@ class SpacesBaseball(Spaces):
 
 class SpacesHockey(Spaces):
 
-	__slots__ = [
-			"minY","maxY","minZ","maxZ",
-			"targetsY","targetsZ","possibleTargets",
-			"expectedRewardsPerXskill",
-			"dirs","elevations",
-			"estimatorXskills","allCovs","sizeActionSpace",
-			"defaultFocalActions","focalActionMiddle","pdfsPerXskill",
-			"evsPerXskill","grid","mean"]
+        """Maintain expected value surfaces for hockey shot selection experiments."""
+
+        __slots__ = [
+                        "minY","maxY","minZ","maxZ",
+                        "targetsY","targetsZ","possibleTargets",
+                        "expectedRewardsPerXskill",
+                        "dirs","elevations",
+                        "estimatorXskills","allCovs","sizeActionSpace",
+                        "defaultFocalActions","focalActionMiddle","pdfsPerXskill",
+                        "evsPerXskill","grid","mean"]
 
 	# @profile
 	def __init__(self,args,numObservations,domain,delta):		
@@ -1758,9 +1843,11 @@ class SpacesHockey(Spaces):
 
 class SpacesSoccer(Spaces):
 
-	__slots__ = ["minPitchX","maxPitchX","minPitchY","maxPitchY",
-				"targetsY","targetsY","sizeActionSpace","defaultFocalActions",
-				"focalActionMiddle","dataFolder","model","allCovs","estimatorXskills","db"]
+        """Manage cached shot grids and models for soccer scoring experiments."""
+
+        __slots__ = ["minPitchX","maxPitchX","minPitchY","maxPitchY",
+                                "targetsY","targetsY","sizeActionSpace","defaultFocalActions",
+                                "focalActionMiddle","dataFolder","model","allCovs","estimatorXskills","db"]
 
 
 	# @profile
