@@ -1,3 +1,31 @@
+"""Run hockey experiments with optional particle filter estimators.
+
+This script wires together environment setup, estimator creation, and the
+iteration loop that executes experiments for a set of agents. It is invoked as
+its own executable. A high-level overview of what lives here:
+
+Functions
+---------
+* ``work``: Small wrapper that executes an experiment in a separate process
+  when multiprocessing is enabled and returns the produced results.
+* ``onlineExperiment``: Core routine that iterates through agents and runs the
+  selected experiment class for each one, handling persistence and status
+  tracking.
+* ``createEstimators``: Builds the estimator objects used in experiments and
+  records how long construction takes.
+* ``main``: Entry point that parses command-line arguments, prepares
+  directories, configures estimators and the environment, and executes the
+  experiments.
+
+Integration notes
+-----------------
+The ``main`` function ties together utilities across the repository: environment
+initialization from :mod:`setupEnv`, experiment classes from :mod:`expTypes`,
+and estimator implementations in ``Estimators``. Results and metadata are stored
+under the ``Experiments/`` directory so downstream processing scripts can read
+them.
+"""
+
 import numpy as np
 import os, time, datetime
 import pickle
@@ -33,76 +61,93 @@ num = comm.Get_size()
 
 
 def work(exp,tag,counter,domainName,q):
-	exp.run(tag,counter)
+        """Execute a single experiment inside a worker process."""
 
-	if domainName not in ["baseball","baseball-multi","soccer"]:
-		q.put(exp.getResults())
+        # Run the experiment with the provided tag/counter metadata so the
+        # results files can be uniquely identified on disk.
+        exp.run(tag,counter)
+
+        # Non-baseball/soccer domains return results via the queue so the parent
+        # process can persist them to disk.
+        if domainName not in ["baseball","baseball-multi","soccer"]:
+                q.put(exp.getResults())
 
 
 # @profile
 def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,counter,seedNum,rng,indexOR,rerun=False):
-	
-	print("\nPerforming experiments...\n")
+        """Execute an experiment run for each agent in the collection.
 
-	rngMain = rng
-	# print("MAIN: ", rngMain.bit_generator._seed_seq.entropy)
+        This routine selects the correct experiment class based on the configured
+        domain, handles persistence of results, and records execution time. When
+        ``rerun`` is True the function attempts to reload prior results files
+        before running anew.
+        """
 
-	if args.testingBounded:
-		agentInfo,agents = agents[0], agents[1]
-	else:
-		agentInfo = None
+        print("\nPerforming experiments...\n")
+
+        rngMain = rng
+        # print("MAIN: ", rngMain.bit_generator._seed_seq.entropy)
+
+        if args.testingBounded:
+                agentInfo,agents = agents[0], agents[1]
+        else:
+                agentInfo = None
 
 
-	originalTag = tag
+        originalTag = tag
 
 
-	# For each one of the different agents
-	for agent in agents:
+        # For each one of the different agents
+        for agent in agents:
 
-		# rng = deepcopy(rngMain)
-		rng = np.random.default_rng(seedNum)
-		# print("(): ",agent, rng.bit_generator._seed_seq.entropy)
+                # Reset RNG so each agent uses the same seed for reproducibility
+                # within the iteration.
+                rng = np.random.default_rng(seedNum)
+                # print("(): ",agent, rng.bit_generator._seed_seq.entropy)
 
-		tempRerun = rerun
+                tempRerun = rerun
 
-		if args.domain == "billiards":
-			label = f"Agent: {agent}"
-			saveAt = f"{tag}-{counter}-Agent{agent}.results"
-		elif args.domain in ["baseball","baseball-multi"]:
-			label = f"Agent -> pitcherID: {agent[0]} | pitchType: {agent[1]}"
-			saveAt = f"{tag}.results"
-		elif args.domain in ["hockey-multi"]:
-			if args.testingBounded:
-				label = f"Agent -> Player: {agentInfo[0]} | Shot Type: {agentInfo[1]}\nAgent: {agent.getName()}"
-				
-				tag = originalTag + f"_Agent{agent.getName()}"
+                # Build human-friendly labels and output filenames per domain.
+                if args.domain == "billiards":
+                        label = f"Agent: {agent}"
+                        saveAt = f"{tag}-{counter}-Agent{agent}.results"
+                elif args.domain in ["baseball","baseball-multi"]:
+                        label = f"Agent -> pitcherID: {agent[0]} | pitchType: {agent[1]}"
+                        saveAt = f"{tag}.results"
+                elif args.domain in ["hockey-multi"]:
+                        if args.testingBounded:
+                                label = f"Agent -> Player: {agentInfo[0]} | Shot Type: {agentInfo[1]}\nAgent: {agent.getName()}"
 
-				if args.jeeds:
-					tag += "_JEEDS"
+                                tag = originalTag + f"_Agent{agent.getName()}"
 
-				if args.pfe:
-					tag += "_PFE"
+                                if args.jeeds:
+                                        tag += "_JEEDS"
 
-				if args.pfeNeff:
-					tag += "_PFE_NEFF"
+                                if args.pfe:
+                                        tag += "_PFE"
 
-				saveAt = f"{tag}.results"
-			else:
-				label = f"Agent -> player: {agent[0]} | shot type: {agent[1]}"
-				saveAt = f"{tag}.results"
-		elif args.domain == "soccer":
-			label = f"Agent -> playerID: {agent}"
-			saveAt = f"{tag}.results"
-		else:
-			label = f"Agent: {agent.name}"
-			saveAt = f"{tag}-{counter}-Agent{agent.getName()}.results"
+                                if args.pfeNeff:
+                                        tag += "_PFE_NEFF"
+
+                                saveAt = f"{tag}.results"
+                        else:
+                                label = f"Agent -> player: {agent[0]} | shot type: {agent[1]}"
+                                saveAt = f"{tag}.results"
+                elif args.domain == "soccer":
+                        label = f"Agent -> playerID: {agent}"
+                        saveAt = f"{tag}.results"
+                else:
+                        label = f"Agent: {agent.name}"
+                        saveAt = f"{tag}-{counter}-Agent{agent.getName()}.results"
 			
-		resultsFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}results{os.sep}{saveAt}"
-		
-		if args.domain in ["baseball","baseball-multi","hockey-multi","soccer"]:
-			statusFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}status{os.sep}{tag}-DONE"
-		else:
-			statusFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}status{os.sep}{tag}-{counter}-Agent{agent.getName()}-DONE"
+                # Determine where to persist output for this agent and the status
+                # flag file used to detect completed runs.
+                resultsFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}results{os.sep}{saveAt}"
+
+                if args.domain in ["baseball","baseball-multi","hockey-multi","soccer"]:
+                        statusFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}status{os.sep}{tag}-DONE"
+                else:
+                        statusFile = f"Experiments{os.sep}{args.resultsFolder}{os.sep}status{os.sep}{tag}-{counter}-Agent{agent.getName()}-DONE"
 
 
 		expStartTime = time.time()
@@ -117,16 +162,18 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
 		# # Proceed to perform experiment (full/reload/rerun modes)
 		# else:
 
-		print(f"\n{label}")
+                # Display which agent configuration is currently running.
+                print(f"\n{label}")
 
 		# To handle case mode rerun but prev rf for current agent doesn't exist
-		if tempRerun:
-			# Verify if prev rf file exists
-			try:
-				with open(resultsFile,'rb') as handle:
-					resultsLoaded = pickle.load(handle)
-			except:
-				tempRerun = False
+                if tempRerun:
+                        # Verify if a previous results file exists; if not,
+                        # rerun behaves like a fresh run.
+                        try:
+                                with open(resultsFile,'rb') as handle:
+                                        resultsLoaded = pickle.load(handle)
+                        except:
+                                tempRerun = False
 
 
 		if env.domainName in ["1d","2d","2d-multi"]:
@@ -144,61 +191,70 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
 		
 
 		# Experiment valid, proceed to perform exp
-		if exp.getValid():
+                # Proceed only when the experiment instance is properly
+                # configured (valid dataset, states, etc.).
+                if exp.getValid():
 
-			if env.domainName in ["baseball","baseball-multi","hockey-multi","soccer"]:
-				# exp.run(tag,counter,num,comm)
-				exp.run(tag,counter)
-				results = {}	
+                        if env.domainName in ["baseball","baseball-multi","hockey-multi","soccer"]:
+                                # Some experiment classes handle their own
+                                # persistence internally, so simply run them
+                                # inline and use an empty results dict here.
+                                # exp.run(tag,counter,num,comm)
+                                exp.run(tag,counter)
+                                results = {}
 
-			else:
-				q = Queue()
-				
-				process = Process(target=work, args=(exp,tag,counter,env.domainName,q)) 
+                        else:
+                                # For darts-like domains run the experiment in a
+                                # separate process to keep memory usage contained
+                                # and avoid interference between runs.
+                                q = Queue()
 
-				# print(f"ID of parent process: {os.getpid()}")
+                                process = Process(target=work, args=(exp,tag,counter,env.domainName,q))
 
-				# Start the process
-				process.start()
+                                # print(f"ID of parent process: {os.getpid()}")
 
-				results = q.get()
+                                # Start the process
+                                process.start()
 
-				# Wait for the process to finish
-				process.join()
+                                results = q.get()
+
+                                # Wait for the process to finish
+                                process.join()
 
 
 			expStopTime = time.time()
 			expTotalTime = expStopTime-expStartTime
 
 
-			if env.domainName not in ["baseball","baseball-multi","hockey-multi","soccer"]:
+                        if env.domainName not in ["baseball","baseball-multi","hockey-multi","soccer"]:
 
-				# Load initial info from file 
-				# OR load results from prev exp
-				with open(resultsFile,'rb') as handle:
-					resultsLoaded = pickle.load(handle)
+                                # Load initial info from file
+                                # OR load results from prev exp
+                                with open(resultsFile,'rb') as handle:
+                                        resultsLoaded = pickle.load(handle)
 
-				results['expTotalTime'] = expTotalTime
-				results['lastEdited'] = str(datetime.now())
+                                # Attach timing metadata and persist back to disk.
+                                results['expTotalTime'] = expTotalTime
+                                results['lastEdited'] = str(datetime.now())
 
-				# Update dict info
-				resultsLoaded.update(results)
+                                # Update dict info
+                                resultsLoaded.update(results)
 
-				with open(resultsFile,'wb') as outfile:
-					pickle.dump(resultsLoaded,outfile)
-				
-				del resultsLoaded
+                                with open(resultsFile,'wb') as outfile:
+                                        pickle.dump(resultsLoaded,outfile)
 
-			else:
-				# Assuming results file already exist since created when saving initial info
-				# Add just exp time to file since results are saved to file within run()
-				with open(resultsFile,'rb') as handle:
-					results = pickle.load(handle)
+                                del resultsLoaded
 
-				results['expTotalTime'] = expTotalTime
+                        else:
+                                # Assuming results file already exist since created when saving initial info
+                                # Add just exp time to file since results are saved to file within run()
+                                with open(resultsFile,'rb') as handle:
+                                        results = pickle.load(handle)
 
-				with open(resultsFile,'wb') as outfile:
-					pickle.dump(results,outfile)
+                                results['expTotalTime'] = expTotalTime
+
+                                with open(resultsFile,'wb') as outfile:
+                                        pickle.dump(results,outfile)
 				
 				del results
 
@@ -235,30 +291,32 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
 
 
 def createEstimators(args,infoForEstimators,env):
+        """Instantiate all requested estimators and log creation time."""
 
-	print("\nCreating estimators...")
-	
-	creationStart = time.time()
+        print("\nCreating estimators...")
 
-	estimators = Estimators(infoForEstimators,env)
+        creationStart = time.time()
 
-	# code.interact("...", local=dict(globals(), **locals()))
+        estimators = Estimators(infoForEstimators,env)
 
-	creationStop = time.time()
+        # code.interact("...", local=dict(globals(), **locals()))
 
-	print("Done creating the estimators.\n")
+        creationStop = time.time()
 
-	# store the time taken to create estimators to txt file
-	with open("Experiments" + os.sep + args.resultsFolder  + os.sep + "times" + os.sep + f"timeToCreateEstimators{args.seedNum}.txt", "w") as file:
-		file.write("\n\nTime to create all the estimators: "+str(creationStop - creationStart))
-		
-	return estimators
+        print("Done creating the estimators.\n")
+
+        # store the time taken to create estimators to txt file
+        with open("Experiments" + os.sep + args.resultsFolder  + os.sep + "times" + os.sep + f"timeToCreateEstimators{args.seedNum}.txt", "w") as file:
+                file.write("\n\nTime to create all the estimators: "+str(creationStop - creationStart))
+
+        return estimators
 
 
 # @profile
 def main():
+        """Script entry point that prepares configuration and executes runs."""
 
-	# gc.set_debug(gc.DEBUG_LEAK)
+        # gc.set_debug(gc.DEBUG_LEAK)
 
 
 	# USAGE:  python runExp.py -resultsFolder Results -domain 1d
@@ -416,9 +474,9 @@ def main():
 
 
 
-	# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	# Initial Setup
-	# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # Initial Setup
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 	rf = f"Experiments{os.sep}{args.domain}{os.sep}{args.resultsFolder}{os.sep}Experiment{os.sep}"
 
@@ -465,25 +523,26 @@ def main():
 					f"Data{os.sep}Soccer{os.sep}Unxpass{os.sep}Dataset{os.sep}"]
 
 
-	for folder in folders:
-		#If the folder doesn't exist already, create it
-		if not os.path.exists(folder):
+        for folder in folders:
+                # Ensure required directories exist before writing any files.
+                if not os.path.exists(folder):
 
-			try:
-				os.mkdir(folder)
-			# To catch file exists error
-			# Will continue as assuming other process already create it
-			except FileExistsError:
-				continue
+                        try:
+                                os.mkdir(folder)
+                        # To catch file exists error
+                        # Will continue as assuming other process already create it
+                        except FileExistsError:
+                                continue
 
 	del folders
 
 	args.resultsFolder = args.domain + os.sep + args.resultsFolder
 	
 
-	with open(f"Experiments{os.sep}{args.resultsFolder}{os.sep}info.txt","w") as outfile:
-		print(f"Experiment Started: {datetime.now()}",file=outfile)
-		print(f"Model Used: Version 1.Pending",file=outfile)
+        # Record high-level metadata about the experiment run for later review.
+        with open(f"Experiments{os.sep}{args.resultsFolder}{os.sep}info.txt","w") as outfile:
+                print(f"Experiment Started: {datetime.now()}",file=outfile)
+                print(f"Model Used: Version 1.Pending",file=outfile)
 
 
 
@@ -752,25 +811,27 @@ def main():
 
 
 	
-	# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
-	# FOR EXPERIMENTS 
-	# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # FOR EXPERIMENTS
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-	# To ensure seeds generated later on are different
-	if args.seedNum == -1:
-		args.seedNum = np.random.randint(0,100000,1)[0]
-
-
-	# TESTING
-	args.seedNum = 62912
-
-	np.random.seed(args.seedNum)
-	print(f"Seed set to: {args.seedNum}")
+        # To ensure seeds generated later on are different
+        if args.seedNum == -1:
+                args.seedNum = np.random.randint(0,100000,1)[0]
 
 
-	# Generate seeds to use based on main seed
-	seeds = np.random.randint(0,1000000,args.iters)
-	print("Seeds: ",seeds)
+        # TESTING
+        args.seedNum = 62912
+
+        # Seed numpy for reproducibility across runs and generate per-iteration
+        # seeds that will drive individual experiments.
+        np.random.seed(args.seedNum)
+        print(f"Seed set to: {args.seedNum}")
+
+
+        # Generate seeds to use based on main seed
+        seeds = np.random.randint(0,1000000,args.iters)
+        print("Seeds: ",seeds)
 
 	# FOR TESTING
 	# seeds[0] = 5515
