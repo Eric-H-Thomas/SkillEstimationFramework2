@@ -1621,224 +1621,216 @@ class SpacesHockey(Spaces):
                         "defaultFocalActions","focalActionMiddle","pdfsPerXskill",
                         "evsPerXskill","grid","mean"]
 
-	# @profile
-	def __init__(self,args,numObservations,domain,delta):		
+        # @profile
+        def __init__(self,args,numObservations,domain,delta):
+                """Prepare lookup structures used to evaluate hockey shots.
 
+                Args:
+                        args: Command-line arguments passed through from experiment scripts.
+                        numObservations: Number of observations to consider when computing rewards.
+                        domain: Domain helper providing hockey-specific utilities such as covariance builders.
+                        delta: Grid resolution for the discretized shooting surface.
+                """
 
-		super().__init__(numObservations,domain,"",delta)
+                super().__init__(numObservations,domain,"",delta)
 
+                # Track which x-skill parameters the estimator cares about to pre-compute covariances.
+                self.estimatorXskills = []
 
-		self.estimatorXskills = []
+                #####################################################
+                # Init Info
+                #####################################################
 
+                # Bounds for shot targets on the ice (in meters).
+                self.minY = -3.0
+                self.maxY = 3.0
 
-		#####################################################
-		# Init Info
-		#####################################################
+                # Bounds for target height (in meters).
+                self.minZ = 0.0
+                self.maxZ = 4.0
 
-		self.minY = -3.0
-		self.maxY = 3.0
+                # Build evenly spaced target grids for lateral (Y) and vertical (Z) aiming.
+                # Note that delta is treated per-dimension rather than a single scalar step.
+                self.targetsY = np.linspace(self.minY,self.maxY,60)
+                self.targetsZ = np.linspace(self.minZ,self.maxZ,40)
 
-		self.minZ = 0.0
-		self.maxZ = 4.0
+                # Size of action space = number of discrete (Y,Z) pairs.
+                self.sizeActionSpace = len(self.targetsY)*len(self.targetsZ)
 
-		# self.targetsY = np.arange(self.minY,self.maxY,delta)
-		# self.targetsZ = np.arange(self.minZ,self.maxZ,delta)
+                # Used by estimators when they need a default aiming point.
+                self.defaultFocalActions = []
 
+                # Dense matrix of all possible actions (y,z). The order is kept consistent
+                # with the nested loops below to avoid changing downstream assumptions.
+                self.possibleTargets = []
 
-		# delta is now per dimension
+                # Preserve the original ordering of Y-first iteration so downstream
+                # code that relies on the legacy flattening convention continues to
+                # match previous caches/expectations.
+                for i in range(len(self.targetsY)):
+                        for j in range(len(self.targetsZ)):
+                                self.possibleTargets.append([self.targetsY[i],self.targetsZ[j]])
 
-		self.targetsY = np.linspace(self.minY,self.maxY,60)
-		self.targetsZ = np.linspace(self.minZ,self.maxZ,40) 
+                self.possibleTargets = np.array(self.possibleTargets)
 
+                #####################################################
+                # PDF/EV caches keyed by x-skill parameterization
+                #####################################################
+                self.pdfsPerXskill = {}
+                self.evsPerXskill = {}
 
-		# To include end point
-		# self.targetsY = np.append(self.targetsY,self.maxY)
-		# self.targetsZ = np.append(self.targetsZ,self.maxZ)
+                #####################################################
+                # PER EXPERIMENT (lazy initialized elsewhere)
+                #####################################################
+                # self.expectedRewardsPerXskill = {}
 
+                # code.interact("spaces init()...", local=dict(globals(), **locals()))
 
-		# Size of action space = area of rectangle = length * width
-		# a = abs(self.minY-self.maxY)
-		# b = abs(self.minZ-self.maxZ)
-		# self.sizeActionSpace = a*b
-		self.sizeActionSpace = len(self.targetsY)*len(self.targetsZ)
+        # @profile
+        def initInfoForExps(self):
+                """Pre-compute covariance matrices used by downstream convolution calls."""
 
+                self.allCovs = {}
 
-		self.defaultFocalActions = []
-		
-		# self.focalActionMiddle =  [0.0,2.479]
+                # For hockey multi-domain experiments store covariances keyed by stringified x-skill.
+                if "multi" in self.domainName:
 
+                        # Computing for symmetric set only since for normal JTM only.
+                        # The ones for JTM-Particles will be managed within addObservation().
+                        info = list(product(self.estimatorXskills,[0.0]))
 
-		# Store dense matrix for actions
-		self.possibleTargets = []
+                        for xi in range(len(info)):
+                                x = info[xi]
+                                key = self.getKey(x[0],x[1])
+                                self.allCovs[key] = self.domain.getCovMatrix(x[0],x[1])
 
-		# for i in range(len(self.targetsY)):
-			# for j in range(len(self.targetsZ)):
-				# self.possibleTargets.append([self.targetsY[i],self.targetsZ[j]])
+                else:
 
-		
-		for j in range(len(self.targetsZ)):
-			for i in range(len(self.targetsY)):
-				self.possibleTargets.append([self.targetsY[i],self.targetsZ[j]])
+                        for xi in range(len(self.estimatorXskills)):
+                                x = self.estimatorXskills[xi]
 
-		self.possibleTargets = np.array(self.possibleTargets)
-		
+                                val = x**2
+                                cvs = np.zeros((2,2))
+                                np.fill_diagonal(cvs,val)
 
+                                self.allCovs[x] = cvs
 
-		#####################################################
-		
-		
-		self.pdfsPerXskill = {}
-		self.evsPerXskill = {}
+        # @profile
+        def getAgentData(self,rf,player,typeShot,maxRows):
+                """Load recent angular heatmap data for a player/type combination.
 
+                Args:
+                        rf: Run folder string used to locate experiment outputs.
+                        player: Identifier of the player to load.
+                        typeShot: Shot type index used in file naming.
+                        maxRows: Maximum number of entries to retain (oldest entries are dropped).
 
-		#####################################################
-		# PER EXPERIMENT
-		#####################################################
+                Returns:
+                        Dictionary keyed by game-state identifiers or an empty list when data is missing.
+                """
 
-		# self.expectedRewardsPerXskill = {}
+                rfup = str(rf.replace(f"Experiment",""))
 
-		#####################################################
+                folder = f"Experiments{os.sep}{rfup}{os.sep}Data{os.sep}AngularHeatmaps{os.sep}"
+                fileName = f"angular_heatmap_data_player_{player}_type_shot_{typeShot}.pkl"
 
+                try:
+                        with open(folder+fileName,"rb") as infile:
+                                agentData = pickle.load(infile)
 
-		# code.interact("spaces init()...", local=dict(globals(), **locals()))
+                        # Select only the most recent ``maxRows`` entries to keep processing lightweight.
+                        if len(agentData) > maxRows:
+                                agentData = {k:agentData[k] for i,k in enumerate(agentData) if i < maxRows}
 
 
-	# @profile
-	def initInfoForExps(self):
-	
-		self.allCovs = {}
+                except Exception as e:
+                        print(e)
+                        print("File not present.")
+                        agentData = []
 
+                # code.interact("...", local=dict(globals(), **locals()))
 
-		# For baseball-multi domain
-		if "multi" in self.domainName:
+                return agentData
 
-			# Computing for symmetric set only since for normal JTM only
-			# The ones for JTM-Particles will be managed within addObservation()
-			info = list(product(self.estimatorXskills,[0.0]))
+        def reset(self):
+                """Clear reward caches for a fresh experiment run."""
+                self.expectedRewardsPerXskill = {}
 
-			for xi in range(len(info)):
-				x = info[xi]
-				key = self.getKey(x[0],x[1])
-				self.allCovs[key] = self.domain.getCovMatrix(x[0],x[1])
-			
-		else:
+        def getKey(self,info,r):
+                """Build a deterministic cache key from an x-skill vector and rho value."""
+                return "|".join(map(str,info))+f"|{r}"
 
-			for xi in range(len(self.estimatorXskills)):
-				x = self.estimatorXskills[xi]
+        def updateSpace(self,rng,givenXskills,fromEstimator=False):
+                """Record estimator-requested x-skills so covariances can be prepared later."""
 
-				val = x**2
-				cvs = np.zeros((2,2))
-				np.fill_diagonal(cvs,val)
+                if "multi" in self.domainName:
+                        givenXskills = givenXskills[0]
 
-				self.allCovs[x] = cvs
+                for x in givenXskills:
 
+                        # Adding symmetric set only since for normal JTM only
+                        # The ones for JTM-Particles will be managed within addObservation()
+                        if fromEstimator and x not in self.estimatorXskills:
 
+                                if "multi" in self.domainName:
+                                         if x[0] == x[1]:
+                                                self.estimatorXskills.append(x)
+                                else:
+                                        self.estimatorXskills.append(x)
 
-	# @profile
-	def getAgentData(self,rf,player,typeShot,maxRows):		
+        def updateSpaceParticles(self,rng,each,state,info,wid=None):
+                """Compute PDFs/EVs for particle filter states in the multi-domain setting."""
 
-		rfup = str(rf.replace(f"Experiment",""))
+                if "multi" in self.domainName:
 
-		folder = f"Experiments{os.sep}{rfup}{os.sep}Data{os.sep}AngularHeatmaps{os.sep}"
-		fileName = f"angular_heatmap_data_player_{player}_type_shot_{typeShot}.pkl"
-		
-		try:
-			with open(folder+fileName,"rb") as infile:
-				agentData = pickle.load(infile)
+                        # Assuming method will get called only with multi domain
+                        covMatrix = self.domain.getCovMatrix(each[:-2],each[-2])
+                        key = self.getKey(each[:-2],each[-2])
 
-			# Select only X recent rows (slice dict)
-			if len(agentData) > maxRows:
-				agentData = {k:agentData[k] for i,k in enumerate(agentData) if i < maxRows}
 
+                        if key not in self.pdfsPerXskill:
+                                # print(f"Computing pdfs for {key}... (wid: {wid})")
+                                self.pdfsPerXskill[key] = self.domain.getNormalDistribution(rng,covMatrix,self.delta,self.mean,self.grid)
+                        else:
+                                # print(f"Pdfs info is present for {key}. (wid: {wid})")
+                                pass
 
-		except Exception as e:
-			print(e)
-			print("File not present.")
-			agentData = []
 
-		# code.interact("...", local=dict(globals(), **locals()))
-		
-		return agentData
+                        if key not in self.evsPerXskill:
+                                # print(f"Computing EVs for {key}... (wid: {wid})")
+                                # t1 = time.perf_counter()
 
+                                Zs = info["Zs"]
+                                # print(Zs)
+                                minUtility = np.min(Zs)
 
-	def reset(self):
-		self.expectedRewardsPerXskill = {}
+                                # t1 = time.perf_counter()
+                                self.evsPerXskill[key] = convolve2d(Zs,self.pdfsPerXskill[key],mode="same",fillvalue=0.0)
+                                # print(f"Total time for convolve2d: {time.perf_counter()-t1:.4f}")
+                        else:
+                                # print(f"EVs info present for {key}... (wid: {wid})")
+                                pass
 
 
-	def getKey(self,info,r):
-		return "|".join(map(str,info))+f"|{r}"
+                        # if "0.7854" in key:
+                                # code.interact("updateSpaceParticles()...", local=dict(globals(), **locals()))
 
+        def deleteSpaceParticles(self,each,state):
+                """Remove cached PDF/EV entries when a particle is discarded."""
 
-	def updateSpace(self,rng,givenXskills,fromEstimator=False):
+                key = self.getKey(each[:-2],each[-2])
 
-		if "multi" in self.domainName:
-			givenXskills = givenXskills[0]
+                try:
+                        # print(f"Removing convolution for x = {key}")
 
-		for x in givenXskills:
+                        self.pdfsPerXskill[key].clear()
+                        self.evsPerXskill[key].clear()
 
-			# Adding symmetric set only since for normal JTM only
-			# The ones for JTM-Particles will be managed within addObservation()
-			if fromEstimator and x not in self.estimatorXskills:
+                        del self.pdfsPerXskill[key]
+                        del self.evsPerXskill[key]
 
-				if "multi" in self.domainName:
-					 if x[0] == x[1]:
-					 	self.estimatorXskills.append(x)
-				else:
-					self.estimatorXskills.append(x)
-
-
-	def updateSpaceParticles(self,rng,each,state,info,wid=None):
-
-		if "multi" in self.domainName:
-
-			# Assuming method will get called only with multi domain
-			covMatrix = self.domain.getCovMatrix(each[:-2],each[-2])
-			key = self.getKey(each[:-2],each[-2])
-
-
-			if key not in self.pdfsPerXskill:
-				# print(f"Computing pdfs for {key}... (wid: {wid})")
-				self.pdfsPerXskill[key] = self.domain.getNormalDistribution(rng,covMatrix,self.delta,self.mean,self.grid)
-			else:
-				# print(f"Pdfs info is present for {key}. (wid: {wid})")
-				pass
-
-
-			if key not in self.evsPerXskill:
-				# print(f"Computing EVs for {key}... (wid: {wid})")
-				# t1 = time.perf_counter()
-				
-				Zs = info["Zs"]
-				# print(Zs)
-				minUtility = np.min(Zs)
-
-				# t1 = time.perf_counter()
-				self.evsPerXskill[key] = convolve2d(Zs,self.pdfsPerXskill[key],mode="same",fillvalue=0.0)
-				# print(f"Total time for convolve2d: {time.perf_counter()-t1:.4f}")
-			else:
-				# print(f"EVs info present for {key}... (wid: {wid})")
-				pass
-
-
-			# if "0.7854" in key:
-				# code.interact("updateSpaceParticles()...", local=dict(globals(), **locals()))
-
-
-	def deleteSpaceParticles(self,each,state):
-
-		key = self.getKey(each[:-2],each[-2])
-
-		try:
-			# print(f"Removing convolution for x = {key}")
-
-			self.pdfsPerXskill[key].clear()
-			self.evsPerXskill[key].clear()
-
-			del self.pdfsPerXskill[key]
-			del self.evsPerXskill[key]
-		
-		except:
-			pass
+                except:
+                        pass
 
 
 class SpacesSoccer(Spaces):
