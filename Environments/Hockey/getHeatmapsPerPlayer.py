@@ -1,9 +1,24 @@
-"""Utility for splitting hockey heatmap data by player and shot type.
+"""Split aggregated hockey heatmap data into per-player/shot-type outputs.
 
-The script expects to be executed from the root of the repository and the
-experiment folder name to be passed as the sole command line argument.  The
-folder structure is assumed to follow the hierarchy created by the experiment
-pipelines (Experiments/hockey-multi/<experiment>/Data/).
+This script is a small data-preparation step in the hockey simulation pipeline
+used throughout the repository. Experiments generate a single
+``heatmap_data.pkl`` file that aggregates shot records for every player. This
+utility reshapes that file into per-player, per-shot-type pickles and writes a
+text summary so downstream analysis or visualization code can read smaller,
+focused datasets from ``Experiments/hockey-multi/<experiment>/Data/Heatmaps``.
+
+Functions in this module
+------------------------
+* ``_load_data_file`` – open the aggregated pickle and return its contents.
+* ``_ensure_heatmap_dir`` – create the ``Heatmaps`` output directory if needed.
+* ``_group_shots_by_player`` – organize rows by player identifier and shot
+  type, returning both the grouped data and the list of shot types observed.
+* ``_write_player_pickles`` – emit one pickle file for each player/shot-type
+  combination.
+* ``_write_summary_stats`` – generate a text file that reports counts per
+  player and shot type.
+* ``main`` – CLI entry point that wires the above helpers together based on the
+  experiment folder passed via ``sys.argv``.
 """
 
 import os
