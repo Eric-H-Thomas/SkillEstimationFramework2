@@ -1664,8 +1664,11 @@ class SpacesHockey(Spaces):
                 # with the nested loops below to avoid changing downstream assumptions.
                 self.possibleTargets = []
 
-                for j in range(len(self.targetsZ)):
-                        for i in range(len(self.targetsY)):
+                # Preserve the original ordering of Y-first iteration so downstream
+                # code that relies on the legacy flattening convention continues to
+                # match previous caches/expectations.
+                for i in range(len(self.targetsY)):
+                        for j in range(len(self.targetsZ)):
                                 self.possibleTargets.append([self.targetsY[i],self.targetsZ[j]])
 
                 self.possibleTargets = np.array(self.possibleTargets)
