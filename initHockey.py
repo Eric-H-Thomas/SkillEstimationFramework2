@@ -1,19 +1,19 @@
-import os,sys
+import os
 from datetime import datetime
 
-if __name__ == '__main__':
-	
+"""
+This script initializes the directory structure for the hockey-multi domain experiments.
+It creates folders for storing experiment data and plots based on the current date.
+"""
 
-	domain = "hockey-multi"
+def main():
+    domain = "hockey-multi"
+    now = datetime.now()
 
-	tempInfo = datetime.now()
+    base_experiment_path = os.path.join("Experiments", domain, f"{now.year}-{now.month}-{now.day}")
+    plots_folder = os.path.join(base_experiment_path, "Data", "Plots")
+    os.makedirs(plots_folder, exist_ok=True)
 
 
-	folder = f"Experiments{os.sep}{domain}{os.sep}{tempInfo.year}-{tempInfo.month}-{tempInfo.day}{os.sep}Data{os.sep}"
-
-	
-	folders = ["Experiments",f"Experiments{os.sep}{domain}{os.sep}",f"Experiments{os.sep}{domain}{os.sep}{tempInfo.year}-{tempInfo.month}-{tempInfo.day}",folder,f"{folder}{os.sep}Plots{os.sep}"]
-
-	for each in folders:
-		if not os.path.exists(each):
-			os.mkdir(each)
+if __name__ == "__main__":
+    main()
