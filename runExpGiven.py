@@ -1,3 +1,55 @@
+"""Experiment runner for user-specified skill configurations.
+
+This script is the main entry point for running *given* skill configurations (as opposed
+to random draws) across multiple domains such as darts, billiards, baseball, and soccer.
+It wires together environment/agent creation (``setupEnv``), estimator construction
+(``Estimators.estimators``), domain-specific experiment classes (e.g., ``RandomDartsExp``
+and ``BaseballExp``), and the file-system layout under ``Experiments/``. Runs are grouped
+by iteration and skill tuple, executed either inline or in subprocesses, and results are
+checkpointed with DONE markers plus timing metadata. This complements files like
+``runExpRandom.py`` (randomized skill draws) and ``runExpDynamic.py`` (dynamic skill
+trajectories) by providing a deterministic, CLI-driven workflow for enumerated skills.
+
+Function guide (order of appearance)
+------------------------------------
+- ``build_info_for_estimators``: Assemble estimator hyperparameters/ranges from CLI args.
+- ``parse_cli_args``: Define and parse the command-line interface for experiment runs.
+- ``run_single_experiment``: Execute one experiment in a worker process and queue results.
+- ``_compute_labels_and_paths``: Derive human-readable labels and output file paths.
+- ``_make_experiment``: Instantiate the correct experiment class for the active domain.
+- ``_run_exp_and_collect_results``: Run an experiment (inline or subprocess) and gather
+  its result dictionary when applicable.
+- ``_should_skip_completed``: Skip persistent-domain runs already marked as DONE.
+- ``_validate_rerun_flag``: Keep the rerun flag only when prior results exist on disk.
+- ``_run_and_time``: Measure wall-clock duration for a single experiment run.
+- ``_persist_results``: Merge timing metadata into result pickles for non-persistent
+  domains or append to persisted domain outputs.
+- ``_mark_success``: Write DONE markers (plus rerun markers) after successful completion.
+- ``_cleanup_after_agent``: Free per-agent experiment objects and encourage GC.
+- ``ensure_output_folders``: Create the folder hierarchy and normalize results folder
+  names under ``Experiments/<domain>/``.
+- ``prepare_experiment_context``: Seed RNGs, build the environment, preload agents (when
+  applicable), and compute iteration counts.
+- ``cleanup_memory_placeholders``: Legacy no-op kept for readability of the main flow.
+- ``find_observed_reward_index``: Locate the ``ObservedReward`` estimator within a stack.
+- ``prepare_iteration_spaces``: Reset environments/spaces per iteration based on domain.
+- ``build_iteration_tag``: Build filename-safe tags for each iteration/skill combination
+  and detect rerun requests.
+- ``format_xskill_strings``: Render execution-skill tuples for logs and tag components.
+- ``update_space_for_2d_multi``: Adjust darts multi-dimensional spaces for a skill tuple.
+- ``record_iteration_time``: Track per-iteration timing and persist rolling averages.
+- ``run_persistent_domain_iteration``: Orchestrate baseball/soccer iterations that
+  persist their own results.
+- ``build_all_xskill_info``: Enumerate execution-skill combinations for darts-like runs.
+- ``onlineExperiment``: Core per-skill loop that launches experiments across agents.
+- ``createEstimators`` / ``create_estimators_and_index``: Construct estimator objects and
+  fetch the ``ObservedReward`` index when present.
+- ``run_all_experiments``: High-level driver looping over iterations and skill configs.
+- ``save_seeds_if_needed``: Persist RNG seeds for reproducibility (unless rerunning).
+- ``main``: Tie together argument parsing, setup, estimator creation, experiment loops,
+  and seed persistence.
+"""
+
 import argparse, datetime, os, time, pickle, setupEnv
 import numpy as np
 from multiprocess import Process, Queue
