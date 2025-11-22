@@ -1,501 +1,495 @@
-import numpy as np
-import sys, os, pickle
+"""
+Generate angular heatmaps for hockey player shot data.
+
+This script converts Cartesian heatmap data (Y/Z utility values for a player
+shooting from a given position) into angular coordinates (direction/elevation)
+so that utilities can be analyzed relative to the net. It loads supporting
+modules dynamically, computes angular grids, interpolates utilities, and saves
+per-player/per-shot-type results.
+
+Functions
+---------
+getAngle(point1, point2)
+    Compute the polar angle (in radians) from point1 to point2.
+getAngularHeatmap(heatmap, playerLocation, executedAction)
+    Convert a player's Cartesian heatmap and executed shot into angular space,
+    returning both the angular grid and the interpolated utility values.
+
+How it fits
+-----------
+This file is part of the Hockey environment preprocessing pipeline. It takes
+heatmaps produced elsewhere in the experiment folder structure and transforms
+them into an angular representation used by evaluators in the Estimators
+package. The generated pickle files are consumed by downstream analysis tools
+to study player shot tendencies and performance in angular space.
+"""
+
 import code
-from scipy.interpolate import griddata
+import os
+import pickle
+import sys
 from importlib.machinery import SourceFileLoader
 
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import griddata
 
-
-# Find location of current file
+# Find location of current file to resolve project-root-relative imports.
 scriptPath = os.path.realpath(__file__)
 mainFolderName = scriptPath.split(f"Environments{os.sep}Hockey{os.sep}getAngularHeatmapsPerPlayer.py")[0]
 
-module = SourceFileLoader("hockey.py",f"{mainFolderName}Environments{os.sep}Hockey{os.sep}hockey.py").load_module()
+# Dynamically load project modules without altering import paths.
+module = SourceFileLoader("hockey.py", f"{mainFolderName}Environments{os.sep}Hockey{os.sep}hockey.py").load_module()
 sys.modules["domain"] = module
 
-module = SourceFileLoader("setupSpaces.py",f"{mainFolderName}setupSpaces.py").load_module()
+module = SourceFileLoader("setupSpaces.py", f"{mainFolderName}setupSpaces.py").load_module()
 sys.modules["spaces"] = module
 
-
-module = SourceFileLoader("utils.py",f"{mainFolderName}Estimators{os.sep}utils.py").load_module()
+module = SourceFileLoader("utils.py", f"{mainFolderName}Estimators{os.sep}utils.py").load_module()
 sys.modules["utils"] = module
 
+# Heatmap grid resolution (in feet).
+delta = 1.0  # 0.16
 
-# Feet
-delta = 1.0 #0.16
-
-spaces = sys.modules["spaces"].SpacesHockey([],1,sys.modules["domain"],delta)
+# Initialize hockey-specific space definitions for target coordinates.
+spaces = sys.modules["spaces"].SpacesHockey([], 1, sys.modules["domain"], delta)
 
 Y = spaces.targetsY
 Z = spaces.targetsZ
 
-targetsUtilityGridY,targetsUtilityGridZ = np.meshgrid(Y,Z)
-targetsUtilityGridYZ = np.stack((targetsUtilityGridY,targetsUtilityGridZ),axis=-1)
+# Pre-compute target grid in Cartesian coordinates (Y, Z).
+targetsUtilityGridY, targetsUtilityGridZ = np.meshgrid(Y, Z)
+targetsUtilityGridYZ = np.stack((targetsUtilityGridY, targetsUtilityGridZ), axis=-1)
 
 shape = targetsUtilityGridYZ.shape
-listedTargetsUtilityGridYZ = targetsUtilityGridYZ.reshape((shape[0]*shape[1],shape[2]))
+listedTargetsUtilityGridYZ = targetsUtilityGridYZ.reshape((shape[0] * shape[1], shape[2]))
 
+# Net geometry reference points (feet).
+leftPost = np.array([89, -3])
+rightPost = np.array([89, 3])
 
-leftPost = np.array([89,-3])
-rightPost = np.array([89,3])
-
-
-leftAugmented = np.array([89,-9])
-rightAugmented = np.array([89,9])
+# Augmented goalposts and crossbar heights for larger angular span.
+leftAugmented = np.array([89, -9])
+rightAugmented = np.array([89, 9])
 
 top = 4
 topAugmented = 8
 
 
-def getAngle(point1,point2):
+def getAngle(point1, point2):
+    """Return the polar angle from point1 to point2 (radians)."""
 
-	x1,y1 = point1
-	x2,y2 = point2
-	
-	angle = np.arctan2(y2-y1,x2-x1)
-	
-	return angle
+    x1, y1 = point1
+    x2, y2 = point2
 
+    angle = np.arctan2(y2 - y1, x2 - x1)
 
-def getAngularHeatmap(heatmap,playerLocation,executedAction):
+    return angle
 
-	rng = np.random.default_rng(1000)
 
+def getAngularHeatmap(heatmap, playerLocation, executedAction):
+    """Convert a Cartesian heatmap for one shot into angular space."""
 
-	shape = heatmap.shape
-	listedUtilities = heatmap.reshape((shape[0]*shape[1],1))
+    rng = np.random.default_rng(1000)
 
+    # Flatten utilities for interpolation convenience.
+    shape = heatmap.shape
+    listedUtilities = heatmap.reshape((shape[0] * shape[1], 1))
 
-	# Generate edges - directions
-	dirL = getAngle(playerLocation,leftAugmented)
-	dirR = getAngle(playerLocation,rightAugmented)
+    # Generate angular bounds for direction based on augmented posts.
+    dirL = getAngle(playerLocation, leftAugmented)
+    dirR = getAngle(playerLocation, rightAugmented)
 
-	# Generate edges - elevations
-	dist1 = np.linalg.norm(playerLocation-leftAugmented)
-	dist2 = np.linalg.norm(playerLocation-rightAugmented)
+    # Compute maximum elevation angle based on top of net.
+    dist1 = np.linalg.norm(playerLocation - leftAugmented)
+    dist2 = np.linalg.norm(playerLocation - rightAugmented)
 
-	minDist = min(dist1,dist2)
-	elevationTop = np.arctan2(topAugmented,minDist)
+    minDist = min(dist1, dist2)
+    elevationTop = np.arctan2(topAugmented, minDist)
 
+    # Create grid of direction/elevation samples (uniform resolution).
+    # Legacy manual step size code is preserved below but commented out.
+    '''
+    deltaD = 0.01*(abs(dirL)+abs(dirR))
+    deltaE = 0.01*elevationTop
 
-	# Create grid
+    dirs = np.arange(dirL,dirR,deltaD)
 
-	'''
-	deltaD = 0.01*(abs(dirL)+abs(dirR))
-	deltaE = 0.01*elevationTop
+    # In case discretization yield too little points
+    if len(dirs) < 10:
+            deltaD = 0.001*(abs(dirL)+abs(dirR))
+            dirs = np.arange(dirL,dirR,deltaD)
 
-	dirs = np.arange(dirL,dirR,deltaD)
 
-	# In case discretization yield too little points
-	if len(dirs) < 10:
-		deltaD = 0.001*(abs(dirL)+abs(dirR))
-		dirs = np.arange(dirL,dirR,deltaD)
+    elevations = np.arange(0.0,elevationTop,deltaE)
 
+    # To account for max endpoint
+    if dirR not in dirs:
+            dirs = np.append(dirs,dirR)
 
-	elevations = np.arange(0.0,elevationTop,deltaE)
+    if elevationTop not in elevations:
+            elevations = np.append(elevations,elevationTop)
+    '''
 
-	# To account for max endpoint
-	if dirR not in dirs:
-		dirs = np.append(dirs,dirR)
+    resolution = 100
+    dirs = np.linspace(dirL, dirR, resolution)
+    elevations = np.linspace(0, elevationTop, resolution)
 
-	if elevationTop not in elevations:
-		elevations = np.append(elevations,elevationTop)
-	'''
+    # Cartesian target coordinates (unused, kept for reference/testing).
+    gridTargets = []
 
-	resolution = 100
-	dirs = np.linspace(dirL,dirR,resolution)
-	elevations = np.linspace(0,elevationTop,resolution)
+    for j in Z:
+        for i in Y:
+            gridTargets.append([i, j])
 
+    # Build angular grid list [direction, elevation].
+    listedTargetsAngular = []
 
-	gridTargets = []
+    for e in elevations:
+        for d in dirs:
+            listedTargetsAngular.append([d, e])
 
-	for j in Z:
-		for i in Y:
-			gridTargets.append([i,j])
+    # Pre-compute angular targets converted back to Y/Z coordinates.
+    tempDist = np.linalg.norm(np.array([-3, 0]) - np.array([3, 0]))
 
+    listedTargetsAngular2YZ = []
 
+    # For each target on the angular grid, convert to Cartesian (Y/Z).
+    for target in listedTargetsAngular:
 
-	listedTargetsAngular = []
+        d, e = target
 
-	for e in elevations:
-		for d in dirs:
-			listedTargetsAngular.append([d,e])
+        # Step 1: rotate from player's X/Y to Y direction along net line.
+        xp = 89 - playerLocation[0]
+        deltaY = xp * np.tan(d)
+        D = xp / np.cos(d)
 
+        # Step 2: project elevation given distance to target point.
+        deltaZ = D * np.tan(e)
 
+        listedTargetsAngular2YZ.append([playerLocation[1] + deltaY, deltaZ])
 
-	tempDist = np.linalg.norm(np.array([-3,0])-np.array([3,0]))
+    # gridTargets = np.array(gridTargets)
 
-	listedTargetsAngular2YZ = []
+    listedTargetsAngular = np.array(listedTargetsAngular)
+    gridTargetsAngular = np.array(listedTargetsAngular).reshape((len(dirs), len(elevations), 2))
 
-	# For each target on the grid
-	for target in listedTargetsAngular:
+    listedTargetsAngular2YZ = np.array(listedTargetsAngular2YZ)
+    gridTargetsAngular2YZ = np.array(listedTargetsAngular2YZ).reshape((len(dirs), len(elevations), 2))
 
-		d,e = target
+    # Interpolate utilities from Y/Z grid into angular grid.
+    listedUtilitiesComputed = griddata(
+        listedTargetsUtilityGridYZ,
+        listedUtilities,
+        listedTargetsAngular2YZ,
+        method='cubic',
+        fill_value=0.0,
+    )
 
-		# Step 1
-		xp = 89 - playerLocation[0]
-		deltaY = xp * np.tan(d)
-		D = xp / np.cos(d)
+    gridUtilitiesComputed = np.array(listedUtilitiesComputed).reshape((len(dirs), len(elevations)))
 
-		# Step 2
-		deltaZ = D * np.tan(e)
+    ##################################################
+    # Convert executed action to angular coordinates
+    ##################################################
 
-		listedTargetsAngular2YZ.append([playerLocation[1]+deltaY,deltaZ])
+    negativeElevation = False
+    originalElevation = None
 
+    deltaX = 89 - playerLocation[0]
+    deltaY = executedAction[0] - playerLocation[1]
+    deltaZ = executedAction[1]
 
-	# gridTargets = np.array(gridTargets)
+    # Direction Angle
+    d = np.arctan2(deltaY, deltaX)
 
-	listedTargetsAngular = np.array(listedTargetsAngular)
-	gridTargetsAngular = np.array(listedTargetsAngular).reshape((len(dirs),len(elevations),2))
+    # Elevation Angle
+    D = np.sqrt(deltaX**2 + deltaY**2)
+    e = np.arctan2(deltaZ, D)
 
+    # No negative angles possible. Can't miss low. Capping at 0.
+    if e < 0:
+        originalElevation = e
+        e = 0.0
+        negativeElevation = True
 
-	listedTargetsAngular2YZ = np.array(listedTargetsAngular2YZ)
-	gridTargetsAngular2YZ = np.array(listedTargetsAngular2YZ).reshape((len(dirs),len(elevations),2))
+    executedActionAngular = [d, e]
 
+    ##################################################
 
+    ##################################################
+    # TEST
+    ##################################################
+    # '''
+    d, e = executedActionAngular
 
-	# Interpolate to find utility
-	listedUtilitiesComputed = griddata(listedTargetsUtilityGridYZ,listedUtilities,listedTargetsAngular2YZ,method='cubic',fill_value=0.0)
+    # Step 1
+    xp = 89 - playerLocation[0]
+    deltaY = xp * np.tan(d)
+    D = xp / np.cos(d)
 
-	gridUtilitiesComputed = np.array(listedUtilitiesComputed).reshape((len(dirs),len(elevations)))
+    # Step 2
+    deltaZ = D * np.tan(e)
 
+    executedActionComputed = [playerLocation[1] + deltaY, deltaZ]
+    print("playerLocation: ", playerLocation)
+    print("executedAction: ", executedAction)
+    print("executedActionAngular: ", executedActionAngular)
+    print("executedActionComputed: ", executedActionComputed)
 
-	##################################################
-	# Convert executed action to angular coordinates
-	##################################################
+    if negativeElevation:
+        print("Negative Elevation found. Elevation was set to 0. Original Elevation: ", originalElevation)
 
-	negativeElevation = False
-	originalElevation = None
+    # d = executedActionAngular[0]
+    # e = executedActionAngular[1]
 
+    # # Convert to Cartesian coordinates on the unit circle
+    # x = np.cos(d)
+    # y = np.sin(d)
 
-	deltaX = 89-playerLocation[0]
-	deltaY = executedAction[0]-playerLocation[1]
-	deltaZ = executedAction[1]
-	
-	# Direction Angle
-	d = np.arctan2(deltaY,deltaX)
-	
-	# Elevation Angle
-	D = np.sqrt(deltaX**2+deltaY**2)	
-	e = np.arctan2(deltaZ,D)
+    # plt.subplot(1, 2, 2, projection='polar')
+    # plt.polar(d, 1, 'ro')
+    # plt.show()
 
+    # '''
+    ##################################################
 
-	# No negative angles possible. Can't miss low. Capping at 0.
-	if e < 0:
-		originalElevation = e
-		e = 0.0
-		negativeElevation = True
+    # Assumming both same size (-1 to ofset for index-based 0)
+    middle = int(len(dirs) / 2) - 1
+    mean = [dirs[middle], elevations[middle]]
 
-	executedActionAngular = [d,e]
+    ##################################################
+    # Filtering
+    ##################################################
 
+    # Radians
+    minX = 0.004
+    maxX = np.pi / 4
+    rhos = [0.0, -0.75, 0.75]
+    # rhos = [-0.75]
 
-	##################################################
+    allXS = [[minX, minX], [minX, maxX], [maxX, minX], [maxX, maxX]]
+    # allXS = [[minX,minX]]
+    # allXS = [[minX,maxX]]
 
-	##################################################
-	# TEST
-	##################################################
-	# '''
-	d,e = executedActionAngular
+    skip = False
 
-	# Step 1
-	xp = 89 - playerLocation[0]
-	deltaY = xp * np.tan(d)
-	D = xp / np.cos(d)
+    tempPDFs = {}
 
-	# Step 2
-	deltaZ = D * np.tan(e)
+    for eachX in allXS:
+        for rho in rhos:
 
-	executedActionComputed = [playerLocation[1]+deltaY,deltaZ]
+            # FOR TESTING
+            # skip = False
 
-	print("playerLocation: ", playerLocation)
-	print("executedAction: ", executedAction)
-	print("executedActionAngular: ", executedActionAngular)
-	print("executedActionComputed: ", executedActionComputed)
+            covMatrix = spaces.domain.getCovMatrix([eachX[0], eachX[1]], rho)
 
-	if negativeElevation:
-		print("Negative Elevation found. Elevation was set to 0. Original Elevation: ", originalElevation)
+            x = spaces.getKey([eachX[0], eachX[1]], rho)
 
-	
+            pdfs = sys.modules["utils"].computePDF(
+                x=executedActionAngular,
+                means=listedTargetsAngular,
+                covs=np.array([covMatrix] * len(listedTargetsAngular)),
+            )
+            prev = np.copy(pdfs)
 
-	# d = executedActionAngular[0]
-	# e = executedActionAngular[1]
+            pdfs /= np.sum(pdfs)
 
-	# # Convert to Cartesian coordinates on the unit circle 
-	# x = np.cos(d)
-	# y = np.sin(d)
+            N = sys.modules["domain"].draw_noise_sample(rng, mean, covMatrix)
+            D = N.pdf(gridTargetsAngular)
+            D /= np.sum(D)
 
-	# plt.subplot(1, 2, 2, projection='polar')
-	# plt.polar(d, 1, 'ro')
-	# plt.show()
+            if np.isnan(pdfs).any():
+                skip = True
 
-	# '''
-	##################################################
+                # UNCOMMENT AFTER TESTING
+                break
 
+            # tempPDFs[x] = {"pdfs":pdfs,"prev":prev,"D":D}
 
-	# Assumming both same size (-1 to ofset for index-based 0)
-	middle = int(len(dirs)/2) - 1
-	mean = [dirs[middle],elevations[middle]]
+            '''
+            savePdfs = f"{mainFolder}PDFs{os.sep}"
 
+            if not os.path.exists(savePdfs):
+                    os.mkdir(savePdfs)
 
+            plt.contourf(gridTargetsAngular[:,:,0],gridTargetsAngular[:,:,1],D)
+            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-1.jpg",bbox_inches="tight")
+            plt.close()
+            plt.clf()
 
-	##################################################
-	# Filtering
-	##################################################
+            plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=prev)
+            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-2.jpg",bbox_inches="tight")
+            plt.close()
+            plt.clf()
 
-	# Radians
-	minX = 0.004
-	maxX = np.pi/4
-	rhos = [0.0,-0.75,0.75]
-	# rhos = [-0.75]
+            plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=pdfs)
+            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-3-normalized.jpg",bbox_inches="tight")
+            plt.close()
+            plt.clf()
+            '''
 
-	allXS = [[minX,minX],[minX,maxX],[maxX,minX],[maxX,maxX]]
-	# allXS = [[minX,minX]]
-	# allXS = [[minX,maxX]]
+    ##################################################
 
-	skip = False
+    # code.interact("...", local=dict(globals(), **locals()))
 
-	tempPDFs = {}
-
-	for eachX in allXS:
-		for rho in rhos:
-
-
-			# FOR TESTING
-			# skip = False
-
-
-			covMatrix = spaces.domain.getCovMatrix([eachX[0],eachX[1]],rho)	
-
-			x = spaces.getKey([eachX[0],eachX[1]],rho)
-
-
-			pdfs = sys.modules["utils"].computePDF(x=executedActionAngular,means=listedTargetsAngular,covs=np.array([covMatrix]*len(listedTargetsAngular)))
-			prev = np.copy(pdfs)
-
-			pdfs /= np.sum(pdfs)
-
-
-			N = sys.modules["domain"].draw_noise_sample(rng,mean,covMatrix)
-			D = N.pdf(gridTargetsAngular)
-			D /= np.sum(D)
-
-
-			if np.isnan(pdfs).any():
-				skip = True
-
-
-				# UNCOMMENT AFTER TESTING
-				break
-
-
-			# tempPDFs[x] = {"pdfs":pdfs,"prev":prev,"D":D}
-
-
-
-
-			'''
-			savePdfs = f"{mainFolder}PDFs{os.sep}"
-			
-			if not os.path.exists(savePdfs):
-				os.mkdir(savePdfs)
-
-			plt.contourf(gridTargetsAngular[:,:,0],gridTargetsAngular[:,:,1],D)
-			plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-1.jpg",bbox_inches="tight")
-			plt.close()
-			plt.clf()
-		
-			plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=prev)
-			plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-2.jpg",bbox_inches="tight")
-			plt.close()
-			plt.clf()
-
-			plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=pdfs)
-			plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-3-normalized.jpg",bbox_inches="tight")
-			plt.close()
-			plt.clf()
-			'''
-
-	##################################################
-
-
-	# code.interact("...", local=dict(globals(), **locals()))
-
-	return dirs,elevations,listedTargetsAngular,gridTargetsAngular,listedTargetsAngular2YZ,gridTargetsAngular2YZ,listedUtilitiesComputed,gridUtilitiesComputed,executedActionAngular,skip,(negativeElevation,originalElevation)
-
+    return (
+        dirs,
+        elevations,
+        listedTargetsAngular,
+        gridTargetsAngular,
+        listedTargetsAngular2YZ,
+        gridTargetsAngular2YZ,
+        listedUtilitiesComputed,
+        gridUtilitiesComputed,
+        executedActionAngular,
+        skip,
+        (negativeElevation, originalElevation),
+    )
 
 
 if __name__ == '__main__':
 
+    try:
+        experimentFolder = sys.argv[1]
+    except Exception as e:
+        print("Need to specify the name of the folder for the experiment (located under 'Experiments/hockey-multi/') as command line argument.")
+        exit()
+
+    # Locate hockey experiment data for the provided experiment name.
+    mainFolder = f"Experiments{os.sep}hockey-multi{os.sep}{experimentFolder}{os.sep}Data{os.sep}"
 
-	try:
-		experimentFolder = sys.argv[1]
-	except Exception as e:
-		print("Need to specify the name of the folder for the experiment (located under 'Experiments/hockey-multi/') as command line argument.")
-		exit()
+    folder = f"{mainFolder}Heatmaps{os.sep}"
+    files = os.listdir(folder)
 
+    # Destination folders for generated outputs.
+    saveAt = f"{mainFolder}AngularHeatmaps{os.sep}"
+    saveAtFiltered = f"{mainFolder}AngularHeatmaps-Filtered{os.sep}"
+    saveAtNegativeElevations = f"{mainFolder}AngularHeatmaps-NegativeElevations{os.sep}"
 
-	mainFolder = f"Experiments{os.sep}hockey-multi{os.sep}{experimentFolder}{os.sep}Data{os.sep}"
+    # Ensure required directories exist.
+    for each in [f"Data{os.sep}", mainFolder, saveAt, saveAtFiltered, saveAtNegativeElevations]:
+        if not os.path.exists(each):
+            os.mkdir(each)
 
+    statsInfo = {}
+    typeShots = []
 
-	folder = f"{mainFolder}Heatmaps{os.sep}"
-	files = os.listdir(folder)
+    for eachFile in files:
 
+        if "player" not in eachFile:
+            continue
 
-	saveAt = f"{mainFolder}AngularHeatmaps{os.sep}"
-	saveAtFiltered = f"{mainFolder}AngularHeatmaps-Filtered{os.sep}"
-	saveAtNegativeElevations = f"{mainFolder}AngularHeatmaps-NegativeElevations{os.sep}"
+        splitted = eachFile.split("_")
+        playerID = splitted[3]
+        typeShot = splitted[-1].split(".")[0]
 
+        # FOR TESTING
+        # playerID = 950041
+        # playerID = 949936
+        playerID = 950148
+        # typeShot = "snapshot"
+        typeShot = "wristshot"
 
-	for each in [f"Data{os.sep}",mainFolder,saveAt,saveAtFiltered,saveAtNegativeElevations]:
-		if not os.path.exists(each):
-			os.mkdir(each)
+        if playerID not in statsInfo:
+            statsInfo[playerID] = {}
 
-	
-	statsInfo = {}
-	typeShots = []
+        if typeShot not in statsInfo[playerID]:
+            statsInfo[playerID][typeShot] = 0
 
+        if typeShot not in typeShots:
+            typeShots.append(typeShot)
 
-	for eachFile in files:
+        print(f"Creating angular heatmap for player {playerID} - {typeShot} ...")
 
-		if "player" not in eachFile:
-			continue
+        fileName = f"heatmap_data_player_{playerID}_type_shot_{typeShot}.pkl"
 
+        with open(folder + fileName, "rb") as infile:
+            data = pickle.load(infile)
 
-		splitted = eachFile.split("_")
-		playerID = splitted[3]
-		typeShot = splitted[-1].split(".")[0]
+        statsInfo[playerID][typeShot] = len(data)
+        statsInfo[playerID][f"filtered-{typeShot}"] = 0
+        statsInfo[playerID][f"negativeElevation-{typeShot}"] = []
 
+        playerData = {}
+        filtered = {}
 
+        # FOR TESTING
+        # data = {270544010806:data[270544010806]}
+        # data = {270443030337:data[270443030337]}
 
-		# FOR TESTING
-		# playerID = 950041
-		# playerID = 949936
-		playerID = 950148
-		# typeShot = "snapshot"
-		typeShot = "wristshot"
+        # Get angular heatmaps per player
+        for i, row in enumerate(data):
 
+            print("\ni: ", i)
+            print("row: ", row)
 
+            # FOR TESTING
+            # row = 270544010806
 
-		if playerID not in statsInfo:
-			statsInfo[playerID] = {}
+            heatmap = data[row]["heat_map"]
+            playerLocation = [data[row]["start_x"], data[row]["start_y"]]
+            projectedZ = data[row]["projected_z"]
+            # shot_location = final_y, projected_z, start_x, start_y
+            executedAction = [data[row]["shot_location"][0], data[row]["shot_location"][1]]
 
-		if typeShot not in statsInfo[playerID]:
-			statsInfo[playerID][typeShot] = 0
+            info = getAngularHeatmap(heatmap, playerLocation, executedAction)
 
-		if typeShot not in typeShots:
-			typeShots.append(typeShot)
+            skip = info[9]
+            # print(f"{row} - skip? {skip}")
 
+            # Determine if to save in file or save at file for filtered ones
+            if not skip:
+                where = playerData
+            else:
+                where = filtered
+                statsInfo[playerID][f"filtered-{typeShot}"] += 1
+                statsInfo[playerID][typeShot] -= 1
 
-		print(f"Creating angular heatmap for player {playerID} - {typeShot} ...")
+            where[row] = data[row]
+            where[row]["dirs"] = info[0]
+            where[row]["elevations"] = info[1]
+            where[row]["listedTargetsAngular"] = info[2]
+            where[row]["gridTargetsAngular"] = info[3]
+            where[row]["listedTargetsAngular2YZ"] = info[4]
+            where[row]["gridTargetsAngular2YZ"] = info[5]
+            where[row]["listedUtilitiesComputed"] = info[6]
+            where[row]["gridUtilitiesComputed"] = info[7]
+            where[row]["executedActionAngular"] = info[8]
 
-		fileName = f"heatmap_data_player_{playerID}_type_shot_{typeShot}.pkl"
+            negativeElevation = info[10][0]
 
-		with open(folder+fileName,"rb") as infile:
-			data = pickle.load(infile)
+            if not skip and negativeElevation:
+                statsInfo[playerID][f"negativeElevation-{typeShot}"].append((info[10][1], row))
 
+        with open(f"{saveAt}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}.pkl", "wb") as outfile:
+            pickle.dump(playerData, outfile)
 
+        if len(filtered) > 0:
+            with open(f"{saveAtFiltered}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}_filtered{len(filtered)}.pkl", "wb") as outfile:
+                pickle.dump(filtered, outfile)
 
-		statsInfo[playerID][typeShot] = len(data)
-		statsInfo[playerID][f"filtered-{typeShot}"] = 0
-		statsInfo[playerID][f"negativeElevation-{typeShot}"] = []
+        infoNegativeElevations = statsInfo[playerID][f"negativeElevation-{typeShot}"]
+        if len(infoNegativeElevations) > 0:
+            with open(f"{saveAtNegativeElevations}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}_negativeElevations{len(infoNegativeElevations)}.pkl", "wb") as outfile:
+                pickle.dump(infoNegativeElevations, outfile)
 
+        code.interact("...", local=dict(globals(), **locals()))
 
-		playerData = {}
-		filtered = {}
+    with open(f"{mainFolder}statsAfterFiltering.txt", "w") as outfile:
 
+        for eachID in statsInfo:
+            print(f"Player: {eachID}", file=outfile)
 
+            for st in typeShots:
+                if st in statsInfo[eachID]:
+                    print(f"\t{st}: {statsInfo[eachID][st]}", file=outfile)
 
-		# FOR TESTING
-		# data = {270544010806:data[270544010806]}
-		# data = {270443030337:data[270443030337]}
+            for st in typeShots:
+                if st in statsInfo[eachID]:
+                    if statsInfo[eachID][f"filtered-{st}"] > 0:
+                        print(f"\tfiltered-{st}: {statsInfo[eachID][f'filtered-{st}']}", file=outfile)
+                    if len(statsInfo[eachID][f"negativeElevation-{st}"]) > 0:
+                        print(f"\negativeElevation-{st}: {len(statsInfo[eachID][f'negativeElevation-{st}'])}", file=outfile)
 
-		# Get angular heatmaps per player
-		for i,row in enumerate(data):
-
-			print("\ni: ",i)
-			print("row: ",row)
-
-			# FOR TESTING
-			# row = 270544010806
-
-
-			heatmap = data[row]["heat_map"]
-			playerLocation = [data[row]["start_x"],data[row]["start_y"]]
-			projectedZ = data[row]["projected_z"]
-			# shot_location = final_y, projected_z, start_x, start_y
-			executedAction = [data[row]["shot_location"][0],data[row]["shot_location"][1]]
-
-			info = getAngularHeatmap(heatmap,playerLocation,executedAction)
-
-			skip = info[9]
-			# print(f"{row} - skip? {skip}")
-
-			# Determine if to save in file or save at file for filtered ones
-			if not skip:
-				where = playerData				
-			else:
-				where = filtered
-				statsInfo[playerID][f"filtered-{typeShot}"] += 1
-				statsInfo[playerID][typeShot] -= 1
-
-
-			where[row] = data[row]
-			where[row]["dirs"] = info[0]
-			where[row]["elevations"] = info[1]
-			where[row]["listedTargetsAngular"] = info[2]
-			where[row]["gridTargetsAngular"] = info[3]
-			where[row]["listedTargetsAngular2YZ"] = info[4]
-			where[row]["gridTargetsAngular2YZ"] = info[5]
-			where[row]["listedUtilitiesComputed"] = info[6]
-			where[row]["gridUtilitiesComputed"] = info[7]
-			where[row]["executedActionAngular"] = info[8]
-
-
-			negativeElevation = info[10][0]
-
-			if not skip and negativeElevation:
-				statsInfo[playerID][f"negativeElevation-{typeShot}"].append((info[10][1],row))
-
-
-		with open(f"{saveAt}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}.pkl","wb") as outfile:
-			pickle.dump(playerData,outfile)
-
-
-		if len(filtered) > 0:
-			with open(f"{saveAtFiltered}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}_filtered{len(filtered)}.pkl","wb") as outfile:
-				pickle.dump(filtered,outfile)
-
-
-		infoNegativeElevations = statsInfo[playerID][f"negativeElevation-{typeShot}"]
-		
-		if len(infoNegativeElevations) > 0:
-			with open(f"{saveAtNegativeElevations}angular_heatmap_data_player_{playerID}_type_shot_{typeShot}_negativeElevations{len(infoNegativeElevations)}.pkl","wb") as outfile:
-				pickle.dump(infoNegativeElevations,outfile)
-
-
-		code.interact("...", local=dict(globals(), **locals()))	
-
-
-	with open(f"{mainFolder}statsAfterFiltering.txt","w") as outfile:
-
-		for eachID in statsInfo:
-			print(f"Player: {eachID}",file=outfile)
-
-			for st in typeShots:
-				if st in statsInfo[eachID]:
-					print(f"\t{st}: {statsInfo[eachID][st]}",file=outfile)
-
-			for st in typeShots:
-				if st in statsInfo[eachID]:
-					if statsInfo[eachID][f"filtered-{st}"] > 0:
-						print(f"\tfiltered-{st}: {statsInfo[eachID][f'filtered-{st}']}",file=outfile)
-					if len(statsInfo[eachID][f"negativeElevation-{st}"]) > 0:
-						print(f"\negativeElevation-{st}: {len(statsInfo[eachID][f'negativeElevation-{st}'])}",file=outfile)
-
-
-
-	# code.interact("...", local=dict(globals(), **locals()))	
-	print("Done.")
-
-
+    # code.interact("...", local=dict(globals(), **locals()))
+    print("Done.")
