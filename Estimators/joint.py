@@ -81,8 +81,9 @@ class JointMethodFlip():
 		self.allProbs.append(self.probs.tolist())
 
 
-	def getEstimatorName(self):
-		return self.names
+        def getEstimatorName(self):
+                """Return the metric names used for this estimator (MAP and EES variants)."""
+                return self.names
 		
 
 	def reset(self):
@@ -108,8 +109,9 @@ class JointMethodFlip():
 		tag = otherArgs["tag"]
 		delta = spaces.delta
 
-		if self.domainName == "sequentialDarts": 
-			currentScore = otherArgs["currentScore"]
+                if self.domainName == "sequentialDarts":
+                        # Sequential darts keeps track of the running score to select the correct state-space slice
+                        currentScore = otherArgs["currentScore"]
 	
 		action = np.array(action)
 
@@ -242,103 +244,128 @@ class JointMethodFlip():
 # Note: JEEDS is the same thing as JointMethodQRE
 class JointMethodQRE():
 
-	slots = ["xskills","numXskills","numPskills","domainName","names",
-	"estimatesXskills","methodType","estimatesPskills","pskills","probs","allProbs","label"]
+        slots = ["xskills","numXskills","numPskills","domainName","names",
+        "estimatesXskills","methodType","estimatesPskills","pskills","probs","allProbs","label"]
 
-	def __init__(self,xskills,numPskills,domainName,givenPrior=False,minLambda=False,otherArgs=None):
+        def __init__(self,xskills,numPskills,domainName,givenPrior=False,minLambda=False,otherArgs=None):
+                """Initialize a joint estimator over execution (x) and planning (p) skills.
 
-		self.xskills = xskills
-		self.numXskills = len(xskills)
-		self.numPskills = numPskills
+                Parameters
+                ----------
+                xskills : list[float]
+                        Grid of execution skill hypotheses.
+                numPskills : int
+                        Number of planning skill hypotheses (lambda values).
+                domainName : str
+                        Name of the environment so the estimator can configure priors correctly.
+                givenPrior : bool
+                        Whether to initialize a skew-normal prior over execution skills.
+                minLambda : bool
+                        Whether to shift the minimum lambda value when building planning priors.
+                otherArgs : dict | None
+                        Additional tuning parameters used when givenPrior/minLambda are enabled.
+                """
 
-		self.domainName = domainName
+                self.xskills = xskills
+                self.numXskills = len(xskills)
+                self.numPskills = numPskills
 
-		self.methodType = "JT-QRE"
+                self.domainName = domainName
 
-		baseNames = [f"{self.methodType}-MAP-{self.numXskills}-{self.numPskills}",
-					f"{self.methodType}-EES-{self.numXskills}-{self.numPskills}"]
+                # Identifier for this estimator flavour (Joint True QRE)
+                self.methodType = "JT-QRE"
 
-
-		if givenPrior and minLambda:
-			self.label = f"-GivenPrior-{otherArgs['givenPrior'][0]}-{otherArgs['givenPrior'][1]}-{otherArgs['givenPrior'][2]}-MinLambda{otherArgs['minLambda']}"
-		elif givenPrior:
-			self.label = f"-GivenPrior-{otherArgs['givenPrior'][0]}-{otherArgs['givenPrior'][1]}-{otherArgs['givenPrior'][2]}"
-		elif minLambda:
-			self.label = f"-MinLambda-{otherArgs['minLambda']}"
-		else:
-			self.label = ""
-		
-		baseNames[0] += self.label
-		baseNames[1] += self.label
-		self.names = baseNames
-
-	   
-		self.estimatesXskills = dict()
-		self.estimatesPskills = dict()
-
-		for n in self.names:
-			self.estimatesXskills[n] = []
-			self.estimatesPskills[n] = []
+                # Baseline names used for MAP (maximum a posteriori) and EES (expected execution skill) estimates
+                baseNames = [f"{self.methodType}-MAP-{self.numXskills}-{self.numPskills}",
+                                        f"{self.methodType}-EES-{self.numXskills}-{self.numPskills}"]
 
 
-		if domainName == "1d":
-			self.pskills = np.logspace(-3,2,self.numPskills) # 0.001 to 100
-		elif domainName in ["2d","2d-multi","sequentialDarts","billiards"]:
-			self.pskills = np.logspace(-3,1.5,self.numPskills)
-		elif domainName in ["baseball","baseball-multi"]:
-			if minLambda:
-				self.pskills = np.logspace(otherArgs["minLambda"],3.6,self.numPskills)
-			else:
-				self.pskills = np.logspace(-3,3.6,self.numPskills)
-		elif domainName in ["hockey-multi"]:
-			self.pskills = np.round(np.logspace(-3,1.6,self.numPskills),4)
+                # Build a label describing which specialized priors were used (if any)
+                if givenPrior and minLambda:
+                        self.label = f"-GivenPrior-{otherArgs['givenPrior'][0]}-{otherArgs['givenPrior'][1]}-{otherArgs['givenPrior'][2]}-MinLambda{otherArgs['minLambda']}"
+                elif givenPrior:
+                        self.label = f"-GivenPrior-{otherArgs['givenPrior'][0]}-{otherArgs['givenPrior'][1]}-{otherArgs['givenPrior'][2]}"
+                elif minLambda:
+                        self.label = f"-MinLambda-{otherArgs['minLambda']}"
+                else:
+                        self.label = ""
+
+                # Append the label to both estimator names so downstream metrics are tagged consistently
+                baseNames[0] += self.label
+                baseNames[1] += self.label
+                self.names = baseNames
 
 
-		# Initializing the array (init prior distribution)
-		if givenPrior:
-			# Get "skewed" dist for the different xskill hyps
-			xProbs = skewnorm.pdf(self.xskills,a=otherArgs["givenPrior"][0],loc=otherArgs["givenPrior"][1],scale=otherArgs["givenPrior"][2])
-			xProbs = xProbs.reshape(xProbs.shape[0],1)
+                # Storage for posterior traces of execution and planning skills (per estimator name)
+                self.estimatesXskills = dict()
+                self.estimatesPskills = dict()
 
-			self.probs = xProbs.copy()
-			self.probs = self.probs.reshape(self.probs.shape[0],1)
-
-			# Fill the rest of the columns with the same value
-			# Assumption: All lambdas are equally likely (uniform distribution)
-			for i in range(self.numPskills-1):
-				self.probs = np.hstack((self.probs,xProbs))
-
-			self.probs /= np.sum(self.probs)
+                for n in self.names:
+                        self.estimatesXskills[n] = []
+                        self.estimatesPskills[n] = []
 
 
-		else:
-			self.probs = np.ndarray(shape=(self.numXskills,self.numPskills))
-			self.probs.fill(1.0/(self.numXskills*self.numPskills*1.0))
+                # Planning skill hypotheses are log-spaced; range depends on the domain
+                if domainName == "1d":
+                        self.pskills = np.logspace(-3,2,self.numPskills) # 0.001 to 100
+                elif domainName in ["2d","2d-multi","sequentialDarts","billiards"]:
+                        self.pskills = np.logspace(-3,1.5,self.numPskills)
+                elif domainName in ["baseball","baseball-multi"]:
+                        if minLambda:
+                                self.pskills = np.logspace(otherArgs["minLambda"],3.6,self.numPskills)
+                        else:
+                                self.pskills = np.logspace(-3,3.6,self.numPskills)
+                elif domainName in ["hockey-multi"]:
+                        self.pskills = np.round(np.logspace(-3,1.6,self.numPskills),4)
 
-		# To save the initial probs - uniform distribution for all
-		self.allProbs = [self.probs.tolist()]
 
-		# code.interact("JTM init...", local=dict(globals(), **locals()))
+                # Initialize joint prior P(x, p)
+                if givenPrior:
+                        # Skew-normal prior over execution skills; assume planning skills are uniformly likely
+                        xProbs = skewnorm.pdf(self.xskills,a=otherArgs["givenPrior"][0],loc=otherArgs["givenPrior"][1],scale=otherArgs["givenPrior"][2])
+                        xProbs = xProbs.reshape(xProbs.shape[0],1)
+
+                        self.probs = xProbs.copy()
+                        self.probs = self.probs.reshape(self.probs.shape[0],1)
+
+                        # Fill the rest of the columns with the same value (uniform across planning skills)
+                        for i in range(self.numPskills-1):
+                                self.probs = np.hstack((self.probs,xProbs))
+
+                        self.probs /= np.sum(self.probs)
+
+
+                else:
+                        # Uniform distribution across all execution/planning combinations
+                        self.probs = np.ndarray(shape=(self.numXskills,self.numPskills))
+                        self.probs.fill(1.0/(self.numXskills*self.numPskills*1.0))
+
+                # Keep a history of the posterior over time (first entry is the prior)
+                self.allProbs = [self.probs.tolist()]
+
+                # code.interact("JTM init...", local=dict(globals(), **locals()))
 
 
 	def getEstimatorName(self):
 		return self.names
 	   
 
-	def midReset(self):
+        def midReset(self):
+                """Reset collected estimates but keep the current posterior intact."""
 
-		for n in self.names:
-			self.estimatesXskills[n] = []
-			self.estimatesPskills[n] = []
+                for n in self.names:
+                        self.estimatesXskills[n] = []
+                        self.estimatesPskills[n] = []
 
 		self.allProbs = []
 
 
-	def reset(self):
+        def reset(self):
+                """Fully reset the estimator, including the joint posterior distribution."""
 
-		for n in self.names:
-			self.estimatesPskills[n] = []
-			self.estimatesXskills[n] = []
+                for n in self.names:
+                        self.estimatesPskills[n] = []
+                        self.estimatesXskills[n] = []
 
 		# reset probs
 		self.probs.fill(1.0/(self.numXskills*self.numPskills*1.0))
@@ -347,8 +374,23 @@ class JointMethodQRE():
 		self.allProbs.append(self.probs.tolist())
 
 
-	# @profile
-	def addObservation(self,rng,spaces,state,action,**otherArgs):
+        # @profile
+        def addObservation(self,rng,spaces,state,action,**otherArgs):
+                """Update posterior distributions given a single observed action.
+
+                Parameters
+                ----------
+                rng : np.random.Generator
+                        Random generator used by spaces when updating target sets.
+                spaces : object
+                        Domain-specific structure that exposes target grids, convolutions, and covariances.
+                state : any
+                        Current environment state (used by space updates).
+                action : array-like
+                        Executed action to condition on.
+                otherArgs : dict
+                        Additional metadata required by different domains (e.g., currentScore, resultsFolder).
+                """
 
 		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		# Initialize info
@@ -373,25 +415,28 @@ class JointMethodQRE():
 		startTimeEst = time.perf_counter()
 
 
-		if "baseball" not in self.domainName and "hockey" not in self.domainName:
-			# print("addObservation(): ",rng.bit_generator._seed_seq.entropy)
-			for each in self.xskills:
-				if self.domainName == "2d-multi":
-					spaces.updateSpace(rng,[[[each,each]],[0.0]],state)
-				else:
-					spaces.updateSpace(rng,[each],state)
+                if "baseball" not in self.domainName and "hockey" not in self.domainName:
+                        # Update target distributions for each execution hypothesis when the domain requires it.
+                        # Baseball/hockey pass all required information directly through otherArgs.
+                        for each in self.xskills:
+                                if self.domainName == "2d-multi":
+                                        spaces.updateSpace(rng,[[[each,each]],[0.0]],state)
+                                else:
+                                        spaces.updateSpace(rng,[each],state)
 
 
 		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		# Compute PDFs and EVs
 		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-		PDFsPerXskill = {}
-		EVsPerXskill = {}
+                # Containers reused across hypotheses to avoid recomputation later during the update stage
+                PDFsPerXskill = {}
+                EVsPerXskill = {}
 
 		
-		if "baseball" not in self.domainName and "hockey" not in self.domainName:
-			listedTargets = spaces.listedTargets
+                if "baseball" not in self.domainName and "hockey" not in self.domainName:
+                        # Shared grid of possible targets for darts-like domains
+                        listedTargets = spaces.listedTargets
 
 
 		# For each execution skill hyps
@@ -399,17 +444,19 @@ class JointMethodQRE():
 			
 			x = self.xskills[xi]
 
-			# Get the corresponding xskill level hypothesis at the given index
-			if self.domainName in ["2d-multi","baseball-multi","hockey-multi"]:
-				key = spaces.getKey([x,x],r=0.0)
-			else:
-				key = x
+                        # Get the corresponding xskill level hypothesis at the given index
+                        if self.domainName in ["2d-multi","baseball-multi","hockey-multi"]:
+                                # Multi-dimensional setups use a tuple-like key built from both dimensions
+                                key = spaces.getKey([x,x],r=0.0)
+                        else:
+                                key = x
 
 
 			if self.domainName in ["1d","2d","2d-multi"]:
 
-				space = spaces.convolutionsPerXskill[key][otherArgs["s"]]				
-				evs = space["all_vs"].flatten()
+                                # Lookup precomputed convolutions for this execution skill and state index
+                                space = spaces.convolutionsPerXskill[key][otherArgs["s"]]
+                                evs = space["all_vs"].flatten()
 
 				if self.domainName == "1d":
 					pdfs = scipy.stats.norm.pdf([action]*len(listedTargets),loc=listedTargets,scale=[x]*len(listedTargets))	
@@ -417,34 +464,34 @@ class JointMethodQRE():
 				else: # 2D
 					pdfs = computePDF(x=action,means=listedTargets,covs=np.array([spaces.convolutionsPerXskill[key]["cov"]]*len(listedTargets)))
 			
-			elif self.domainName == "sequentialDarts":
-				
-				space = spaces.spacesPerXskill[x]
-				evs = space.flatEVsPerState[currentScore]
+                        elif self.domainName == "sequentialDarts":
 
-				# pdfs = computePDF(x=action,means=spaces.possibleTargets,
-								  # covs=np.array([spaces.allCovs[xi]]*len(spaces.possibleTargets)))
-			
-				pdfs = computePDF(x=action,means=spaces.possibleTargets,covs=spaces.allCovsGivenXskillDomainTargets[xi]) 
+                                # Sequential darts spaces are stored per execution skill and indexed by score
+                                space = spaces.spacesPerXskill[x]
+                                evs = space.flatEVsPerState[currentScore]
+
+                                # Each execution skill has its own covariance matrix per target
+                                pdfs = computePDF(x=action,means=spaces.possibleTargets,covs=spaces.allCovsGivenXskillDomainTargets[xi])
 
 			elif self.domainName == "billiards":
 
 				# Sampling
-				pdfs,evs = getPDFsAndEVsBilliardsSampling(spaces,x,action,otherArgs)
+                                pdfs,evs = getPDFsAndEVsBilliardsSampling(spaces,x,action,otherArgs)
 
 				'''
 				# New way of computing EVs (focal ev)
 				pdfs,evs = getPDFsAndEVsBilliardsFocalEV(spaces,self.xskills,action,otherArgs)
 				'''
 
-			elif self.domainName in ["baseball","baseball-multi"]:
+                        elif self.domainName in ["baseball","baseball-multi"]:
 
-				evs = otherArgs["infoPerRow"]["evsPerXskill"][key].flatten()
-				cov = spaces.allCovs[key]
+                                # Baseball/hockey feed EVs through infoPerRow rather than precomputed convolutions
+                                evs = otherArgs["infoPerRow"]["evsPerXskill"][key].flatten()
+                                cov = spaces.allCovs[key]
 
-				pdfs = computePDF(x=action,means=spaces.possibleTargetsFeet,covs=np.array([cov]*len(spaces.possibleTargetsFeet)))
+                                pdfs = computePDF(x=action,means=spaces.possibleTargetsFeet,covs=np.array([cov]*len(spaces.possibleTargetsFeet)))
 
-				# code.interact("JTM...", local=dict(globals(), **locals()))
+                                # code.interact("JTM...", local=dict(globals(), **locals()))
 
 			elif self.domainName in ["hockey-multi"]:
 
@@ -537,12 +584,13 @@ class JointMethodQRE():
 				evsC = np.copy(evs)
 				# print("evsC: ",evsC)
 
-				# With norm trick
-				b = np.max(evsC*p)
-				# print("max evsC: ", np.max(evsC*p))
-				# print("b: ", b)
+                                # With norm trick
+                                b = np.max(evsC*p)
+                                # print("max evsC: ", np.max(evsC*p))
+                                # print("b: ", b)
 
-				expev = np.exp(evsC*p-b)
+                                # Subtract b to avoid overflow in the exponential for large EV*lambda values
+                                expev = np.exp(evsC*p-b)
 				# print("expev: ", expev)
 
 				# Without norm trick
@@ -578,12 +626,13 @@ class JointMethodQRE():
 
 
 
-		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-		# Normalize
-		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                # Normalize
+                # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-		self.probs /= np.sum(self.probs)
-		self.allProbs.append(self.probs.tolist())
+                # Normalizing ensures the joint distribution remains a valid probability table
+                self.probs /= np.sum(self.probs)
+                self.allProbs.append(self.probs.tolist())
 
 		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -636,22 +685,22 @@ class JointMethodQRE():
 		# Get estimates
 		# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-		# MAP estimate - Get index of maximum prob - returns flat index
-		mi = np.argmax(self.probs)
+                # MAP estimate - Get index of maximum prob - returns flat index
+                mi = np.argmax(self.probs)
 
-		# "Converts a flat index or array of flat indices into a tuple of coordinate arrays."
-		xmi, pmi = np.unravel_index(mi,self.probs.shape)
+                # "Converts a flat index or array of flat indices into a tuple of coordinate arrays."
+                xmi, pmi = np.unravel_index(mi,self.probs.shape)
 
-		self.estimatesXskills[self.names[0]].append(self.xskills[xmi])
-		self.estimatesPskills[self.names[0]].append(self.pskills[pmi])
+                self.estimatesXskills[self.names[0]].append(self.xskills[xmi])
+                self.estimatesPskills[self.names[0]].append(self.pskills[pmi])
 
 
-		# Get EES & EPS Estimate
-		ees = 0.0
-		eps = 0.0
-		
-		for xi in range(self.numXskills):
-			for pi in range(self.numPskills):
+                # Get EES & EPS Estimate (expected execution/planning skill under current posterior)
+                ees = 0.0
+                eps = 0.0
+
+                for xi in range(self.numXskills):
+                        for pi in range(self.numPskills):
 				ees += self.xskills[xi] * self.probs[xi][pi]
 				eps += self.pskills[pi] * self.probs[xi][pi]
 
