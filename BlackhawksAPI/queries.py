@@ -1,0 +1,139 @@
+"""Public querying surface mirroring the Blackhawks analytics helpers."""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from matplotlib.patches import Ellipse
+from matplotlib import transforms
+
+from . import db
+
+
+def plot_ellipse(ax, mean, cov, n_std: float = 2.0, **kwargs):
+    """Plot an ellipse representing covariance of a 2D normal distribution."""
+
+    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    ell_radius_x = np.sqrt(1 + pearson)
+    ell_radius_y = np.sqrt(1 - pearson)
+    ellipse = Ellipse(
+        (0, 0),
+        width=ell_radius_x * 2,
+        height=ell_radius_y * 2,
+        facecolor="none",
+        **kwargs,
+    )
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    transf = (
+        transforms.Affine2D()
+        .rotate_deg(45)
+        .scale(scale_x, scale_y)
+        .translate(mean[0], mean[1])
+    )
+    ellipse.set_transform(transf + ax.transData)
+    ax.add_patch(ellipse)
+
+
+def shot_games(season: int) -> pd.Series:
+    """Return game identifiers for which shot maps exist.
+
+    Parameters
+    ----------
+    season : int
+        The season identifier (e.g., ``20242025``). The underlying database query
+        mirrors the reference implementation, leaving the season filter commented
+        to match the temporary workaround in the supplied reference code.
+    """
+
+    query = """
+        SELECT DISTINCT game_id_hawks
+        FROM hawks_analytics.post_shot_xg_value_maps p
+        JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
+    """
+
+    return db.get_df(query).rename(columns=str.lower)["game_id_hawks"]
+
+
+def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
+    """Return shot metadata for a given game keyed by ``event_id_hawks``."""
+
+    query = """
+            SELECT p.*
+                , st.goalline_y_model
+                , st.goalline_z_model
+                , st.cov_00
+                , st.cov_01
+                , st.cov_10
+                , st.cov_11
+                , st.percent_on_net
+            FROM hawks_analytics.post_shot_xg_value_maps p
+            JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
+            JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
+            WHERE e.game_id_hawks = %(game_id_hawks)s
+            ORDER BY p.event_id_hawks ASC, location_y DESC, location_z ASC
+            ;
+            """
+    df = db.get_df(query, query_params={"game_id_hawks": game_id_hawks}).rename(
+        columns=str.lower
+    )
+
+    shot_maps: dict[int, dict[str, object]] = {}
+    for event_id_hawks in df["event_id_hawks"].unique():
+        shot_df = df[df["event_id_hawks"] == event_id_hawks]
+
+        shot_data: dict[str, object] = {}
+        shot_data["df"] = shot_df
+        shot_data["value_map"] = np.flip(
+            shot_df["post_shot_xg"].values.reshape(120, 72).T, axis=1
+        )
+        shot_data["net_cov"] = shot_df.iloc[0][
+            ["cov_00", "cov_01", "cov_10", "cov_11"]
+        ].values.reshape(2, 2)
+        shot_data["net_coords"] = shot_df.iloc[0][
+            ["goalline_y_model", "goalline_z_model"]
+        ].values
+
+        shot_maps[event_id_hawks] = shot_data
+    return shot_maps
+
+
+def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
+    """Fetch shot-level metadata for a player across specific games."""
+
+    game_ids_str = ",".join(str(g) for g in game_ids)
+    query = f"""
+        SELECT
+            e.PLAYER_ID_HAWKS        AS player_id,
+            e.GAME_ID_HAWKS          AS game_id,
+            e.EVENT_ID_HAWKS         AS event_id,
+            e.SHOT_IS_BLOCKED,
+            e.SHOT_IS_CONTACT_PRESSURE,
+            e.SHOT_IS_FANNED_SHOT,
+            e.SHOT_IS_GOAL,
+            e.SHOT_IS_HIGH_DANGER_MISSED_SHOT_RECOVERY,
+            e.SHOT_IS_LOW_HIGH,
+            e.SHOT_IS_ONE_TIMER,
+            e.SHOT_IS_OUTSIDE,
+            e.SHOT_IS_PENALTY_SHOT,
+            e.SHOT_IS_QUICK_RELEASE,
+            e.SHOT_IS_SCREENED,
+            e.SHOT_IS_SEAM,
+            e.SHOT_IS_SLOT,
+            e.SHOT_IS_SPACE_PRESSURE,
+            e.SHOT_IS_TIME_PRESSURE,
+            e.SHOT_IS_WITH_PRESSURE,
+            e.SHOT_IS_WITH_REBOUND,
+            e.X_ADJ_COORD             AS start_x,
+            e.Y_ADJ_COORD             AS start_y,
+            p.LOCATION_Y,
+            p.LOCATION_Z,
+            p.POST_SHOT_XG            AS probability
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.POST_SHOT_XG_VALUE_MAPS AS p
+          ON p.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE e.PLAYER_ID_HAWKS = %(player_id)s
+          AND e.GAME_ID_HAWKS IN ({game_ids_str})
+          AND e.EVENT_NAME = 'shot';
+    """
+    return db.get_df(query, query_params={"player_id": player_id})
