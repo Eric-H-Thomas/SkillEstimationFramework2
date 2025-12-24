@@ -23,9 +23,9 @@ hockey experiments:
 
 Example
 -------
->>> from BlackhawksSkillEstimation.BlackhawksJEEDS import estimate_player_skill
->>> estimate = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
->>> print(f"Estimated execution skill: {estimate:.3f}")
+from BlackhawksSkillEstimation.BlackhawksJEEDS import estimate_player_skill
+estimate = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
+print(f"Estimated execution skill: {estimate:.3f}")
 """
 from __future__ import annotations
 
@@ -40,6 +40,9 @@ from scipy.ndimage import gaussian_filter
 
 from BlackhawksAPI import query_player_game_info
 from Estimators.joint import JointMethodQRE
+
+
+# TODO: make sure getAngularHeatmapsPerPlayer.py got used properly; this code might be reinventing the wheel
 
 
 @dataclass
@@ -76,6 +79,9 @@ class SimpleHockeySpaces:
             key = self.getKey([skill, skill], r=0.0)
             self.allCovs[key] = self._covariance_from_skill(skill)
 
+    # TODO: need to verify that this _covariance_from_skill method is what we actually want. The steps for determining
+    #   which execution skill levels to test seem convoluted.
+
     def _covariance_from_skill(self, skill: float) -> np.ndarray:
         variance = 1.0 / max(skill, 1e-6) ** 2
         return np.diag([variance, variance])
@@ -93,8 +99,12 @@ class JEEDSInputs:
 
 
 def _build_target_grids(df, grid_step: float) -> tuple[np.ndarray, np.ndarray]:
-    y_min, y_max = df["location_y"].min(), df["location_y"].max()
-    z_min, z_max = df["location_z"].min(), df["location_z"].max()
+    # y_min, y_max = df["location_y"].min(), df["location_y"].max()
+    # z_min, z_max = df["location_z"].min(), df["location_z"].max()
+
+    # TODO: clean this up when done testing
+    y_min, y_max = df["LOCATION_Y"].min(), df["LOCATION_Y"].max()
+    z_min, z_max = df["LOCATION_Z"].min(), df["LOCATION_Z"].max()
 
     # Add a small buffer so the observed locations do not sit on the edge.
     pad = max(grid_step, 0.1)
@@ -145,10 +155,20 @@ def transform_shots_for_jeeds(
     actions: list[list[float]] = []
 
     for _, row in df.iterrows():
+        # TODO: clean up when done debugging
+        # base_ev = _ev_surface_for_shot(
+        #     probability=float(row["probability"]),
+        #     location_y=float(row["location_y"]),
+        #     location_z=float(row["location_z"]),
+        #     y_grid=y_grid,
+        #     z_grid=z_grid,
+        #     base_sigma=base_sigma,
+        # )
+
         base_ev = _ev_surface_for_shot(
-            probability=float(row["probability"]),
-            location_y=float(row["location_y"]),
-            location_z=float(row["location_z"]),
+            probability=float(row["PROBABILITY"]),
+            location_y=float(row["LOCATION_Y"]),
+            location_z=float(row["LOCATION_Z"]),
             y_grid=y_grid,
             z_grid=z_grid,
             base_sigma=base_sigma,
@@ -171,7 +191,9 @@ def transform_shots_for_jeeds(
             entry["focalActions"].append([float(y_grid[iy]), float(z_grid[iz])])
 
         info_rows.append(entry)
-        actions.append([float(row["location_y"]), float(row["location_z"])] )
+        #TODO: clean up when done debugging
+        # actions.append([float(row["location_y"]), float(row["location_z"])] )
+        actions.append([float(row["LOCATION_Y"]), float(row["LOCATION_Z"])])
 
     return JEEDSInputs(spaces=spaces, actions=actions, info_rows=info_rows)
 
@@ -189,7 +211,7 @@ def estimate_player_skill(
     num_planning_skills: int = 25,
     grid_step: float = 0.25,
     base_sigma: float = 0.5,
-    results_folder: Path | str = Path("Experiments/blackhawks-jeeds"),
+    results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
 ) -> float:
     """Return the JEEDS MAP execution-skill estimate for a player.
@@ -220,7 +242,7 @@ def estimate_player_skill(
     tag = f"Player_{player_id}"
 
     for idx, (info, action) in enumerate(zip(jeeds_inputs.info_rows, jeeds_inputs.actions)):
-        estimator.addObservation(
+        estimator.add_observation(
             rng,
             jeeds_inputs.spaces,
             state=None,
@@ -231,8 +253,8 @@ def estimate_player_skill(
             s=str(idx),
         )
 
-    results = estimator.getResults()
-    map_key = f"{estimator.methodType}-MAP-{estimator.numXskills}-{estimator.numPskills}-xSkills"
+    results = estimator.get_results()
+    map_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
     estimates = results.get(map_key, [])
     if not estimates:
         raise RuntimeError("JEEDS returned no MAP execution-skill estimate.")
@@ -249,6 +271,8 @@ def _parse_args() -> argparse.Namespace:
         nargs="+",
         help="One or more game identifiers to include in the estimation run.",
     )
+    # TODO: last exited recursive code check here
+
     parser.add_argument(
         "--candidate-skills",
         type=float,
@@ -256,6 +280,9 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Optional execution-skill grid for JEEDS (defaults to 8 values between 0.25 and 2.0).",
     )
+
+    # TODO: need to make sure that 0.25 up to 2.0 is a reasonable range for the data we are looking at
+
     parser.add_argument(
         "--num-planning-skills",
         type=int,

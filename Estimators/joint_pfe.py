@@ -28,7 +28,7 @@ class QREMethod_Multi_Particles():
 
     def __init__(self,env,N,noise,percent,resampleNEFF,resamplingMethod,ranges,givenPrior=False,minLambda=False,otherArgs=None):
 
-        self.domainName = env.domainName
+        self.domainName = env.domain_name
 
         self.rf = env.resultsFolder
 

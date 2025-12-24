@@ -185,7 +185,7 @@ def estimate_skill_with_jeeds(
         estimator.reset()
         state_key = str(state)
         for sample in samples:
-            estimator.addObservation(
+            estimator.add_observation(
                 rng,
                 spaces,
                 state,
@@ -195,8 +195,8 @@ def estimate_skill_with_jeeds(
                 s=state_key,
             )
 
-        results = estimator.getResults()
-    map_key = f"{estimator.methodType}-MAP-{estimator.numXskills}-{estimator.numPskills}-xSkills"
+        results = estimator.get_results()
+    map_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
     estimates = results.get(map_key, [])
     if not estimates:
         raise RuntimeError("JEEDS estimator returned no MAP execution skill estimate.")

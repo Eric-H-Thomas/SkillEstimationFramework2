@@ -315,7 +315,7 @@ class AgentGenerator():
 
 
 			for p in range(len(pskills)):
-				if env.domainName == "2d-multi" or env.domainName == "hockey-multi":
+				if env.domain_name == "2d-multi" or env.domain_name == "hockey-multi":
 					params = {keys[0]:pskills[p],keys[1]:info[0],keys[2]:info[1]}
 				else:
 					params = {keys[0]:pskills[p],keys[1]:info}

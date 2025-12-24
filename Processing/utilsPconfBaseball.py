@@ -69,7 +69,7 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,numHy
 		
 
 		# Experiment already done
-		if Path(f"{statusFile}.txt").is_file() and not args.rerun and env.domainName == "baseball":
+		if Path(f"{statusFile}.txt").is_file() and not args.rerun and env.domain_name == "baseball":
 			print(f"Experiment for {label} was already performed and it finished successfully.")
 		
 			del env.spaces.allData
@@ -89,13 +89,13 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,numHy
 					tempRerun = False
 
 
-			if env.domainName in ["1d","2d"]:
-				exp = RandomDartsExp(env.numObservations,args.mode,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,args.allProbs,seedNum,rng,tempRerun)
-			elif env.domainName == "sequentialDarts":
-				exp = SequentialDartsExp(env.numObservations,args.mode,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,args.allProbs,seedNum,rng,tempRerun)
-			elif env.domainName == "billiards":
+			if env.domain_name in ["1d", "2d"]:
+				exp = RandomDartsExp(env.numObservations, args.mode, env, agent, xskill, estimatorsObj, subsetEstimators, args.resultsFolder, resultsFile, indexOR, args.probs_history, seedNum, rng, tempRerun)
+			elif env.domain_name == "sequentialDarts":
+				exp = SequentialDartsExp(env.numObservations, args.mode, env, agent, xskill, estimatorsObj, subsetEstimators, args.resultsFolder, resultsFile, indexOR, args.probs_history, seedNum, rng, tempRerun)
+			elif env.domain_name == "billiards":
 				exp = BilliardsExp(env.numObservations,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,seedNum,tempRerun)
-			elif env.domainName == "baseball":
+			elif env.domain_name == "baseball":
 				exp = BaseballExp(args,env,agent,estimatorsObj,args.resultsFolder,resultsFile,indexOR,seedNum)
 			
 
@@ -108,14 +108,14 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,numHy
 				expTotalTime = expStopTime-expStartTime
 
 
-				if env.domainName != "baseball":
+				if env.domain_name != "baseball":
 
 					# Load initial info from file 
 					# OR load results from prev exp
 					with open(resultsFile,'rb') as handle:
 						resultsLoaded = json.load(handle)
 
-					results = exp.getResults()
+					results = exp.get_results()
 					results['expTotalTime'] = expTotalTime
 					results['lastEdited'] = str(datetime.datetime.now())
 

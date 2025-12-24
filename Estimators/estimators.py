@@ -21,7 +21,7 @@ class Estimators():
 		self.num_execution_skill_hypotheses = infoForEstimators["num_execution_skill_hypotheses"]
 		self.num_rationality_hypotheses = infoForEstimators["num_rationality_hypotheses"]
 
-		domainName = env.domainName		
+		domainName = env.domain_name
 
 		if domainName in ["2d-multi","baseball-multi","hockey-multi"]:
 			self.numHypsR = infoForEstimators["numHypsRhos"]
@@ -209,7 +209,7 @@ class Estimators():
 
 		for each in self.estimators:
 
-			names = each.getEstimatorName()
+			names = each.get_estimator_name()
 			
 			if type(names) == str:			
 				self.estimators_list.append(names)
@@ -224,8 +224,8 @@ class Estimators():
 
 	def printEstimators(self):
 		for e in self.estimators:
-			print("Estimator: " + str(e.getEstimatorName()) + "\n" )
-			print("\txskills: " + str(e.xskills)  + "\n")
+			print("Estimator: " + str(e.get_estimator_name()) + "\n")
+			print("\txskills: " + str(e.execution_skills) + "\n")
 
 	
 	def getCopyOfEstimators(self):
