@@ -48,7 +48,7 @@ class Estimators():
 
 		for each in self.estimators:
 
-			names = each.getEstimatorName()
+			names = each.get_estimator_name()
 			
 			if type(names) == str:			
 				self.namesEstimators.append(names)
@@ -60,8 +60,8 @@ class Estimators():
 
 	def printEstimators(self):
 		for e in self.estimators:
-			print("Estimator: " + str(e.getEstimatorName()) + "\n" )
-			print("\txskills: " + str(e.xskills)  + "\n")
+			print("Estimator: " + str(e.get_estimator_name()) + "\n")
+			print("\txskills: " + str(e.execution_skills) + "\n")
 
 	
 	def getCopyOfEstimators(self):
@@ -179,7 +179,7 @@ def run(infoPerRow,xskills,lambdas,delta,possibleTargets,agentFolder):
 				elif isinstance(e,NonJointMethodQRE):
 					e.addObservation(noisyAction,possibleTargets,otherArgs)
 				else: # OR
-					e.addObservation(observedReward,otherArgs)
+					e.add_observation(observedReward, otherArgs)
 
 
 		results = {}
@@ -187,7 +187,7 @@ def run(infoPerRow,xskills,lambdas,delta,possibleTargets,agentFolder):
 		results["pskill"] = p
 
 		for e in estimators:
-			R = e.getResults()
+			R = e.get_results()
 			for en, er in R.items():
 				results[en] = er
 

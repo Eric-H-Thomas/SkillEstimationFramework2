@@ -638,6 +638,7 @@ class JointMethodQRE:
             results[f"{self.method_type}-allProbs"] = self.probs_history
         return results
 
+                # code.interact("JTM...", local=dict(globals(), **locals()))
 
 class NonJointMethodQRE:
 
@@ -1358,6 +1359,7 @@ class QREMethod_Multi:
 
             self.probsXskills[d] *= upd
 
+        start_time_est = time.perf_counter()
 
         updRhos = updRhos.reshape(len(self.rhos),1)
         updPskills = updPskills.reshape(len(self.pskills),1)
@@ -1382,6 +1384,7 @@ class QREMethod_Multi:
         self.probsRhos /= np.sum(self.probsRhos)
         self.probsPskills /= np.sum(self.probsPskills)
 
+        self._print_and_log_data(results_folder, tag, expected_exec_skill, expected_rationality_level, total_time_est)
 
         for d in self.probsXskills:
             self.allProbsXskills[d].append(self.probsXskills[d].tolist())
@@ -1469,7 +1472,6 @@ class QREMethod_Multi:
         for d in self.probsXskills:
             xmi = np.argmax(self.probsXskills[d])
             temp.append(self.xskills[d][xmi])
-
         self.estimatesXskills[self.names[2]].append(temp)
 
 
@@ -1567,7 +1569,6 @@ class QREMethod_Multi:
 class NonJointMethodQRE_Multi:
 
     def __init__(self,xskills,numPskills,domainName,givenPrior=False,minLambda=False,otherArgs=None):
-
         self.xskills = xskills
         self.rhos = rhos
 

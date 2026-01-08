@@ -90,7 +90,7 @@ class BayesianMethod():
 
 			# Get the corresponding xskill level hypothesis at the given index
 			if self.domainName in ["2d-multi","baseball-multi"]:
-				key = spaces.getKey([x,x],r=0.0)
+				key = spaces.get_key([x, x], r=0.0)
 			else:
 				key = x
 
@@ -144,7 +144,7 @@ class BayesianMethod():
 				action = np.array(action)
 
 				focalActions = otherArgs["infoPerRow"]["focalActions"]
-				cov = spaces.allCovs[key]
+				cov = spaces.all_covs[key]
 				pdfs = computePDF(x=action,means=focalActions,covs=[cov]*len(focalActions)) # covariance = std^2
 				
 				# Update prob for current xskill

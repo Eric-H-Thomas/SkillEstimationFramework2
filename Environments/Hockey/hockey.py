@@ -304,7 +304,7 @@ def plotEVs() -> None:
 
         for iii, x in enumerate(allInfo):
             covMatrix = getCovMatrix([x[0], x[1]], x[2])
-            key = spaces.getKey([x[0], x[1]], x[2])
+            key = spaces.get_key([x[0], x[1]], x[2])
             spaces.pdfsPerXskill[key] = getNormalDistribution(
                 rng,
                 covMatrix,

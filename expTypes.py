@@ -121,28 +121,28 @@ class Experiment(metaclass=ABCMeta):
 			# startTimeEstimator = time.time()
 
 			if isinstance(e,Estimators.joint.JointMethodQRE) or isinstance(e,Estimators.joint.QREMethod_Multi):
-				if "baseball" in self.env.domainName or "hockey" in self.env.domainName:
-					e.addObservation(self.rng,self.env.spaces,None,noisyAction,**otherArgs)
+				if "baseball" in self.env.domain_name or "hockey" in self.env.domain_name:
+					e.add_observation(self.rng, self.env.spaces, None, noisyAction, **otherArgs)
 				else:
-					e.addObservation(self.rng,self.env.spaces,self.env.states[otherArgs["i"]],noisyAction,**otherArgs)
+					e.add_observation(self.rng, self.env.spaces, self.env.states[otherArgs["i"]], noisyAction, **otherArgs)
 
 			elif isinstance(e,Estimators.joint_pfe.QREMethod_Multi_Particles):
-				if "baseball" in self.env.domainName or "hockey" in self.env.domainName:
-					e.addObservation(self.rng,self.env.spaces,None,noisyAction,**otherArgs)
+				if "baseball" in self.env.domain_name or "hockey" in self.env.domain_name:
+					e.add_observation(self.rng, self.env.spaces, None, noisyAction, **otherArgs)
 				else:
-					e.addObservation(self.rng,self.env.spaces,self.env.states[otherArgs["i"]],noisyAction,**otherArgs)
+					e.add_observation(self.rng, self.env.spaces, self.env.states[otherArgs["i"]], noisyAction, **otherArgs)
 
 			elif isinstance(e,Estimators.joint.JointMethodFlip):
-				e.addObservation(self.env.spaces,noisyAction,**otherArgs)
+				e.add_observation(self.env.spaces, noisyAction, **otherArgs)
 			
 			elif isinstance(e,Estimators.joint.NonJointMethodQRE):
-				e.addObservation(self.env.spaces,noisyAction,**otherArgs)
+				e.add_observation(self.env.spaces, noisyAction, **otherArgs)
 			
 			elif isinstance(e,Estimators.bayesian.BayesianMethod):
-				e.addObservation(self.rng,self.env.domain,self.env.spaces,self.env.states[otherArgs["i"]],noisyAction,**otherArgs)
+				e.add_observation(self.rng, self.env.domain, self.env.spaces, self.env.states[otherArgs["i"]], noisyAction, **otherArgs)
 			
 			else: # ObservedReward
-				e.addObservation(self.env.spaces,observedReward,**otherArgs)
+				e.add_observation(self.env.spaces, observedReward, **otherArgs)
 
 			
 			# print(f"Total time {e.getEstimatorName()}: {time.time()-startTimeEstimator}")
@@ -160,7 +160,7 @@ class Experiment(metaclass=ABCMeta):
 		self.results['resultsFile'] = self.resultsFile
 		self.results['seedNum'] = self.seedNum
 
-		if self.env.domainName in ["billiards","baseball","baseball-multi","hockey-multi","soccer"]:
+		if self.env.domain_name in ["billiards", "baseball", "baseball-multi", "hockey-multi", "soccer"]:
 			self.results['agent_name'] = self.agent
 		else:
 			self.results['agent_name'] = self.agent.getName()
@@ -169,7 +169,7 @@ class Experiment(metaclass=ABCMeta):
 		self.results['xskill'] = self.execution_skill
 		self.results['numObservations'] = self.numObservations
 
-		self.results["domain"] = self.env.domainName
+		self.results["domain"] = self.env.domain_name
 		self.results["delta"] = self.env.delta
 
 		self.results['estimators_list'] = self.estimatorsObj.estimators_list
@@ -179,7 +179,7 @@ class Experiment(metaclass=ABCMeta):
 		
 		self.results['mode'] = self.mode
 		
-		if self.env.domainName == "2d-multi":
+		if self.env.domain_name == "2d-multi":
 			self.results['numHypsR'] = self.estimatorsObj.numHypsR
 			self.results['rhos'] = self.estimatorsObj.rhos.tolist()
 
@@ -197,7 +197,7 @@ class Experiment(metaclass=ABCMeta):
 	@abstractmethod
 	def getResults(self):
 
-		if self.env.domainName != "baseball":
+		if self.env.domain_name != "baseball":
 			self.results["true_diffs"] = self.trueDiffs
 
 		self.results['intended_actions'] = self.intendedActions
@@ -210,7 +210,7 @@ class Experiment(metaclass=ABCMeta):
 			# if self.rerun and e not in self.list_of_subset_of_estimators:
 			# 	continue
 
-			R = e.getResults()
+			R = e.get_results()
 			for en, er in R.items():
 				self.results[en] = er
 
@@ -264,7 +264,7 @@ class RandomDartsExp(Experiment):
 
 	def __init__(self,numObservations,mode,env,agent,x,estimatorsObj,list_of_subset_of_estimators,resultsFolder,resultsFile,indexOR,allProbs,seedNum,rng,rerun=False):
 
-		if env.domainName == "2d-multi":
+		if env.domain_name == "2d-multi":
 			super().__init__(numObservations,env,agent,x[0],estimatorsObj,list_of_subset_of_estimators,resultsFolder,resultsFile,indexOR,seedNum,rng,rerun)
 		else:
 			super().__init__(numObservations,env,agent,x,estimatorsObj,list_of_subset_of_estimators,resultsFolder,resultsFile,indexOR,seedNum,rng,rerun)
@@ -282,7 +282,7 @@ class RandomDartsExp(Experiment):
 		if "Bounded" in self.agent.name: 
 			self.nansTimes = 0
 
-		if self.env.domainName == "2d-multi":
+		if self.env.domain_name == "2d-multi":
 
 			self.params = x
 
@@ -326,7 +326,7 @@ class RandomDartsExp(Experiment):
 			# Will perform convolution if not present. Returns info either way.
 			if not self.env.dynamic:
 
-				if self.env.domainName == "2d-multi":
+				if self.env.domain_name == "2d-multi":
 					convolutionSpace = self.env.spaces.getSpace(self.rng,self.params,state)
 				else:
 					convolutionSpace = self.env.spaces.getSpace(self.rng, self.execution_skill, state)
@@ -353,13 +353,13 @@ class RandomDartsExp(Experiment):
 
 
 			# Add noise to action + get respective reward
-			if self.env.domainName == "2d-multi":
+			if self.env.domain_name == "2d-multi":
 				noisy_action = self.env.domain.sample_noisy_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
 			else:
 				noisy_action = self.env.domain.sample_noisy_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
 				
 
-			if self.env.domainName == "1d":
+			if self.env.domain_name == "1d":
 				observed_reward = self.env.domain.get_reward_for_action(self.rng,state,noisy_action)
 			else:
 				observed_reward = self.env.domain.get_reward_for_action(state,noisy_action)
@@ -382,12 +382,12 @@ class RandomDartsExp(Experiment):
 			# Resample rewards
 			for j in range(20):		
 
-				if self.env.domainName == "2d-multi":
+				if self.env.domain_name == "2d-multi":
 					na = self.env.domain.sample_noisy_action(self.rng,state,self.agent.mean,self.agent.covMatrix,action,self.agent.noiseModel)
 				else:
 					na = self.env.domain.sample_noisy_action(self.rng, state, self.execution_skill, action, self.agent.noiseModel)
 				
-				if self.env.domainName == "1d":
+				if self.env.domain_name == "1d":
 					ob = self.env.domain.get_reward_for_action(self.rng,state,na)
 				else:
 					ob = self.env.domain.get_reward_for_action(state,na)
@@ -399,7 +399,7 @@ class RandomDartsExp(Experiment):
 			#tt, exp_reward = get_optimal_action_and_value(state, xskill)
 			#tt = agent.get_action(i)
 
-			if self.env.domainName == "1d":
+			if self.env.domain_name == "1d":
 				exp_reward = self.env.domain.get_reward_for_action(self.rng,state,action)
 			else:
 				exp_reward = self.env.domain.get_reward_for_action(state,action)
@@ -461,12 +461,12 @@ class RandomDartsExp(Experiment):
 		
 		super().getResults()
 
-		if self.env.domainName == "1d":
+		if self.env.domain_name == "1d":
 			self.results['intended_actions'] = self.intendedActions
 			self.results['noisy_actions'] = self.noisyActions
 			self.results['wrap'] = self.env.wrap
 
-		elif "2d" in self.env.domainName:
+		elif "2d" in self.env.domain_name:
 
 			# Will store actions separately since they are in a 2D-list ([[x,y], [x,y]]) and causes
 			# 'not serializable' error when trying to save
@@ -502,14 +502,14 @@ class RandomDartsExp(Experiment):
 		self.results['true_rewards'] = self.agent.get_true_rewards()
 
 
-		if "multi" in self.env.domainName:
+		if "multi" in self.env.domain_name:
 			self.results['mean'] = self.agent.mean
 			self.results['covMatrix'] = self.agent.covMatrix.tolist()
 			self.results["dimensions"] = self.env.dimensions
 
 		# Saving the states used for the experiment - dictionary
 		self.results["states"] = {"states" : self.env.states}
-		self.results["domain"] = self.env.domainName
+		self.results["domain"] = self.env.domain_name
 		self.results["mode"] = self.env.mode
 		
 
@@ -908,7 +908,7 @@ class BaseballExp(Experiment):
 
 		# Using symmetric set since will need to init pdfsPerXskill info just for normal JTM
 		# The ones for the particles will be managed within addObservation()
-		if "multi" in self.env.domainName:
+		if "multi" in self.env.domain_name:
 			# self.xSkills = list(product(list(map(list,self.xSkills)),estimatorsObj.rhos))
 			self.xSkills = estimatorsObj.xskillsNormal
 
@@ -1025,9 +1025,9 @@ class BaseballExp(Experiment):
 
 				# Using symmetric set since will need to init pdfsPerXskill info just for normal JTM
 				# The ones for the particles will be managed within addObservation()
-				if "multi" in self.env.domainName:
+				if "multi" in self.env.domain_name:
 
-					key = self.env.spaces.getKey([each,each],0.0)
+					key = self.env.spaces.get_key([each, each], 0.0)
 
 					if key in self.env.spaces.pdfsPerXskill:
 						print(f"Info available for {key}")
@@ -1409,11 +1409,11 @@ class BaseballExp(Experiment):
 
 				for x in self.xSkills:
 
-					if "multi" in self.env.domainName:
+					if "multi" in self.env.domain_name:
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# Compute if haven't seen before OR need to be updated
@@ -1460,8 +1460,8 @@ class BaseballExp(Experiment):
 				# For memory management
 				for x in self.xSkills:
 
-					if "multi" in self.env.domainName:
-						x = self.env.spaces.getKey([x,x],0.0)
+					if "multi" in self.env.domain_name:
+						x = self.env.spaces.get_key([x, x], 0.0)
 					
 
 				self.timesPerObservations.append(time.time()-startTime)
@@ -1608,11 +1608,11 @@ class BaseballExp(Experiment):
 
 					# print(f"xskill: {x}")
 
-					if "multi" in self.env.domainName:
+					if "multi" in self.env.domain_name:
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# Convolve to produce the EV and aiming spot
@@ -1633,7 +1633,7 @@ class BaseballExp(Experiment):
 					# 	- target for best xskill hyp
 					#	- other targets if they are more than 0.16667 feet (or 2 inches) away 
 					# 	  from middle target OR last focal target added
-					if action not in newFocalActions and "multi" not in self.env.domainName:
+					if action not in newFocalActions and "multi" not in self.env.domain_name:
 						if (x == np.min(self.xSkills)) or dist(action,middle) >= 0.16667 or dist(action,newFocalActions[-1]) >= 0.16667:
 							newFocalActions.append(action)
 
@@ -1653,7 +1653,7 @@ class BaseballExp(Experiment):
 
 
 				# Update set of focal actions
-				if "multi" not in self.env.domainName:
+				if "multi" not in self.env.domain_name:
 					self.infoPerRow[index]["focalActions"] = np.concatenate([self.infoPerRow[index]["focalActions"],newFocalActions])			
 				
 
@@ -2051,7 +2051,7 @@ class BaseballExp(Experiment):
 
 		# Reset estimators info (mainly estimates lists)
 		for e in self.estimators:
-			e.midReset()
+			e.mid_reset()
 
 		self.noisyActions = []
 		self.observedRewards = []
@@ -2186,7 +2186,7 @@ class HockeyExp(Experiment):
 
 		# Using symmetric set since will need to init pdfsPerXskill info just for normal JTM
 		# The ones for the particles will be managed within addObservation()
-		if "multi" in self.env.domainName:
+		if "multi" in self.env.domain_name:
 			# self.xSkills = list(product(list(map(list,self.xSkills)),estimatorsObj.rhos))
 			self.xSkills = estimatorsObj.xskillsNormal
 
@@ -2652,13 +2652,13 @@ class HockeyExp(Experiment):
 
 				for x in self.xSkills:
 
-					if "multi" in self.env.domainName:
+					if "multi" in self.env.domain_name:
 
 						covMatrix = self.env.domain.getCovMatrix([x,x],0.0)
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# NEEDED HERE (FOR EACH XSKILL)
@@ -2680,8 +2680,8 @@ class HockeyExp(Experiment):
 				# For memory management
 				for x in self.xSkills:
 
-					if "multi" in self.env.domainName:
-						x = self.env.spaces.getKey([x,x],0.0)
+					if "multi" in self.env.domain_name:
+						x = self.env.spaces.get_key([x, x], 0.0)
 					
 
 				self.timesPerObservations.append(time.time()-startTime)
@@ -2794,13 +2794,13 @@ class HockeyExp(Experiment):
 					# print(f"xskill: {x}")
 
 
-					if "multi" in self.env.domainName:
+					if "multi" in self.env.domain_name:
 
 						covMatrix = self.env.domain.getCovMatrix([x,x],0.0)
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 					
 					# NEEDED HERE (FOR EACH XSKILL)
@@ -2847,7 +2847,7 @@ class HockeyExp(Experiment):
 
 
 				# Update set of focal actions
-				if "multi" not in self.env.domainName:
+				if "multi" not in self.env.domain_name:
 					self.infoPerRow[row]["focalActions"] = np.concatenate([self.infoPerRow[row]["focalActions"],newFocalActions])			
 				
 
@@ -3180,7 +3180,7 @@ class HockeyExp(Experiment):
 
 		# Reset estimators info (mainly estimates lists)
 		for e in self.estimators:
-			e.midReset()
+			e.mid_reset()
 
 		self.noisyActions = []
 		self.observedRewards = []
@@ -3510,7 +3510,7 @@ class SoccerExp(Experiment):
 				for x in self.xSkills:
 
 					if type(x) == tuple:
-						x = self.env.spaces.getKey(x[0],x[1])
+						x = self.env.spaces.get_key(x[0], x[1])
 
 					# Convolve to produce the EV and aiming spot
 					EVs = convolve2d(Zs,self.env.spaces.pdfsPerXskill[x],mode="same",fillvalue=minUtility)

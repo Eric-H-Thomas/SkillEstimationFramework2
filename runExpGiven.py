@@ -372,26 +372,26 @@ def _make_experiment(env, args, agent, xskill, estimators_obj, subset_estimators
 
     Mirrors the original if/elif ladder but centralizes it for readability.
     """
-    if env.domainName in ["1d", "2d", "2d-multi"]:
+    if env.domain_name in ["1d", "2d", "2d-multi"]:
         return RandomDartsExp(env.numObservations, args.mode, env, agent, xskill,
                               estimators_obj, subset_estimators, args.resultsFolder,
-                              results_file, index_or, args.allProbs, seed_num, rng, temp_rerun)
-    elif env.domainName == "sequentialDarts":
+                              results_file, index_or, args.probs_history, seed_num, rng, temp_rerun)
+    elif env.domain_name == "sequentialDarts":
         return SequentialDartsExp(env.numObservations, args.mode, env, agent, xskill,
                                   estimators_obj, subset_estimators, args.resultsFolder,
-                                  results_file, index_or, args.allProbs, seed_num, rng, temp_rerun)
-    elif env.domainName == "billiards":
+                                  results_file, index_or, args.probs_history, seed_num, rng, temp_rerun)
+    elif env.domain_name == "billiards":
         return BilliardsExp(env.numObservations, env, agent, xskill,
                             estimators_obj, subset_estimators, args.resultsFolder,
                             results_file, index_or, seed_num, rng, temp_rerun)
-    elif env.domainName in ["baseball", "baseball-multi"]:
+    elif env.domain_name in ["baseball", "baseball-multi"]:
         return BaseballExp(args, env, agent, estimators_obj, subset_estimators,
                            args.resultsFolder, results_file, index_or, seed_num, rng)
-    elif env.domainName == "soccer":
+    elif env.domain_name == "soccer":
         return SoccerExp(args, env, agent, estimators_obj, subset_estimators,
                          args.resultsFolder, results_file, index_or, seed_num, rng)
     else:
-        raise ValueError(f"Unknown domainName: {env.domainName}")
+        raise ValueError(f"Unknown domainName: {env.domain_name}")
 
 
 
@@ -403,13 +403,13 @@ def _run_exp_and_collect_results(env, exp, tag, counter):
     - For other domains, it runs the experiment in a child process via `run_single_experiment`
       and returns the results placed on the queue by the worker.
     """
-    if env.domainName in ["baseball", "baseball-multi", "soccer"]:
+    if env.domain_name in ["baseball", "baseball-multi", "soccer"]:
         exp.run(tag, counter)
         return {}
 
     result_queue = Queue()
     process = Process(target=run_single_experiment,
-                      args=(exp, tag, counter, env.domainName, result_queue))
+                      args=(exp, tag, counter, env.domain_name, result_queue))
     process.start()
     results = result_queue.get()
     process.join()
@@ -424,7 +424,7 @@ def _should_skip_completed(env, args, status_file, label):
     a DONE marker exists and args.rerun is False. Also frees large cached data
     on the env when possible to keep memory stable across many agents.
     """
-    if env.domainName in ["baseball", "baseball-multi"] and Path(f"{status_file}.txt").is_file() and not args.rerun:
+    if env.domain_name in ["baseball", "baseball-multi"] and Path(f"{status_file}.txt").is_file() and not args.rerun:
         print(f"Experiment for {label} was already performed and it finished successfully.")
         try:
             del env.spaces.allData
@@ -457,7 +457,7 @@ def _persist_results(env, results_file, results, exp_total_time):
     """Write timing/metadata and merge results (when applicable) to disk."""
     import datetime as _dt
 
-    if env.domainName not in ["baseball", "baseball-multi", "soccer"]:
+    if env.domain_name not in ["baseball", "baseball-multi", "soccer"]:
         # Non-persistent domains: merge returned results with timing
         with open(results_file, "rb") as handle:
             results_loaded = pickle.load(handle)

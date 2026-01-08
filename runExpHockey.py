@@ -70,7 +70,7 @@ def work(exp,tag,counter,domainName,q):
         # Non-baseball/soccer domains return results via the queue so the parent
         # process can persist them to disk.
         if domainName not in ["baseball","baseball-multi","soccer"]:
-                q.put(exp.getResults())
+                q.put(exp.get_results())
 
 
 # @profile
@@ -176,17 +176,17 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
                                 tempRerun = False
 
 
-		if env.domainName in ["1d","2d","2d-multi"]:
-			exp = RandomDartsExp(env.numObservations,args.mode,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,args.allProbs,seedNum,rng,tempRerun)
-		elif env.domainName == "sequentialDarts":
-			exp = SequentialDartsExp(env.numObservations,args.mode,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,args.allProbs,seedNum,rng,tempRerun)
-		elif env.domainName == "billiards":
+		if env.domain_name in ["1d", "2d", "2d-multi"]:
+			exp = RandomDartsExp(env.numObservations, args.mode, env, agent, xskill, estimatorsObj, subsetEstimators, args.resultsFolder, resultsFile, indexOR, args.probs_history, seedNum, rng, tempRerun)
+		elif env.domain_name == "sequentialDarts":
+			exp = SequentialDartsExp(env.numObservations, args.mode, env, agent, xskill, estimatorsObj, subsetEstimators, args.resultsFolder, resultsFile, indexOR, args.probs_history, seedNum, rng, tempRerun)
+		elif env.domain_name == "billiards":
 			exp = BilliardsExp(env.numObservations,env,agent,xskill,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,seedNum,rng,tempRerun)
-		elif env.domainName in ["baseball","baseball-multi"]:
+		elif env.domain_name in ["baseball", "baseball-multi"]:
 			exp = BaseballExp(args,env,agent,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,seedNum,rng)
-		elif env.domainName in ["hockey-multi"]:
+		elif env.domain_name in ["hockey-multi"]:
 			exp = HockeyExp(args,env,[agentInfo,agent],estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,seedNum,rng)
-		elif env.domainName == "soccer":
+		elif env.domain_name == "soccer":
 			exp = SoccerExp(args,env,agent,estimatorsObj,subsetEstimators,args.resultsFolder,resultsFile,indexOR,seedNum,rng)
 		
 
@@ -195,7 +195,7 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
                 # configured (valid dataset, states, etc.).
                 if exp.getValid():
 
-                        if env.domainName in ["baseball","baseball-multi","hockey-multi","soccer"]:
+                        if env.domain_name in ["baseball", "baseball-multi", "hockey-multi", "soccer"]:
                                 # Some experiment classes handle their own
                                 # persistence internally, so simply run them
                                 # inline and use an empty results dict here.
@@ -209,7 +209,7 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
                                 # and avoid interference between runs.
                                 q = Queue()
 
-                                process = Process(target=work, args=(exp,tag,counter,env.domainName,q))
+                                process = Process(target=work, args=(exp, tag, counter, env.domain_name, q))
 
                                 # print(f"ID of parent process: {os.getpid()}")
 
@@ -226,7 +226,7 @@ def onlineExperiment(args,xskill,agents,env,estimatorsObj,subsetEstimators,tag,c
 			expTotalTime = expStopTime-expStartTime
 
 
-                        if env.domainName not in ["baseball","baseball-multi","hockey-multi","soccer"]:
+                        if env.domain_name not in ["baseball", "baseball-multi", "hockey-multi", "soccer"]:
 
                                 # Load initial info from file
                                 # OR load results from prev exp
