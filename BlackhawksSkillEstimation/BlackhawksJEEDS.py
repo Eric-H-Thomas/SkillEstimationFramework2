@@ -5,8 +5,8 @@ framework's JEEDS implementation (``JointMethodQRE``).  The workflow:
 
 1. Pull per-shot metadata for a given player across selected games via
    :func:`BlackhawksAPI.query_player_game_info`.
-2. Convert those raw SQL rows into the grids and covariances expected by the
-   JEEDS estimator for the hockey domain.
+2. Convert those raw SQL rows into angular heatmaps and covariances expected by
+   the JEEDS estimator for the hockey domain.
 3. Feed each observed shot into JEEDS and return the final MAP execution-skill
    estimate.
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -39,10 +39,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 from BlackhawksAPI import query_player_game_info
+from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
-
-
-# TODO: make sure getAngularHeatmapsPerPlayer.py got used properly; this code might be reinventing the wheel
 
 
 @dataclass
@@ -64,15 +62,20 @@ class SimpleHockeySpaces:
     y_grid: np.ndarray
     z_grid: np.ndarray
     candidate_execution_skills: Sequence[float]
+    possible_targets: np.ndarray | None = None
+    possibleTargets: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         dy = np.diff(self.y_grid).mean() if len(self.y_grid) > 1 else 1.0
         dz = np.diff(self.z_grid).mean() if len(self.z_grid) > 1 else 1.0
         self.delta = (float(dy), float(dz))
 
-        self.possibleTargets = np.array(
-            [(y, z) for y in self.y_grid for z in self.z_grid], dtype=float
-        )
+        if self.possible_targets is None:
+            self.possibleTargets = np.array(
+                [(y, z) for y in self.y_grid for z in self.z_grid], dtype=float
+            )
+        else:
+            self.possibleTargets = np.array(self.possible_targets, dtype=float)
 
         self.all_covs: dict[str, np.ndarray] = {}
         for skill in self.candidate_execution_skills:
@@ -106,24 +109,9 @@ class SimpleHockeySpaces:
 
 @dataclass
 class JEEDSInputs:
-    spaces: SimpleHockeySpaces
+    spaces_per_shot: list[SimpleHockeySpaces]
     actions: list[list[float]]
     info_rows: list[dict[str, object]]
-
-
-def _build_target_grids(df, grid_step: float) -> tuple[np.ndarray, np.ndarray]:
-    # y_min, y_max = df["location_y"].min(), df["location_y"].max()
-    # z_min, z_max = df["location_z"].min(), df["location_z"].max()
-
-    # TODO: clean this up when done testing
-    y_min, y_max = df["LOCATION_Y"].min(), df["LOCATION_Y"].max()
-    z_min, z_max = df["LOCATION_Z"].min(), df["LOCATION_Z"].max()
-
-    # Add a small buffer so the observed locations do not sit on the edge.
-    pad = max(grid_step, 0.1)
-    y_grid = np.arange(y_min - pad, y_max + pad + grid_step, grid_step)
-    z_grid = np.arange(z_min - pad, z_max + pad + grid_step, grid_step)
-    return y_grid, z_grid
 
 
 def _ev_surface_for_shot(
@@ -134,7 +122,7 @@ def _ev_surface_for_shot(
     z_grid: np.ndarray,
     base_sigma: float,
 ) -> np.ndarray:
-    yy, zz = np.meshgrid(y_grid, z_grid, indexing="ij")
+    yy, zz = np.meshgrid(y_grid, z_grid)
     dist2 = (yy - location_y) ** 2 + (zz - location_z) ** 2
     return probability * np.exp(-dist2 / (2.0 * base_sigma**2))
 
@@ -154,37 +142,59 @@ def transform_shots_for_jeeds(
     candidate_skills:
         Execution-skill hypotheses passed to JEEDS.
     grid_step:
-        Spacing (in rink meters) for the (y, z) grid used when constructing EV
-        surfaces.
+        Deprecated in angular mode; retained for backward compatibility.
     base_sigma:
-        Standard deviation (in rink meters) for the base Gaussian centered on
-        the observed shot location.
+        Standard deviation for the base Gaussian centered on the observed shot
+        location (in the same units as the angular heatmap utilities).
     """
 
-    y_grid, z_grid = _build_target_grids(df, grid_step)
-    spaces = SimpleHockeySpaces(y_grid, z_grid, candidate_skills)
+    df = df.rename(columns=str.lower)
+    y_grid = angular_heatmaps.Y
+    z_grid = angular_heatmaps.Z
 
     info_rows: list[dict[str, object]] = []
     actions: list[list[float]] = []
+    spaces_per_shot: list[SimpleHockeySpaces] = []
 
     for _, row in df.iterrows():
-        # TODO: clean up when done debugging
-        # base_ev = _ev_surface_for_shot(
-        #     probability=float(row["probability"]),
-        #     location_y=float(row["location_y"]),
-        #     location_z=float(row["location_z"]),
-        #     y_grid=y_grid,
-        #     z_grid=z_grid,
-        #     base_sigma=base_sigma,
-        # )
-
         base_ev = _ev_surface_for_shot(
-            probability=float(row["PROBABILITY"]),
-            location_y=float(row["LOCATION_Y"]),
-            location_z=float(row["LOCATION_Z"]),
+            probability=float(row["probability"]),
+            location_y=float(row["location_y"]),
+            location_z=float(row["location_z"]),
             y_grid=y_grid,
             z_grid=z_grid,
             base_sigma=base_sigma,
+        )
+
+        player_location = np.array([float(row["start_x"]), float(row["start_y"])])
+        executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
+
+        (
+            dirs,
+            elevations,
+            _,
+            grid_targets_angular,
+            _,
+            _,
+            _,
+            grid_utilities_computed,
+            executed_action_angular,
+            skip,
+            _,
+        ) = angular_heatmaps.getAngularHeatmap(
+            base_ev,
+            player_location,
+            executed_action,
+        )
+
+        if skip:
+            continue
+
+        spaces = SimpleHockeySpaces(
+            np.array(dirs),
+            np.array(elevations),
+            candidate_skills,
+            possible_targets=grid_targets_angular.reshape(-1, 2),
         )
 
         entry = {"evsPerXskill": {}, "maxEVPerXskill": {}, "focalActions": []}
@@ -193,22 +203,23 @@ def transform_shots_for_jeeds(
             key = spaces.get_key([skill, skill], r=0.0)
             # More skilled shooters keep reward mass near the aimed point; less
             # skilled shooters smear it out.
-            sigma = max(grid_step / 3.0, base_sigma / max(math.sqrt(skill), 1e-3))
-            evs = gaussian_filter(base_ev, sigma=sigma)
+            sigma = max(base_sigma / max(math.sqrt(skill), 1e-3), 1e-3)
+            evs = gaussian_filter(grid_utilities_computed, sigma=sigma)
 
             entry["evsPerXskill"][key] = evs
             entry["maxEVPerXskill"][key] = float(np.max(evs))
 
             best_idx = int(np.argmax(evs))
-            iy, iz = np.unravel_index(best_idx, (len(y_grid), len(z_grid)))
-            entry["focalActions"].append([float(y_grid[iy]), float(z_grid[iz])])
+            iy, iz = np.unravel_index(best_idx, (len(dirs), len(elevations)))
+            entry["focalActions"].append(
+                [float(grid_targets_angular[iy, iz, 0]), float(grid_targets_angular[iy, iz, 1])]
+            )
 
         info_rows.append(entry)
-        #TODO: clean up when done debugging
-        # actions.append([float(row["location_y"]), float(row["location_z"])] )
-        actions.append([float(row["LOCATION_Y"]), float(row["LOCATION_Z"])])
+        actions.append([float(executed_action_angular[0]), float(executed_action_angular[1])])
+        spaces_per_shot.append(spaces)
 
-    return JEEDSInputs(spaces=spaces, actions=actions, info_rows=info_rows)
+    return JEEDSInputs(spaces_per_shot=spaces_per_shot, actions=actions, info_rows=info_rows)
 
 
 def ensure_results_directories(results_folder: Path) -> None:
@@ -246,6 +257,8 @@ def estimate_player_skill(
         grid_step=grid_step,
         base_sigma=base_sigma,
     )
+    if not jeeds_inputs.actions:
+        raise RuntimeError("No usable shot data remained after angular conversion.")
 
     estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, "hockey-multi")
     results_folder = Path(results_folder)
@@ -254,10 +267,12 @@ def estimate_player_skill(
     rng = np.random.default_rng(rng_seed)
     tag = f"Player_{player_id}"
 
-    for idx, (info, action) in enumerate(zip(jeeds_inputs.info_rows, jeeds_inputs.actions)):
+    for idx, (spaces, info, action) in enumerate(
+        zip(jeeds_inputs.spaces_per_shot, jeeds_inputs.info_rows, jeeds_inputs.actions)
+    ):
         estimator.add_observation(
             rng,
-            jeeds_inputs.spaces,
+            spaces,
             state=None,
             action=action,
             resultsFolder=str(results_folder),
