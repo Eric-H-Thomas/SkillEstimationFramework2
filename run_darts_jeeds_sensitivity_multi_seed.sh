@@ -1,32 +1,32 @@
 #!/bin/bash
 #
-# Iterate over multiple random seeds and rerun the JEEDS sensitivity experiment
-# for each value, mirroring the configuration from
-# ``run_darts_jeeds_sensitivity_exp.sbatch``. Results for each seed are written
-# to a dedicated output directory. When the workload is partitioned across
-# multiple jobs per seed the partial CSV shards are automatically aggregated
-# once all shards finish.
+# Submit multiple JEEDS sensitivity experiments across seeds to the Slurm
+# scheduler, mirroring the configuration from
+# ``run_darts_jeeds_sensitivity_exp.sbatch``. Work can optionally be sharded per
+# seed using a Slurm job array. When sharded, an aggregation job array is
+# submitted after the main jobs finish.
 
 set -euo pipefail
 
 usage() {
-  cat <<'EOF'
-Usage: run_darts_jeeds_sensitivity_multi_seed.sh [--jobs-per-seed N] [seed ...]
+  cat <<'USAGE'
+Usage: run_darts_jeeds_sensitivity_multi_seed.sh [--jobs-per-seed N] [--output-dir-base PATH] [seed ...]
 
-Run the high-resolution JEEDS sensitivity experiment for one or more random
-seeds. By default the script processes a curated list of seeds sequentially,
-but you can supply your own seeds as positional arguments. When more than one
-job per seed is requested the script runs each shard back-to-back and triggers
-the aggregation pass automatically once all shards complete.
+Submit the high-resolution JEEDS sensitivity experiment for one or more random
+seeds to Slurm. By default the script processes a curated list of seeds using a
+job array, but you can supply your own seeds as positional arguments.
 
 Options:
-  --jobs-per-seed N   Split each seed's workload across N sequential jobs.
-                      Defaults to 1 (no sharding).
-  -h, --help          Display this help message and exit.
-EOF
+  --jobs-per-seed N     Split each seed's workload across N Slurm array tasks.
+                        Defaults to 1 (no sharding).
+  --output-dir-base P   Base output directory (defaults to Testing/results/high_res).
+                        Each seed writes to "<base>_seed_<seed>".
+  -h, --help            Display this help message and exit.
+USAGE
 }
 
 jobs_per_seed=1
+output_dir_base="Testing/results/high_res"
 seeds=()
 
 while [[ $# -gt 0 ]]; do
@@ -44,6 +44,15 @@ while [[ $# -gt 0 ]]; do
       jobs_per_seed="$2"
       shift 2
       ;;
+    --output-dir-base)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --output-dir-base requires a path argument." >&2
+        usage >&2
+        exit 1
+      fi
+      output_dir_base="$2"
+      shift 2
+      ;;
     --)
       shift
       while [[ $# -gt 0 ]]; do
@@ -52,7 +61,7 @@ while [[ $# -gt 0 ]]; do
       done
       break
       ;;
-    -*)
+    -* )
       echo "Error: Unrecognized option '$1'." >&2
       usage >&2
       exit 1
@@ -75,37 +84,27 @@ if [[ ${#seeds[@]} -eq 0 ]]; then
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+array_script="${script_dir}/run_darts_jeeds_sensitivity_multi_seed.sbatch"
 
-for seed in "${seeds[@]}"; do
-  output_dir="Testing/results/high_res_seed_${seed}"
-  partial_dir="${output_dir}/partials"
+num_seeds="${#seeds[@]}"
+total_tasks=$(( num_seeds * jobs_per_seed ))
+seeds_export="${seeds[*]}"
 
-  echo "==== Running darts JEEDS sensitivity experiment with seed ${seed} ===="
-  echo "Output directory: ${output_dir}"
+submit_out=$(sbatch \
+  --array=0-$((total_tasks - 1)) \
+  --export=ALL,SEEDS="${seeds_export}",JOBS_PER_SEED="${jobs_per_seed}",OUTPUT_DIR_BASE="${output_dir_base}" \
+  "${array_script}")
 
-  if (( jobs_per_seed > 1 )) && [[ -d "${partial_dir}" ]]; then
-    echo "Cleaning partial results directory: ${partial_dir}"
-    rm -rf "${partial_dir}"
-  fi
+job_id=$(awk '{print $4}' <<< "${submit_out}")
 
-  for (( job_index = 0; job_index < jobs_per_seed; ++job_index )); do
-    echo "---- Launching job $((job_index + 1))/${jobs_per_seed} for seed ${seed}"
-    SEED="${seed}" \
-    OUTPUT_DIR="${output_dir}" \
-    NUM_JOBS="${jobs_per_seed}" \
-    JOB_INDEX="${job_index}" \
-      bash "${script_dir}/run_darts_jeeds_sensitivity_exp.sbatch"
-  done
+echo "Submitted ${total_tasks} tasks for ${num_seeds} seeds: ${submit_out}"
 
-  if (( jobs_per_seed > 1 )); then
-    echo "---- Aggregating partial results for seed ${seed}"
-    SEED="${seed}" \
-    OUTPUT_DIR="${output_dir}" \
-    NUM_JOBS="${jobs_per_seed}" \
-    JOB_INDEX=0 \
-    AGGREGATE_RESULTS=1 \
-      bash "${script_dir}/run_darts_jeeds_sensitivity_exp.sbatch"
-  else
-    echo "---- Seed ${seed} completed (single job produced final artifacts)"
-  fi
-done
+if (( jobs_per_seed > 1 )); then
+  aggregate_out=$(sbatch \
+    --dependency=afterok:${job_id} \
+    --array=0-$((num_seeds - 1)) \
+    --export=ALL,SEEDS="${seeds_export}",JOBS_PER_SEED="${jobs_per_seed}",OUTPUT_DIR_BASE="${output_dir_base}",AGGREGATE_RESULTS=1 \
+    "${array_script}")
+
+  echo "Submitted aggregation array: ${aggregate_out}"
+fi
