@@ -283,7 +283,7 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
 
             covMatrix = spaces.domain.getCovMatrix([eachX[0], eachX[1]], rho)
 
-            x = spaces.getKey([eachX[0], eachX[1]], rho)
+            x = spaces.get_key([eachX[0], eachX[1]], rho)
 
             pdfs = sys.modules["utils"].computePDF(
                 x=executedActionAngular,

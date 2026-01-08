@@ -63,7 +63,7 @@ class SimpleHockeySpaces:
 
     y_grid: np.ndarray
     z_grid: np.ndarray
-    estimator_xskills: Sequence[float]
+    candidate_execution_skills: Sequence[float]
 
     def __post_init__(self) -> None:
         dy = np.diff(self.y_grid).mean() if len(self.y_grid) > 1 else 1.0
@@ -74,20 +74,33 @@ class SimpleHockeySpaces:
             [(y, z) for y in self.y_grid for z in self.z_grid], dtype=float
         )
 
-        self.allCovs: dict[str, np.ndarray] = {}
-        for skill in self.estimator_xskills:
-            key = self.getKey([skill, skill], r=0.0)
-            self.allCovs[key] = self._covariance_from_skill(skill)
+        self.all_covs: dict[str, np.ndarray] = {}
+        for skill in self.candidate_execution_skills:
+            key = self.get_key([skill, skill], r=0.0)
+            self.all_covs[key] = self._covariance_from_skill(skill)
 
     # TODO: need to verify that this _covariance_from_skill method is what we actually want. The steps for determining
     #   which execution skill levels to test seem convoluted.
 
-    def _covariance_from_skill(self, skill: float) -> np.ndarray:
+    @staticmethod
+    def _covariance_from_skill(skill: float) -> np.ndarray:
         variance = 1.0 / max(skill, 1e-6) ** 2
         return np.diag([variance, variance])
 
+    '''
+    Examples of how skill translates to variance:
+    skill: 0.25; variance: 16.000
+    skill: 0.50; variance: 4.000
+    skill: 0.75; variance: 1.778
+    skill: 1.00; variance: 1.000
+    skill: 1.25; variance: 0.640
+    skill: 1.50; variance: 0.444
+    skill: 1.75; variance: 0.327
+    skill: 2.00; variance: 0.250
+    '''
+
     @staticmethod
-    def getKey(info: Sequence[float], r: float) -> str:
+    def get_key(info: Sequence[float], r: float) -> str:
         return "|".join(map(str, info)) + f"|{r}"
 
 
@@ -149,7 +162,7 @@ def transform_shots_for_jeeds(
     """
 
     y_grid, z_grid = _build_target_grids(df, grid_step)
-    spaces = SimpleHockeySpaces(y_grid=y_grid, z_grid=z_grid, estimator_xskills=candidate_skills)
+    spaces = SimpleHockeySpaces(y_grid, z_grid, candidate_skills)
 
     info_rows: list[dict[str, object]] = []
     actions: list[list[float]] = []
@@ -177,7 +190,7 @@ def transform_shots_for_jeeds(
         entry = {"evsPerXskill": {}, "maxEVPerXskill": {}, "focalActions": []}
 
         for skill in candidate_skills:
-            key = spaces.getKey([skill, skill], r=0.0)
+            key = spaces.get_key([skill, skill], r=0.0)
             # More skilled shooters keep reward mass near the aimed point; less
             # skilled shooters smear it out.
             sigma = max(grid_step / 3.0, base_sigma / max(math.sqrt(skill), 1e-3))
@@ -281,7 +294,8 @@ def _parse_args() -> argparse.Namespace:
         help="Optional execution-skill grid for JEEDS (defaults to 8 values between 0.25 and 2.0).",
     )
 
-    # TODO: need to make sure that 0.25 up to 2.0 is a reasonable range for the data we are looking at
+    # TODO: need to make sure that 0.25 up to 2.0 is a reasonable range for the data we are looking at;
+    #  will need to check how .25 ... 2 are getting used; not sure whether they're raw rink meters or something else
 
     parser.add_argument(
         "--num-planning-skills",

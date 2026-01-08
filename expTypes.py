@@ -1027,7 +1027,7 @@ class BaseballExp(Experiment):
 				# The ones for the particles will be managed within addObservation()
 				if "multi" in self.env.domain_name:
 
-					key = self.env.spaces.getKey([each,each],0.0)
+					key = self.env.spaces.get_key([each, each], 0.0)
 
 					if key in self.env.spaces.pdfsPerXskill:
 						print(f"Info available for {key}")
@@ -1413,7 +1413,7 @@ class BaseballExp(Experiment):
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# Compute if haven't seen before OR need to be updated
@@ -1461,7 +1461,7 @@ class BaseballExp(Experiment):
 				for x in self.xSkills:
 
 					if "multi" in self.env.domain_name:
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 					
 
 				self.timesPerObservations.append(time.time()-startTime)
@@ -1612,7 +1612,7 @@ class BaseballExp(Experiment):
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# Convolve to produce the EV and aiming spot
@@ -2658,7 +2658,7 @@ class HockeyExp(Experiment):
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 
 					# NEEDED HERE (FOR EACH XSKILL)
@@ -2681,7 +2681,7 @@ class HockeyExp(Experiment):
 				for x in self.xSkills:
 
 					if "multi" in self.env.domain_name:
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 					
 
 				self.timesPerObservations.append(time.time()-startTime)
@@ -2800,7 +2800,7 @@ class HockeyExp(Experiment):
 
 						# Getting symmetric key since pdfsPerXskill info initialized only for normal JTM
 						# The ones for the particles will be managed within addObservation()
-						x = self.env.spaces.getKey([x,x],0.0)
+						x = self.env.spaces.get_key([x, x], 0.0)
 
 					
 					# NEEDED HERE (FOR EACH XSKILL)
@@ -3510,7 +3510,7 @@ class SoccerExp(Experiment):
 				for x in self.xSkills:
 
 					if type(x) == tuple:
-						x = self.env.spaces.getKey(x[0],x[1])
+						x = self.env.spaces.get_key(x[0], x[1])
 
 					# Convolve to produce the EV and aiming spot
 					EVs = convolve2d(Zs,self.env.spaces.pdfsPerXskill[x],mode="same",fillvalue=minUtility)

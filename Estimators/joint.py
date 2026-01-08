@@ -94,7 +94,7 @@ class JointMethodFlip:
 
 
         if self.domainName == "sequentialDarts":
-            pdfs = computePDF(x=action,means=spaces.allPIsForXskillsPerState[currentScore],covs=spaces.allCovs)
+            pdfs = computePDF(x=action, means=spaces.allPIsForXskillsPerState[currentScore], covs=spaces.all_covs)
 
 
         for xi in range(self.numXskills):
@@ -118,7 +118,7 @@ class JointMethodFlip:
                 diff = otherArgs["diff"]
 
             elif self.domainName == "baseball":
-                pdfs = computePDF(x=action,means=spaces.possibleTargetsFeet,covs=[spaces.allCovs[xi]]*len(spaces.possibleTargetsFeet))
+                pdfs = computePDF(x=action, means=spaces.possibleTargetsFeet, covs=[spaces.all_covs[xi]] * len(spaces.possibleTargetsFeet))
 
 
             for pi in range(len(self.pskills)):
@@ -212,22 +212,25 @@ class JointMethodFlip:
         return results
 
 
-def _build_label(given_prior, min_lambda, other_args):
-    """Return a suffix label describing which specialized priors were used."""
 
-    if given_prior and min_lambda:
-        return (
-            f"-GivenPrior-{other_args['givenPrior'][0]}-{other_args['givenPrior'][1]}-{other_args['givenPrior'][2]}"
-            f"-MinLambda{other_args['minLambda']}"
-        )
-    if given_prior:
-        return f"-GivenPrior-{other_args['givenPrior'][0]}-{other_args['givenPrior'][1]}-{other_args['givenPrior'][2]}"
-    if min_lambda:
-        return f"-MinLambda-{other_args['minLambda']}"
-    return ""
 
 # Note: JEEDS is the same thing as JointMethodQRE
 class JointMethodQRE:
+
+    @staticmethod
+    def _build_label(given_prior, min_lambda, other_args):
+        """Return a suffix label describing which specialized priors were used."""
+
+        if given_prior and min_lambda:
+            return (
+                f"-GivenPrior-{other_args['givenPrior'][0]}-{other_args['givenPrior'][1]}-{other_args['givenPrior'][2]}"
+                f"-MinLambda{other_args['minLambda']}"
+            )
+        if given_prior:
+            return f"-GivenPrior-{other_args['givenPrior'][0]}-{other_args['givenPrior'][1]}-{other_args['givenPrior'][2]}"
+        if min_lambda:
+            return f"-MinLambda-{other_args['minLambda']}"
+        return ""
 
     def __init__(self, execution_skills, num_rationality_levels, domain_name, given_prior=False, min_lambda=False, other_args=None):
         """Initialize a joint estimator over execution skills and rationality levels.
@@ -257,7 +260,7 @@ class JointMethodQRE:
         base = f"{self.method_type}-{{}}-{self.num_execution_skills}-{self.num_rationality_levels}"
         base_names = [base.format("MAP"), base.format("EES")]
 
-        self.label = _build_label(given_prior, min_lambda, other_args)
+        self.label = self._build_label(given_prior, min_lambda, other_args)
 
         # Append the label to both estimator names so downstream metrics are tagged consistently
         base_names[0] += self.label
@@ -405,7 +408,7 @@ class JointMethodQRE:
             # Get the corresponding xskill level hypothesis at the given index
             if self.domain_name in ["2d-multi", "baseball-multi", "hockey-multi"]:
                 # Multidimensional setups use a tuple-like key built from both dimensions
-                key = spaces.getKey([execution_skill, execution_skill], r=0.0)
+                key = spaces.get_key([execution_skill, execution_skill], r=0.0)
             else:
                 key = execution_skill
 
@@ -447,7 +450,7 @@ class JointMethodQRE:
 
                 # Baseball/hockey feed EVs through infoPerRow rather than precomputed convolutions
                 evs = other_args["infoPerRow"]["evsPerXskill"][key].flatten()
-                cov = spaces.allCovs[key]
+                cov = spaces.all_covs[key]
 
                 pdfs = computePDF(x=action, means=spaces.possibleTargetsFeet,
                                   covs=np.array([cov] * len(spaces.possibleTargetsFeet)))
@@ -457,7 +460,7 @@ class JointMethodQRE:
             elif self.domain_name in ["hockey-multi"]:
 
                 evs = other_args["infoPerRow"]["evsPerXskill"][key].flatten()
-                cov = spaces.allCovs[key]
+                cov = spaces.all_covs[key]
 
                 pdfs = computePDF(x=action, means=spaces.possibleTargets,
                                   covs=np.array([cov] * len(spaces.possibleTargets)))
@@ -808,8 +811,8 @@ class NonJointMethodQRE:
                 space = spaces.spacesPerXskill[x]
                 evs = space.flatEVsPerState[currentScore]
 
-                pdfs = computePDF(x=action,means=spaces.possibleTargets,
-                                  covs=np.array([spaces.allCovs[xi]]*len(spaces.possibleTargets)))
+                pdfs = computePDF(x=action, means=spaces.possibleTargets,
+                                  covs=np.array([spaces.all_covs[xi]] * len(spaces.possibleTargets)))
 
             elif self.domainName == "billiards":
 
@@ -825,7 +828,7 @@ class NonJointMethodQRE:
 
                 evs = otherArgs["infoPerRow"]["evsPerXskill"][x].flatten()
 
-                pdfs = computePDF(x=action,means=spaces.possibleTargetsFeet,covs=[spaces.allCovs[xi]]*len(spaces.possibleTargetsFeet))
+                pdfs = computePDF(x=action, means=spaces.possibleTargetsFeet, covs=[spaces.all_covs[xi]] * len(spaces.possibleTargetsFeet))
 
 
             if self.domainName == "1d":
