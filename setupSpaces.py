@@ -263,31 +263,31 @@ class SpacesRandomDarts(Spaces):
 
             info = {"mean":[0.0]*len(givenXskills[0])}
 
-        for temp in givenXskills:
+            for temp in givenXskills:
 
-            for tempR in rhos:
+                for tempR in rhos:
 
-                info["key"] = self.getKey(temp,tempR)
+                    info["key"] = self.getKey(temp,tempR)
 
-                info["covMatrix"] = self.domain.getCovMatrix(temp,tempR)
+                    info["covMatrix"] = self.domain.getCovMatrix(temp,tempR)
 
-                try:
-                    states[0][0]
-                except Exception as e:
-                    # print(e)
-                    states = [states]
-                    # code.interact("...", local=dict(globals(), **locals()))
+                    try:
+                        states[0][0]
+                    except Exception as e:
+                        # print(e)
+                        states = [states]
+                        # code.interact("...", local=dict(globals(), **locals()))
 
 
-                # print("updateSpace() - STATES: ",states,type(states))
+                    # print("updateSpace() - STATES: ",states,type(states))
 
-                for s in states:
-                    if not self.verifyIfExists(temp+[tempR],s):
-                        # print(f"Doing convolution for x = {info['key']}")
-                        self.addSpace(rng,info,s,returnZn=False)
-                    else:
-                        # print(f"Convolution present for x = {info['key']}")
-                        pass
+                    for s in states:
+                        if not self.verifyIfExists(temp+[tempR],s):
+                            # print(f"Doing convolution for x = {info['key']}")
+                            self.addSpace(rng,info,s,returnZn=False)
+                        else:
+                            # print(f"Convolution present for x = {info['key']}")
+                            pass
         else:
 
             try:
