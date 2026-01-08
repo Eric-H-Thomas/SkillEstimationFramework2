@@ -53,6 +53,19 @@ sbatch --array=0-19 --export=NUM_JOBS=20 run_darts_jeeds_sensitivity_exp.sbatch
 
 Each array task reads `JOB_INDEX` from `SLURM_ARRAY_TASK_ID` and runs the experiment with `--num-jobs 20 --job-index <task-id>`, ensuring the 20 shards jointly cover the full workload.
 
+## Local multi-seed automation (`run_darts_jeeds_sensitivity_multi_seed.sh`)
+
+When running outside of Slurm you can still reproduce the high-resolution study across multiple random seeds with the convenience wrapper `run_darts_jeeds_sensitivity_multi_seed.sh`. The script mirrors the configuration baked into the `.sbatch` file, accepts an arbitrary list of seeds, and optionally shards each seed's workload across multiple sequential jobs. After all shards complete it automatically re-runs the experiment in aggregation mode so that the combined CSV and visualization are ready without any manual follow-up.
+
+Launch the full pipeline for ten seeds, each split into twenty shards, with:
+
+```bash
+./run_darts_jeeds_sensitivity_multi_seed.sh --jobs-per-seed 20 \
+  7 11 13 17 19 23 29 31 37 41
+```
+
+The script creates per-seed output directories under `Testing/results/high_res_seed_<seed>` that contain `jeeds_skill_vs_aim.csv` and `jeeds_skill_vs_aim.png`. With `--jobs-per-seed 1` (the default) each seed runs in a single process and writes the final artifacts directly without an aggregation pass.
+
 ## Parallel verification (`Testing/verify_parallelized_jeeds.py`)
 
 This diagnostic script confirms that slicing the experiment across multiple jobs produces identical results to the single-job path. It runs a shortened configuration serially and in parallel, aggregates the shards, and diffs the resulting CSVs. Run it whenever you change the sharding logic or upgrade dependencies that might alter floating-point behaviour.
