@@ -54,26 +54,16 @@ output_dir="${output_dir_base}_seed_${seed}"
 python_args=(
   -m Testing.darts_aiming_jeeds_sensitivity
   --seed "${seed}"
-  # --num-samples 100
-  --num-samples 5
-  # --num-aim-points 50
-  --num-aim-points 7
-  # --num-true-skills 40
-  --num-true-skills 3
-  # --min-true-skill 0.1
+  --num-samples 100
+  --num-aim-points 50
+  --num-true-skills 40
   --min-true-skill 0.1
-  # --max-true-skill 3.0
   --max-true-skill 3.0
-  # --num-grid-skills 200
-  --num-grid-skills 20
-  # --grid-min-skill 0.05
+  --num-grid-skills 200
   --grid-min-skill 0.05
-  # --grid-max-skill 3.5
   --grid-max-skill 3.5
-  # --num-planning-skills 100
-  --num-planning-skills 10
-  # --delta 5e-3
-  --delta 1e-2
+  --num-planning-skills 100
+  --delta 5e-3
   --output-dir "${output_dir}"
   --num-jobs "${jobs_per_seed}"
   --job-index "${job_index}"
