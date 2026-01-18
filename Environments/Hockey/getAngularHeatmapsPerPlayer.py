@@ -34,6 +34,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
 
+# Net geometry constants (in feet)
+NET_GOAL_LINE_X = 89  # Distance from blueline to goal line
+NET_POST_Y = 3  # Half-width of actual net
+NET_POST_Z = 0  # Posts at ice level
+NET_HEIGHT = 4  # Actual net height
+
+# Augmented geometry (extended range to capture misses)
+AUGMENTED_POST_Y = 9  # Extended Y range for missed shots
+AUGMENTED_HEIGHT_Z = 8  # Extended height for missed shots
+
+# Angular grid resolution (number of samples in each dimension)
+ANGULAR_GRID_RESOLUTION = 100
+
 # Find location of current file to resolve project-root-relative imports.
 scriptPath = os.path.realpath(__file__)
 mainFolderName = scriptPath.split(f"Environments{os.sep}Hockey{os.sep}getAngularHeatmapsPerPlayer.py")[0]
@@ -65,15 +78,15 @@ shape = targetsUtilityGridYZ.shape
 listedTargetsUtilityGridYZ = targetsUtilityGridYZ.reshape((shape[0] * shape[1], shape[2]))
 
 # Net geometry reference points (feet).
-leftPost = np.array([89, -3])
-rightPost = np.array([89, 3])
+leftPost = np.array([NET_GOAL_LINE_X, -NET_POST_Y])
+rightPost = np.array([NET_GOAL_LINE_X, NET_POST_Y])
 
 # Augmented goalposts and crossbar heights for larger angular span.
-leftAugmented = np.array([89, -9])
-rightAugmented = np.array([89, 9])
+leftAugmented = np.array([NET_GOAL_LINE_X, -AUGMENTED_POST_Y])
+rightAugmented = np.array([NET_GOAL_LINE_X, AUGMENTED_POST_Y])
 
-top = 4
-topAugmented = 8
+top = NET_HEIGHT
+topAugmented = AUGMENTED_HEIGHT_Z
 
 
 def getAngle(point1, point2):
@@ -97,43 +110,20 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
     listedUtilities = heatmap.reshape((shape[0] * shape[1], 1))
 
     # Generate angular bounds for direction based on augmented posts.
-    dirL = getAngle(playerLocation, leftAugmented)
-    dirR = getAngle(playerLocation, rightAugmented)
+    dir_left = getAngle(playerLocation, leftAugmented)
+    dir_right = getAngle(playerLocation, rightAugmented)
 
     # Compute maximum elevation angle based on top of net.
     dist1 = np.linalg.norm(playerLocation - leftAugmented)
     dist2 = np.linalg.norm(playerLocation - rightAugmented)
 
-    minDist = min(dist1, dist2)
-    elevationTop = np.arctan2(topAugmented, minDist)
+    min_dist = min(dist1, dist2)
+    elevation_top = np.arctan2(topAugmented, min_dist)
 
     # Create grid of direction/elevation samples (uniform resolution).
-    # Legacy manual step size code is preserved below but commented out.
-    '''
-    deltaD = 0.01*(abs(dirL)+abs(dirR))
-    deltaE = 0.01*elevationTop
-
-    dirs = np.arange(dirL,dirR,deltaD)
-
-    # In case discretization yield too little points
-    if len(dirs) < 10:
-            deltaD = 0.001*(abs(dirL)+abs(dirR))
-            dirs = np.arange(dirL,dirR,deltaD)
-
-
-    elevations = np.arange(0.0,elevationTop,deltaE)
-
-    # To account for max endpoint
-    if dirR not in dirs:
-            dirs = np.append(dirs,dirR)
-
-    if elevationTop not in elevations:
-            elevations = np.append(elevations,elevationTop)
-    '''
-
-    resolution = 100
-    dirs = np.linspace(dirL, dirR, resolution)
-    elevations = np.linspace(0, elevationTop, resolution)
+    resolution = ANGULAR_GRID_RESOLUTION
+    dirs = np.linspace(dir_left, dir_right, resolution)
+    elevations = np.linspace(0, elevation_top, resolution)
 
     # Cartesian target coordinates (unused, kept for reference/testing).
     gridTargets = []
@@ -195,62 +185,25 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
     negativeElevation = False
     originalElevation = None
 
-    deltaX = 89 - playerLocation[0]
+    deltaX = NET_GOAL_LINE_X - playerLocation[0]
     deltaY = executedAction[0] - playerLocation[1]
     deltaZ = executedAction[1]
 
     # Direction Angle
-    d = np.arctan2(deltaY, deltaX)
+    direction_angle = np.arctan2(deltaY, deltaX)
 
     # Elevation Angle
-    D = np.sqrt(deltaX**2 + deltaY**2)
-    e = np.arctan2(deltaZ, D)
+    horizontal_distance = np.sqrt(deltaX**2 + deltaY**2)
+    elevation_angle = np.arctan2(deltaZ, horizontal_distance)
 
     # No negative angles possible. Can't miss low. Capping at 0.
-    if e < 0:
-        originalElevation = e
-        e = 0.0
+    if elevation_angle < 0:
+        originalElevation = elevation_angle
+        elevation_angle = 0.0
         negativeElevation = True
 
-    executedActionAngular = [d, e]
+    executedActionAngular = [direction_angle, elevation_angle]
 
-    ##################################################
-
-    ##################################################
-    # TEST
-    ##################################################
-    # '''
-    d, e = executedActionAngular
-
-    # Step 1
-    xp = 89 - playerLocation[0]
-    deltaY = xp * np.tan(d)
-    D = xp / np.cos(d)
-
-    # Step 2
-    deltaZ = D * np.tan(e)
-
-    executedActionComputed = [playerLocation[1] + deltaY, deltaZ]
-    print("playerLocation: ", playerLocation)
-    print("executedAction: ", executedAction)
-    print("executedActionAngular: ", executedActionAngular)
-    print("executedActionComputed: ", executedActionComputed)
-
-    if negativeElevation:
-        print("Negative Elevation found. Elevation was set to 0. Original Elevation: ", originalElevation)
-
-    # d = executedActionAngular[0]
-    # e = executedActionAngular[1]
-
-    # # Convert to Cartesian coordinates on the unit circle
-    # x = np.cos(d)
-    # y = np.sin(d)
-
-    # plt.subplot(1, 2, 2, projection='polar')
-    # plt.polar(d, 1, 'ro')
-    # plt.show()
-
-    # '''
     ##################################################
 
     # Assumming both same size (-1 to ofset for index-based 0)
@@ -261,15 +214,12 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
     # Filtering
     ##################################################
 
-    # Radians
-    minX = 0.004
-    maxX = np.pi / 4
-    rhos = [0.0, -0.75, 0.75]
-    # rhos = [-0.75]
+    # Skill range for testing different execution skill hypotheses (in radians)
+    min_skill = 0.004
+    max_skill = np.pi / 4
+    rhos = [0.0, -0.75, 0.75]  # Correlation coefficients
 
-    allXS = [[minX, minX], [minX, maxX], [maxX, minX], [maxX, maxX]]
-    # allXS = [[minX,minX]]
-    # allXS = [[minX,maxX]]
+    allXS = [[min_skill, min_skill], [min_skill, max_skill], [max_skill, min_skill], [max_skill, max_skill]]
 
     skip = False
 
@@ -304,33 +254,7 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
                 # UNCOMMENT AFTER TESTING
                 break
 
-            # tempPDFs[x] = {"pdfs":pdfs,"prev":prev,"D":D}
-
-            '''
-            savePdfs = f"{mainFolder}PDFs{os.sep}"
-
-            if not os.path.exists(savePdfs):
-                    os.mkdir(savePdfs)
-
-            plt.contourf(gridTargetsAngular[:,:,0],gridTargetsAngular[:,:,1],D)
-            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-1.jpg",bbox_inches="tight")
-            plt.close()
-            plt.clf()
-
-            plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=prev)
-            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-2.jpg",bbox_inches="tight")
-            plt.close()
-            plt.clf()
-
-            plt.scatter(listedTargetsAngular[:,0],listedTargetsAngular[:,1],c=pdfs)
-            plt.savefig(f"{savePdfs}{os.sep}pdfs-xskill{eachX}-rho{rho}-{skip}-3-normalized.jpg",bbox_inches="tight")
-            plt.close()
-            plt.clf()
-            '''
-
     ##################################################
-
-    # code.interact("...", local=dict(globals(), **locals()))
 
     return (
         dirs,

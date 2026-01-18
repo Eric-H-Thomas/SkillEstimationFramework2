@@ -17,15 +17,18 @@ hockey experiments:
 * Expected values are derived from the shot's post-shot xG probability and
   smoothed over a (y, z) grid to approximate the reward surface JEEDS normally
   receives from simulation.
-* Execution skill values are interpreted as inverse noise levels when building
-  covariance matrices; higher skill concentrates probability mass around the
-  intended target while lower skill spreads it out.
+* Execution skill (xskill) is modeled as standard deviation in radians: higher
+  xskill spreads probability mass widely (worse execution, high miss rate),
+  while lower xskill concentrates mass tightly (better execution, low miss rate).
+  This follows the production hockey.py convention where getCovMatrix treats the
+  skill parameter as the standard deviation of the Gaussian execution noise.
 
 Example
 -------
 from BlackhawksSkillEstimation.BlackhawksJEEDS import estimate_player_skill
-estimate = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
-print(f"Estimated execution skill: {estimate:.3f}")
+estimates = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
+print(f"Execution skill: {estimates['execution_skill']:.4f} rad (lower=better)")
+print(f"Rationality: {estimates['rationality']:.2f} (higher=better, experimental)")
 """
 from __future__ import annotations
 
@@ -87,19 +90,24 @@ class SimpleHockeySpaces:
 
     @staticmethod
     def _covariance_from_skill(skill: float) -> np.ndarray:
-        variance = 1.0 / max(skill, 1e-6) ** 2
+        """Return a 2D diagonal covariance matrix for execution error in angular space.
+        
+        The input skill is the standard deviation (in radians) of execution error
+        in both direction and elevation. Variance = skill², so:
+        - Higher skill → larger variance → worse execution (looser spread)
+        - Lower skill → smaller variance → better execution (tighter cluster)
+        """
+        variance = max(skill, 1e-6) ** 2
         return np.diag([variance, variance])
 
     '''
-    Examples of how skill translates to variance:
-    skill: 0.25; variance: 16.000
-    skill: 0.50; variance: 4.000
-    skill: 0.75; variance: 1.778
-    skill: 1.00; variance: 1.000
-    skill: 1.25; variance: 0.640
-    skill: 1.50; variance: 0.444
-    skill: 1.75; variance: 0.327
-    skill: 2.00; variance: 0.250
+    Examples of how skill (in radians) translates to variance:
+    skill: 0.004; variance: 0.000016 (elite execution, tight cluster)
+    skill: 0.02;  variance: 0.0004   (strong execution, tight spread)
+    skill: 0.1;   variance: 0.01     (moderate execution)
+    skill: 0.3;   variance: 0.09     (loose execution, wide spread)
+    skill: 0.6;   variance: 0.36     (poor execution, very wide spread)
+    skill: 0.785 (π/4); variance: 0.616 (terrible execution, nearly random)
     '''
 
     @staticmethod
@@ -112,6 +120,33 @@ class JEEDSInputs:
     spaces_per_shot: list[SimpleHockeySpaces]
     actions: list[list[float]]
     info_rows: list[dict[str, object]]
+
+
+# ============================================================================
+# ARCHITECTURAL NOTE: Spaces as Reward Maps/Reward Surfaces
+# ============================================================================
+#
+# A "Space" in this framework is a REWARD MAP—a lookup table that tells the
+# estimator: "For this shot location, here are the possible aims and how
+# valuable each one is."
+#
+# **SpacesHockey (production framework):**
+#   - Pre-computes reward surfaces for EVERY POSSIBLE SHOT LOCATION
+#   - Uses expensive scipy.signal.convolve2d operations with skill-based kernels
+#   - Stores all results in memory or on disk
+#   - Reuses the same Space object across many shots in an experiment
+#   - Used by: Estimators when processing simulation data
+#
+# **SimpleHockeySpaces (this module):**
+#   - Computes reward surface for ONLY ONE SHOT AT A TIME
+#   - Uses _ev_surface_for_shot() to create a minimal Gaussian spike at the
+#     observed ball location, scaled by post-shot xG probability
+#   - Creates a new Space instance per shot, discards it after use
+#   - No expensive precomputation needed
+#   - Used by: BlackhawksJEEDS when processing real player data from Snowflake
+#
+# Both expose the same interface (possibleTargets, all_covs, delta, get_key())
+# so JointMethodQRE treats them identically during skill estimation.
 
 
 def _ev_surface_for_shot(
@@ -199,11 +234,18 @@ def transform_shots_for_jeeds(
 
         entry = {"evsPerXskill": {}, "maxEVPerXskill": {}, "focalActions": []}
 
+        # Compute skill-dependent EV surface smoothing.
+        # Lower xskill (tight execution) → sharp EV surface (player hits what they aim at)
+        # Higher xskill (loose execution) → blurred EV surface (expected value smears across potential hit locations)
+        dir_bin_size = (dirs[-1] - dirs[0]) / (len(dirs) - 1) if len(dirs) > 1 else 0.01
+        elev_bin_size = (elevations[-1] - elevations[0]) / (len(elevations) - 1) if len(elevations) > 1 else 0.01
+        avg_bin_size = (dir_bin_size + elev_bin_size) / 2
+
         for skill in candidate_skills:
             key = spaces.get_key([skill, skill], r=0.0)
-            # More skilled shooters keep reward mass near the aimed point; less
-            # skilled shooters smear it out.
-            sigma = max(base_sigma / max(math.sqrt(skill), 1e-3), 1e-3)
+            # sigma in grid bins: skill (rad) / avg_bin_size (rad/bin) = bins
+            # Clamp to avoid extreme smoothing or no smoothing.
+            sigma = max(min(skill / avg_bin_size, 1.0), 1e-3)
             evs = gaussian_filter(grid_utilities_computed, sigma=sigma)
 
             entry["evsPerXskill"][key] = evs
@@ -237,15 +279,28 @@ def estimate_player_skill(
     base_sigma: float = 0.5,
     results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
-) -> float:
-    """Return the JEEDS MAP execution-skill estimate for a player.
+) -> dict[str, float]:
+    """Return JEEDS MAP estimates of execution skill and rationality for a player.
 
     Parameters mirror :func:`transform_shots_for_jeeds` with additional JEEDS
     configuration knobs.  The estimator relies on the standard Blackhawks
     Snowflake environment variables to authenticate when fetching shots.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - 'execution_skill': MAP estimate of xskill in radians.
+          **Lower is better** (tight execution). Range: [0.004, π/4].
+        - 'rationality': MAP estimate of decision-making optimality.
+          **Higher is better** (optimal aim selection).
+          **EXPERIMENTAL**: May not fully account for game context (defenders, time pressure).
     """
 
-    candidate_skills = list(candidate_skills or np.linspace(0.25, 2.0, 8))
+    # Default to 10 execution skill hypotheses spanning practical angular range (radians).
+    # 0.004 rad ≈ 0.23°, 0.785 rad = π/4 ≈ 45°
+    # These are the same numbers used in getAngularHeatMapsPerPlayer.py under line 217.
+    candidate_skills = list(candidate_skills or np.linspace(0.004, np.pi / 4, 10))
 
     df = query_player_game_info(player_id=player_id, game_ids=list(game_ids))
     if df.empty:
@@ -282,12 +337,23 @@ def estimate_player_skill(
         )
 
     results = estimator.get_results()
-    map_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
-    estimates = results.get(map_key, [])
-    if not estimates:
+    
+    # Extract MAP estimates for both execution skill and rationality
+    xskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
+    pskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-pSkills"
+    
+    xskill_estimates = results.get(xskill_key, [])
+    pskill_estimates = results.get(pskill_key, [])
+    
+    if not xskill_estimates:
         raise RuntimeError("JEEDS returned no MAP execution-skill estimate.")
+    if not pskill_estimates:
+        raise RuntimeError("JEEDS returned no MAP rationality estimate.")
 
-    return float(estimates[-1])
+    return {
+        "execution_skill": float(xskill_estimates[-1]),
+        "rationality": float(pskill_estimates[-1]),
+    }
 
 
 def _parse_args() -> argparse.Namespace:
@@ -306,11 +372,11 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         nargs="+",
         default=None,
-        help="Optional execution-skill grid for JEEDS (defaults to 8 values between 0.25 and 2.0).",
+        help="Optional execution-skill grid for JEEDS in radians (defaults to 10 values between 0.004 and π/4).",
     )
 
-    # TODO: need to make sure that 0.25 up to 2.0 is a reasonable range for the data we are looking at;
-    #  will need to check how .25 ... 2 are getting used; not sure whether they're raw rink meters or something else
+    # Fixed: skill is in radians. Range [0.004, π/4] ≈ [0.004, 0.785] rad spans from minimal to major execution variance.
+    #        This matches production hockey.py domain convention where getCovMatrix uses skill stdDev.
 
     parser.add_argument(
         "--num-planning-skills",
@@ -347,7 +413,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    estimate = estimate_player_skill(
+    estimates = estimate_player_skill(
         player_id=args.player_id,
         game_ids=args.game_ids,
         candidate_skills=args.candidate_skills,
@@ -357,7 +423,8 @@ def main() -> None:
         results_folder=args.results_folder,
         rng_seed=args.rng_seed,
     )
-    print(f"JEEDS MAP execution skill: {estimate:.3f}")
+    print(f"JEEDS MAP execution skill: {estimates['execution_skill']:.4f} rad (lower is better)")
+    print(f"JEEDS MAP rationality:     {estimates['rationality']:.2f} (higher is better, EXPERIMENTAL)")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 # Blackhawks JEEDS Skill Estimation
 
 This module connects the Blackhawks Snowflake tables to the JEEDS execution-skill
-estimator. It focuses on a direct, reproducible path from raw SQL rows to a
-single JEEDS MAP estimate for a player's execution skill across a set of games.
+estimator. It focuses on a direct, reproducible path from raw SQL rows to JEEDS
+MAP estimates for both **execution skill** and **rationality** across a set of games.
 
 ## What the code does
 
@@ -12,9 +12,12 @@ single JEEDS MAP estimate for a player's execution skill across a set of games.
    structures that the JEEDS hockey domain expects: a (y, z) grid of possible
    targets, per-skill covariance matrices, and per-shot expected value (EV)
    surfaces.
-3. **Estimate skill** – `estimate_player_skill` feeds every observed shot into
-   the production JEEDS estimator (`JointMethodQRE`) and returns the final MAP
-   execution-skill value.
+3. **Estimate skills** – `estimate_player_skill` feeds every observed shot into
+   the production JEEDS estimator (`JointMethodQRE`) and returns both MAP estimates:
+   - **Execution skill (xskill)**: Mechanical accuracy in radians. **Lower is better** 
+     (tight shot clustering). Range: [0.004, π/4].
+   - **Rationality (pskill)**: Decision-making optimality. **Higher is better**
+     (aims at high-value targets). **EXPERIMENTAL** - see interpretation notes below.
 
 ## Key modeling choices
 
@@ -23,11 +26,19 @@ single JEEDS MAP estimate for a player's execution skill across a set of games.
   scaled by the shot's post-shot xG probability. A small grid step (default
   `0.25` meters) and sigma (`0.5` meters) keep the surface smooth without
   requiring the full simulation stack used by historical experiments.
-- **Skill-to-variance mapping** – Candidate execution skills are interpreted as
-  inverse noise levels: larger skill values shrink the covariance used when
-  evaluating the likelihood of the executed target. The smoothing applied to the
-  EV surface mirrors this intuition by concentrating mass around the intended
-  target for higher skills and spreading it out for lower skills.
+- **Skill-to-variance mapping** – Candidate execution skills are standard 
+  deviations in radians: larger skill values expand the covariance (wider 
+  execution spread, more misses), smaller skills shrink the covariance (tighter 
+  execution, fewer misses). **Lower execution skill is better.** This matches the 
+  production hockey.py convention. The EV smoothing applied during the 
+  transformation mirrors this: higher skills blur the reward surface more widely 
+  (accounting for greater shot error), while lower skills keep probability mass 
+  concentrated near the intended target.
+- **Rationality interpretation (EXPERIMENTAL)** – The rationality estimate measures
+  how optimally a player selects aim points given the expected value surface.
+  Higher rationality means nearly always choosing the highest-value shot location.
+  However, this metric may not fully account for real-world constraints like
+  defender positioning, time pressure, or play development. Use with caution.
 - **JEEDS compatibility** – The helper `SimpleHockeySpaces` mirrors the fields
   JEEDS reads for the hockey domain (`possibleTargets`, `delta`, `allCovs`, and
   `getKey`), allowing the official estimator to run unmodified.
@@ -41,13 +52,18 @@ Set the Snowflake environment variables required by `BlackhawksAPI` (see
 python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
   950160 \
   44604 270247 \
-  --candidate-skills 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 \
+  --candidate-skills 0.004 0.1 0.2 0.3 0.4 0.5 0.6 0.785 \
   --num-planning-skills 25 \
   --grid-step 0.25 \
   --base-sigma 0.5 \
   --results-folder Experiments/blackhawks-jeeds \
   --rng-seed 0
 ```
+
+**Output interpretation:**
+- **Execution skill**: Value in radians. **Lower = better shooter** (0.004 = elite, 0.785 = poor)
+- **Rationality**: Dimensionless optimality measure. **Higher = better decision-maker**
+  (EXPERIMENTAL - see notes above)
 
 The command prints the MAP execution-skill estimate and creates any missing
 `Experiments/blackhawks-jeeds/times/estimators` folders that JEEDS expects when
