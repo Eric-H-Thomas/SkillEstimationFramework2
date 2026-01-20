@@ -9,6 +9,17 @@ from matplotlib import transforms
 
 from . import db
 
+# Shot map grid dimensions (from post_shot_xg_value_maps reshaping)
+# Used (along with covariance extraction helper) in get_game_shot_maps()
+SHOT_MAP_HEIGHT = 120
+SHOT_MAP_WIDTH = 72
+
+
+def _extract_covariance_matrix(row: pd.Series) -> np.ndarray:
+    """Extract 2x2 covariance matrix from database row."""
+    cov_cols = ["cov_00", "cov_01", "cov_10", "cov_11"]
+    return row[cov_cols].values.reshape(2, 2)
+
 
 def plot_ellipse(ax, mean, cov, n_std: float = 2.0, **kwargs):
     """Plot an ellipse representing covariance of a 2D normal distribution."""
@@ -85,11 +96,9 @@ def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
         shot_data: dict[str, object] = {}
         shot_data["df"] = shot_df
         shot_data["value_map"] = np.flip(
-            shot_df["post_shot_xg"].values.reshape(120, 72).T, axis=1
+            shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T, axis=1
         )
-        shot_data["net_cov"] = shot_df.iloc[0][
-            ["cov_00", "cov_01", "cov_10", "cov_11"]
-        ].values.reshape(2, 2)
+        shot_data["net_cov"] = _extract_covariance_matrix(shot_df.iloc[0])
         shot_data["net_coords"] = shot_df.iloc[0][
             ["goalline_y_model", "goalline_z_model"]
         ].values

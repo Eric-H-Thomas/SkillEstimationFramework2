@@ -524,12 +524,12 @@ class JointMethodQRE:
                 # Applying norm trick (subtract b to avoid overflow in the exponential for large EV*lambda values)
                 b = np.max(evs * rationality_level)
                 expev = np.exp(evs * rationality_level - b)
-                sumexp = np.sum(expev)
+                sum_exponents = np.sum(expev)
 
                 # JT Update
                 summultexps = np.sum(np.multiply(expev, np.copy(pdfs)))
 
-                upd = summultexps / sumexp
+                upd = summultexps / sum_exponents
 
                 # Update probs
                 self.current_probs[exec_skill_index][rationality_index] *= upd
