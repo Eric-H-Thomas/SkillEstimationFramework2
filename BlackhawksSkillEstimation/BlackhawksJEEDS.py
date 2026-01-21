@@ -176,18 +176,6 @@ def transform_shots_for_jeeds(
         
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]
-        
-        # Create grids corresponding to the Blackhawks shot map (120 x 72)
-        # The value_map is centered on the net with goalline_y_model and goalline_z_model
-        # as reference points. We create a grid that spans reasonable hockey coordinates.
-        net_y, net_z = shot_map_data["net_coords"]
-        
-        # Blackhawks value_map dimensions: 120 rows x 72 cols
-        # Approximate ice coordinates: y spans ~[-30, 30] meters, z spans ~[-5, 10] meters from net
-        half_y_range = 30.0
-        half_z_range = 7.5
-        y_grid = np.linspace(net_y - half_y_range, net_y + half_y_range, base_ev.shape[1])
-        z_grid = np.linspace(net_z - half_z_range, net_z + half_z_range, base_ev.shape[0])
 
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
@@ -265,12 +253,19 @@ def estimate_player_skill(
     num_planning_skills: int = 25,
     results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
-) -> dict[str, float]:
+    return_intermediate_estimates: bool = False,
+) -> dict[str, object]:
     """Return JEEDS MAP estimates of execution skill and rationality for a player.
 
     Parameters mirror :func:`transform_shots_for_jeeds` with additional JEEDS
     configuration knobs.  The estimator relies on the standard Blackhawks
     Snowflake environment variables to authenticate when fetching shots.
+
+    Parameters
+    ----------
+    return_intermediate_estimates : bool
+        If True, return a 'skill_log' key with MAP estimates after each shot.
+        Default is False.
 
     Returns
     -------
@@ -281,6 +276,10 @@ def estimate_player_skill(
         - 'rationality': MAP estimate of decision-making optimality.
           **Higher is better** (optimal aim selection).
           **EXPERIMENTAL**: May not fully account for game context (defenders, time pressure).
+        - 'num_shots': Number of shots used in estimation.
+        - 'skill_log' (if return_intermediate_estimates=True): List of dicts with
+          intermediate MAP estimates after each shot, including 'shot_idx',
+          'execution_skill', and 'rationality'.
     """
 
     # Default to 10 execution skill hypotheses spanning practical angular range (radians).
@@ -317,6 +316,10 @@ def estimate_player_skill(
     rng = np.random.default_rng(rng_seed)
     tag = f"Player_{player_id}"
 
+    skill_log: list[dict[str, object]] = []
+    xskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
+    pskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-pSkills"
+
     for idx, (spaces, info, action) in enumerate(
         zip(jeeds_inputs.spaces_per_shot, jeeds_inputs.info_rows, jeeds_inputs.actions)
     ):
@@ -331,12 +334,22 @@ def estimate_player_skill(
             s=str(idx),
         )
 
+        # Optionally track intermediate MAP estimates after each shot
+        if return_intermediate_estimates:
+            results = estimator.get_results()
+            xskill_estimates = results.get(xskill_key, [])
+            pskill_estimates = results.get(pskill_key, [])
+            
+            if xskill_estimates and pskill_estimates:
+                skill_log.append({
+                    "shot_idx": idx,
+                    "execution_skill": float(xskill_estimates[-1]),
+                    "rationality": float(pskill_estimates[-1]),
+                })
+
     results = estimator.get_results()
     
     # Extract MAP estimates for both execution skill and rationality
-    xskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
-    pskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-pSkills"
-    
     xskill_estimates = results.get(xskill_key, [])
     pskill_estimates = results.get(pskill_key, [])
     
@@ -345,15 +358,88 @@ def estimate_player_skill(
     if not pskill_estimates:
         raise RuntimeError("JEEDS returned no MAP rationality estimate.")
 
-    return {
+    result = {
         "execution_skill": float(xskill_estimates[-1]),
         "rationality": float(pskill_estimates[-1]),
+        "num_shots": len(jeeds_inputs.actions),
     }
+    
+    if return_intermediate_estimates:
+        result["skill_log"] = skill_log
+
+    return result
+
+
+def estimate_multiple_players(
+    player_ids: Sequence[int],
+    game_ids: Sequence[int],
+    *,
+    candidate_skills: Sequence[float] | None = None,
+    num_planning_skills: int = 25,
+    results_folder: Path | str = Path("blackhawks-jeeds"),
+    rng_seed: int | None = 0,
+    capture_skill_logs: bool = False,
+) -> list[dict[str, object]]:
+    """Estimate execution skill and rationality for multiple players.
+
+    Parameters
+    ----------
+    player_ids : Sequence[int]
+        List of player identifiers to estimate.
+    game_ids : Sequence[int]
+        List of game identifiers to include in estimation for all players.
+    capture_skill_logs : bool
+        If True, capture intermediate MAP estimates after each shot for each player.
+        Default is False.
+    
+    Other parameters are passed to :func:`estimate_player_skill`.
+
+    Returns
+    -------
+    list[dict]
+        List of result dictionaries, one per player, each containing:
+        - 'player_id': The player identifier.
+        - 'execution_skill': MAP estimate of xskill in radians.
+        - 'rationality': MAP estimate of decision-making optimality.
+        - 'num_shots': Number of shots used in estimation.
+        - 'skill_log' (if capture_skill_logs=True): Intermediate estimates per shot.
+        - 'status': 'success' or 'error'.
+        - 'error' (if status='error'): Error message.
+    """
+    results: list[dict[str, object]] = []
+
+    for player_id in player_ids:
+        try:
+            player_result = estimate_player_skill(
+                player_id=player_id,
+                game_ids=game_ids,
+                candidate_skills=candidate_skills,
+                num_planning_skills=num_planning_skills,
+                results_folder=results_folder,
+                rng_seed=rng_seed,
+                return_intermediate_estimates=capture_skill_logs,
+            )
+            player_result["player_id"] = player_id
+            player_result["status"] = "success"
+            results.append(player_result)
+        except Exception as e:
+            results.append({
+                "player_id": player_id,
+                "status": "error",
+                "error": str(e),
+            })
+
+    return results
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run JEEDS on Blackhawks shots.")
-    parser.add_argument("player_id", type=int, help="Hawks player identifier.")
+    parser.add_argument(
+        "player_ids",
+        type=int,
+        nargs="+",
+        help="One or more player identifiers to estimate.",
+    )
     parser.add_argument(
         "game_ids",
         type=int,
@@ -391,21 +477,54 @@ def _parse_args() -> argparse.Namespace:
         default=0,
         help="Seed for the numpy random generator used during estimation.",
     )
+    parser.add_argument(
+        "--capture-logs",
+        action="store_true",
+        help="If set, capture intermediate MAP estimates after each shot.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    estimates = estimate_player_skill(
-        player_id=args.player_id,
+    
+    # Support both single and multiple players
+    player_ids = args.player_ids if isinstance(args.player_ids, list) else [args.player_ids]
+    
+    results = estimate_multiple_players(
+        player_ids=player_ids,
         game_ids=args.game_ids,
         candidate_skills=args.candidate_skills,
         num_planning_skills=args.num_planning_skills,
         results_folder=args.results_folder,
         rng_seed=args.rng_seed,
+        capture_skill_logs=args.capture_logs,
     )
-    print(f"JEEDS MAP execution skill: {estimates['execution_skill']:.4f} rad (lower is better)")
-    print(f"JEEDS MAP rationality:     {estimates['rationality']:.2f} (higher is better, EXPERIMENTAL)")
+    
+    # Print results summary
+    print("\n" + "=" * 80)
+    print("JEEDS Multi-Player Skill Estimation Results")
+    print("=" * 80)
+    
+    for result in results:
+        player_id = result.get("player_id")
+        status = result.get("status")
+        
+        if status == "success":
+            print(f"\nPlayer {player_id}:")
+            print(f"  Execution Skill: {result['execution_skill']:.4f} rad (lower is better)")
+            print(f"  Rationality:     {result['rationality']:.2f} (higher is better, EXPERIMENTAL)")
+            print(f"  Shots Used:      {result['num_shots']}")
+            
+            if "skill_log" in result and result["skill_log"]:
+                print(f"  Tracked {len(result['skill_log'])} intermediate estimates")
+        else:
+            print(f"\nPlayer {player_id}: ERROR")
+            print(f"  {result.get('error', 'Unknown error')}")
+    
+    print("\n" + "=" * 80)
+    print(f"Completed: {sum(1 for r in results if r['status'] == 'success')}/{len(results)} players")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
