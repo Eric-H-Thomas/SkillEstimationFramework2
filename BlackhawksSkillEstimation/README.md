@@ -8,11 +8,14 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
 
 1. **Pull shot data** – `query_player_game_info` retrieves shot-level details
    (coordinates, post-shot xG, flags) for the requested player and game IDs.
-2. **Prepare JEEDS inputs** – `transform_shots_for_jeeds` builds the minimal
-   structures that the JEEDS hockey domain expects: a (y, z) grid of possible
-   targets, per-skill covariance matrices, and per-shot expected value (EV)
-   surfaces.
-3. **Estimate skills** – `estimate_player_skill` feeds every observed shot into
+2. **Fetch Blackhawks analytics** – `get_game_shot_maps` retrieves precomputed
+   reward surfaces (post-shot xG probability grids) for each shot in the game,
+   including goal-line coordinates and execution noise covariances.
+3. **Prepare JEEDS inputs** – `transform_shots_for_jeeds` converts the shot data
+   and Blackhawks reward surfaces into the minimal structures JEEDS expects for
+   the hockey domain: angular coordinate grids, per-skill covariance matrices,
+   and per-shot expected value surfaces derived from the Blackhawks analytics.
+4. **Estimate skills** – `estimate_player_skill` feeds every observed shot into
    the production JEEDS estimator (`JointMethodQRE`) and returns both MAP estimates:
    - **Execution skill (xskill)**: Mechanical accuracy in radians. **Lower is better** 
      (tight shot clustering). Range: [0.004, π/4].
@@ -21,11 +24,11 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
 
 ## Key modeling choices
 
-- **Reward surface approximation** – The EV surface for each shot starts with a
-  Gaussian bump centered on the observed target `(location_y, location_z)` and
-  scaled by the shot's post-shot xG probability. A small grid step (default
-  `0.25` meters) and sigma (`0.5` meters) keep the surface smooth without
-  requiring the full simulation stack used by historical experiments.
+- **Reward surface from Blackhawks analytics** – The EV surface for each shot comes
+  directly from the precomputed `post_shot_xg_value_maps`, which incorporate
+  detailed models of shooting position, angle, goalie positioning, and other
+  factors. A corresponding (y, z) grid spanning ±30 meters in y and ±7.5 meters
+  in z from the goal line provides the coordinate system.
 - **Skill-to-variance mapping** – Candidate execution skills are standard 
   deviations in radians: larger skill values expand the covariance (wider 
   execution spread, more misses), smaller skills shrink the covariance (tighter 
@@ -54,8 +57,6 @@ python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
   44604 270247 \
   --candidate-skills 0.004 0.1 0.2 0.3 0.4 0.5 0.6 0.785 \
   --num-planning-skills 25 \
-  --grid-step 0.25 \
-  --base-sigma 0.5 \
   --results-folder Experiments/blackhawks-jeeds \
   --rng-seed 0
 ```
@@ -71,11 +72,12 @@ writing timing metadata.
 
 ## API highlights
 
-- `transform_shots_for_jeeds(df, candidate_skills, grid_step=0.25,
-  base_sigma=0.5)` – Build JEEDS-compatible inputs from a `pandas` DataFrame.
+- `transform_shots_for_jeeds(df, shot_maps, candidate_skills)` – Build
+  JEEDS-compatible inputs from a `pandas` DataFrame and Blackhawks shot maps
+  dictionary.
 - `estimate_player_skill(player_id, game_ids, ...)` – End-to-end helper that
-  fetches data, performs the transformation, runs JEEDS, and returns the MAP
-  estimate.
+  fetches shot data and Blackhawks reward surfaces, performs the transformation,
+  runs JEEDS, and returns the MAP estimate.
 
 Use these functions directly in notebooks or scripts when you already have a
 `DataFrame` of shot rows or want to integrate the estimator into a larger
