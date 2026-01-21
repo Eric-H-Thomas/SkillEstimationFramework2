@@ -135,29 +135,26 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
     # Build angular grid list [direction, elevation].
     listedTargetsAngular = []
 
-    for e in elevations:
-        for d in dirs:
-            listedTargetsAngular.append([d, e])
-
-    # Pre-compute angular targets converted back to Y/Z coordinates.
-    tempDist = np.linalg.norm(np.array([-3, 0]) - np.array([3, 0]))
+    for elevation_angle in elevations:
+        for direction_angle in dirs:
+            listedTargetsAngular.append([direction_angle, elevation_angle])
 
     listedTargetsAngular2YZ = []
 
     # For each target on the angular grid, convert to Cartesian (Y/Z).
     for target in listedTargetsAngular:
 
-        d, e = target
+        direction_angle, elevation_angle = target
 
         # Step 1: rotate from player's X/Y to Y direction along net line.
-        xp = 89 - playerLocation[0]
-        deltaY = xp * np.tan(d)
-        D = xp / np.cos(d)
+        x_to_goal_line = 89 - playerLocation[0]
+        delta_y = x_to_goal_line * np.tan(direction_angle)
+        horizontal_distance_to_target = x_to_goal_line / np.cos(direction_angle)
 
         # Step 2: project elevation given distance to target point.
-        deltaZ = D * np.tan(e)
+        z_coordinate_at_net = horizontal_distance_to_target * np.tan(elevation_angle)
 
-        listedTargetsAngular2YZ.append([playerLocation[1] + deltaY, deltaZ])
+        listedTargetsAngular2YZ.append([playerLocation[1] + delta_y, z_coordinate_at_net])
 
     # gridTargets = np.array(gridTargets)
 
@@ -244,9 +241,9 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
 
             pdfs /= np.sum(pdfs)
 
-            N = sys.modules["domain"].draw_noise_sample(rng, mean, covMatrix)
-            D = N.pdf(gridTargetsAngular)
-            D /= np.sum(D)
+            noise_distribution = sys.modules["domain"].draw_noise_sample(rng, mean, covMatrix)
+            probability_density = noise_distribution.pdf(gridTargetsAngular)
+            probability_density /= np.sum(probability_density)
 
             if np.isnan(pdfs).any():
                 skip = True
