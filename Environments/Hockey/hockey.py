@@ -80,7 +80,8 @@ def getCovMatrix(stdDevs: Iterable[float], rho: float) -> np.ndarray:
     stdDevs:
         A sequence of standard deviations for each dimension.
     rho:
-        The correlation value to apply to off-diagonal entries.
+        The correlation value between direction and elevation to apply to
+        off-diagonal entries.
     """
 
     stdDevs = list(stdDevs)

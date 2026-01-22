@@ -26,7 +26,6 @@ print(f"Rationality: {estimates['rationality']:.2f} (higher=better, experimental
 from __future__ import annotations
 
 import argparse
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -37,6 +36,15 @@ from scipy.ndimage import gaussian_filter
 from BlackhawksAPI import query_player_game_info, get_game_shot_maps
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
+
+
+# Default number of execution skill hypotheses for JEEDS estimation.
+# Trade-off between resolution and computational cost:
+#   10 hypotheses: ~0.08 rad spacing, fast, good for testing
+#   20 hypotheses: ~0.04 rad spacing, balanced for most uses
+#   30 hypotheses: ~0.025 rad spacing, matches production experiments
+#   50 hypotheses: ~0.015 rad spacing, high precision for research
+DEFAULT_NUM_EXECUTION_SKILLS = 30  # Recommended for overnight cluster runs
 
 
 @dataclass
@@ -78,9 +86,7 @@ class SimpleHockeySpaces:
             key = self.get_key([skill, skill], r=0.0)
             self.all_covs[key] = self._covariance_from_skill(skill)
 
-    # TODO: need to verify that this _covariance_from_skill method is what we actually want. The steps for determining
-    #   which execution skill levels to test seem convoluted.
-
+    # Compare to getCovMatrix in hockey.py. Assume rho=0, so we simplify to np.diag
     @staticmethod
     def _covariance_from_skill(skill: float) -> np.ndarray:
         """Return a 2D diagonal covariance matrix for execution error in angular space.
@@ -180,6 +186,7 @@ def transform_shots_for_jeeds(
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
 
+        # Convert Blackhawks Cartesian reward surface to anglular coordinates
         (
             dirs,
             elevations,
@@ -213,6 +220,7 @@ def transform_shots_for_jeeds(
         # Compute skill-dependent EV surface smoothing.
         # Lower xskill (tight execution) → sharp EV surface (player hits what they aim at)
         # Higher xskill (loose execution) → blurred EV surface (expected value smears across potential hit locations)
+        # NOTE: We generate a blurred version of the xG surface for each xskill hypothesis.
         dir_bin_size = (dirs[-1] - dirs[0]) / (len(dirs) - 1) if len(dirs) > 1 else 0.01
         elev_bin_size = (elevations[-1] - elevations[0]) / (len(elevations) - 1) if len(elevations) > 1 else 0.01
         avg_bin_size = (dir_bin_size + elev_bin_size) / 2
@@ -227,6 +235,7 @@ def transform_shots_for_jeeds(
             entry["evsPerXskill"][key] = evs
             entry["maxEVPerXskill"][key] = float(np.max(evs))
 
+            # Find most rational target location for this xskill's blurred xG surface
             best_idx = int(np.argmax(evs))
             iy, iz = np.unravel_index(best_idx, (len(dirs), len(elevations)))
             entry["focalActions"].append(
@@ -282,10 +291,13 @@ def estimate_player_skill(
           'execution_skill', and 'rationality'.
     """
 
-    # Default to 10 execution skill hypotheses spanning practical angular range (radians).
-    # 0.004 rad ≈ 0.23°, 0.785 rad = π/4 ≈ 45°
-    # These are the same numbers used in getAngularHeatMapsPerPlayer.py under line 217.
-    candidate_skills = list(candidate_skills or np.linspace(0.004, np.pi / 4, 10))
+    # Default to DEFAULT_NUM_EXECUTION_SKILLS execution skill hypotheses spanning
+    # practical angular range (radians). 0.004 rad ≈ 0.23°, π/4 ≈ 45°: the same
+    # range used in getAngularHeatMapsPerPlayer.py for min_skill and max_skill.
+    # Adjust DEFAULT_NUM_EXECUTION_SKILLS at top of file for accuracy vs. speed trade-off.
+    candidate_skills = list(
+        candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
+    )
 
     df = query_player_game_info(player_id=player_id, game_ids=list(game_ids))
     if df.empty:
@@ -453,12 +465,8 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         nargs="+",
         default=None,
-        help="Optional execution-skill grid for JEEDS in radians (defaults to 10 values between 0.004 and π/4).",
+        help=f"Optional execution-skill grid for JEEDS in radians (defaults to {DEFAULT_NUM_EXECUTION_SKILLS} values between 0.004 and π/4).",
     )
-
-    # Fixed: skill is in radians. Range [0.004, π/4] ≈ [0.004, 0.785] rad spans from minimal to major execution variance.
-    #        This matches production hockey.py domain convention where getCovMatrix uses skill stdDev.
-
     parser.add_argument(
         "--num-planning-skills",
         type=int,
