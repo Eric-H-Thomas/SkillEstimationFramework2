@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import os
+from configparser import ConfigParser
 from typing import Optional
 
 
@@ -9,31 +10,28 @@ from typing import Optional
 class SnowflakeConfig:
     """Connection details for Snowflake.
 
-    The values are read from environment variables prefixed with ``BLACKHAWKS_SNOWFLAKE_``:
+    The values are read from ~/.hawks.ini:
 
-    - ``BLACKHAWKS_SNOWFLAKE_USER``
-    - ``BLACKHAWKS_SNOWFLAKE_PASSWORD``
-    - ``BLACKHAWKS_SNOWFLAKE_ACCOUNT``
-    - ``BLACKHAWKS_SNOWFLAKE_DATABASE``
-    - ``BLACKHAWKS_SNOWFLAKE_ROLE`` (optional)
-    - ``BLACKHAWKS_SNOWFLAKE_WAREHOUSE`` (optional)
+    - ``account``
+    - ``user``
+    - ``dbname``
+    - ``private_key_path``
+    - ``private_key_passphrase``
+    - ``role`` (optional)
+    - ``warehouse`` (optional)
     """
 
     user: str
-    password: str
     account: str
     database: str
+    private_key_file: str
+    private_key_file_pwd: str
     role: Optional[str] = None
     warehouse: Optional[str] = None
 
 
-def _get_env(name: str) -> Optional[str]:
-    value = os.getenv(name)
-    return value if value and value.strip() else None
-
-
 def load_snowflake_config() -> SnowflakeConfig:
-    """Load Snowflake configuration from environment variables.
+    """Load Snowflake configuration from ~/.hawks.ini.
 
     Returns
     -------
@@ -43,37 +41,59 @@ def load_snowflake_config() -> SnowflakeConfig:
     Raises
     ------
     ValueError
-        If a required environment variable is missing.
+        If the config file is missing or required values are not present.
+    FileNotFoundError
+        If ~/.hawks.ini does not exist.
     """
 
+    config_path = os.path.expanduser("~/.hawks.ini")
+    
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    config = ConfigParser()
+    config.read(config_path)
+    
+    if "snowflake" not in config:
+        raise ValueError("Missing [snowflake] section in ~/.hawks.ini")
+    
+    sf_section = config["snowflake"]
+    
     missing = []
-    user = _get_env("BLACKHAWKS_SNOWFLAKE_USER")
+    user = sf_section.get("user", "").strip() if "user" in sf_section else None
     if not user:
-        missing.append("BLACKHAWKS_SNOWFLAKE_USER")
-
-    password = _get_env("BLACKHAWKS_SNOWFLAKE_PASSWORD")
-    if not password:
-        missing.append("BLACKHAWKS_SNOWFLAKE_PASSWORD")
-
-    account = _get_env("BLACKHAWKS_SNOWFLAKE_ACCOUNT")
+        missing.append("user")
+    
+    account = sf_section.get("account", "").strip() if "account" in sf_section else None
     if not account:
-        missing.append("BLACKHAWKS_SNOWFLAKE_ACCOUNT")
-
-    database = _get_env("BLACKHAWKS_SNOWFLAKE_DATABASE")
+        missing.append("account")
+    
+    database = sf_section.get("dbname", "").strip() if "dbname" in sf_section else None
     if not database:
-        missing.append("BLACKHAWKS_SNOWFLAKE_DATABASE")
-
+        missing.append("dbname")
+    
+    private_key_file = sf_section.get("private_key_path", "").strip() if "private_key_path" in sf_section else None
+    if not private_key_file:
+        missing.append("private_key_path")
+    else:
+        private_key_file = os.path.expanduser(private_key_file)
+    
+    private_key_file_pwd = sf_section.get("private_key_passphrase", "").strip() if "private_key_passphrase" in sf_section else None
+    if not private_key_file_pwd:
+        missing.append("private_key_passphrase")
+    
     if missing:
-        missing_vars = ", ".join(missing)
+        missing_keys = ", ".join(missing)
         raise ValueError(
-            "Missing required Snowflake environment variables: " f"{missing_vars}"
+            f"Missing required keys in [snowflake] section of ~/.hawks.ini: {missing_keys}"
         )
-
+    
     return SnowflakeConfig(
         user=user,
-        password=password,
         account=account,
         database=database,
-        role=_get_env("BLACKHAWKS_SNOWFLAKE_ROLE"),
-        warehouse=_get_env("BLACKHAWKS_SNOWFLAKE_WAREHOUSE"),
+        private_key_file=private_key_file,
+        private_key_file_pwd=private_key_file_pwd,
+        role=sf_section.get("role", "").strip() if "role" in sf_section and sf_section.get("role", "").strip() else None,
+        warehouse=sf_section.get("warehouse", "").strip() if "warehouse" in sf_section and sf_section.get("warehouse", "").strip() else None,
     )

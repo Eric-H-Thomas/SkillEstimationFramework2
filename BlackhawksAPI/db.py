@@ -19,9 +19,11 @@ def get_connection() -> snowflake.connector.SnowflakeConnection:
     snow_config = load_snowflake_config()
     return snowflake.connector.connect(
         user=snow_config.user,
-        password=snow_config.password,
         account=snow_config.account,
         database=snow_config.database,
+        authenticator="SNOWFLAKE_JWT",
+        private_key_file=snow_config.private_key_file,
+        private_key_file_pwd=snow_config.private_key_file_pwd,
         role=snow_config.role,
     )
 
