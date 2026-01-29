@@ -108,7 +108,12 @@ def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
 
 
 def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
-    """Fetch shot-level metadata for a player across specific games."""
+    """Fetch shot-level metadata for a player across specific games.
+    
+    Note: The actual shot location (where the puck crossed the goal line) comes
+    from SHOT_TRAJECTORIES via get_game_shot_maps(), not from this query.
+    This query returns one row per shot with event metadata and player position.
+    """
 
     game_ids_str = ",".join(str(g) for g in game_ids)
     query = f"""
@@ -135,12 +140,11 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
             e.SHOT_IS_WITH_REBOUND,
             e.X_ADJ_COORD             AS start_x,
             e.Y_ADJ_COORD             AS start_y,
-            p.LOCATION_Y,
-            p.LOCATION_Z,
-            p.POST_SHOT_XG            AS probability
+            st.GOALLINE_Y_MODEL       AS location_y,
+            st.GOALLINE_Z_MODEL       AS location_z
         FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
-        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.POST_SHOT_XG_VALUE_MAPS AS p
-          ON p.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
         WHERE e.PLAYER_ID_HAWKS = %(player_id)s
           AND e.GAME_ID_HAWKS IN ({game_ids_str})
           AND e.EVENT_NAME = 'shot';
