@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, zoom
 
 from BlackhawksAPI import query_player_game_info, get_game_shot_maps
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
@@ -182,6 +182,10 @@ def transform_shots_for_jeeds(
         
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]
+        
+        # Resize xG map from 72x120 (queries.py) to 60x40 (expected by getAngularHeatmap)
+        # The zoom factors are: 60/72 ≈ 0.833 for Y, 40/120 ≈ 0.333 for Z
+        base_ev = zoom(base_ev, (60 / base_ev.shape[0], 40 / base_ev.shape[1]), order=1)
 
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])

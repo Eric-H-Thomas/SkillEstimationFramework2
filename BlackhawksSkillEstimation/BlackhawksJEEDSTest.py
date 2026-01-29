@@ -4,7 +4,7 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import estimate_player_skill, est
 estimates = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
 print(f"JEEDS MAP execution skill: {estimates['execution_skill']:.4f} rad (lower is better)")
 print(f"JEEDS MAP rationality:     {estimates['rationality']:.2f} (higher is better)")
-
+'''
 # Test case for multiple player IDs
 # TODO: Fetch actual player IDs from snowflake. I didn't have access when I made this
 player_ids = [950160, 123456, 789012]  # Example player IDs
@@ -26,3 +26,4 @@ for result in results:
     else:
         print(f"\nPlayer {player_id}: ERROR")
         print(f"  {result.get('error', 'Unknown error')}")
+'''
