@@ -44,7 +44,7 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
   defender positioning, time pressure, or play development. Use with caution.
 - **JEEDS compatibility** – The helper `SimpleHockeySpaces` mirrors the fields
   JEEDS reads for the hockey domain (`possibleTargets`, `delta`, `allCovs`, and
-  `getKey`), allowing the official estimator to run unmodified.
+  `get_key`), allowing the official estimator to run unmodified.
 
 ## Running an estimation
 

@@ -188,7 +188,7 @@ class SpacesRandomDarts(Spaces):
             self.doConvolution(rng,givenInfo,S,returnZn)
 
 
-    def getKey(self,info,r):
+    def get_key(self,info,r):
         """Create a deterministic key from skill parameters and a rho value."""
         return "|".join(map(str,info))+f"|{r}"
 
@@ -201,7 +201,7 @@ class SpacesRandomDarts(Spaces):
 
             temp, tempR = each[:-2],each[-2]
 
-            info["key"] = self.getKey(temp,tempR)
+            info["key"] = self.get_key(temp,tempR)
 
             info["covMatrix"] = self.domain.getCovMatrix(temp,tempR)
 
@@ -223,7 +223,7 @@ class SpacesRandomDarts(Spaces):
 
             temp, tempR = each[:-1],each[-1]
 
-            k = self.getKey(temp,tempR)
+            k = self.get_key(temp,tempR)
 
             # Assuming convolution space present on dict
             # Still need try/except in case multiple particles with the same key
@@ -245,7 +245,7 @@ class SpacesRandomDarts(Spaces):
         """Remove cached convolutions for a given skill/state pair."""
         if self.domainName == "2d-multi":
             temp, tempR = each[:-1],each[-1]
-            k = self.getKey(temp,tempR)
+            k = self.get_key(temp,tempR)
         else:
             k = each
 
@@ -267,7 +267,7 @@ class SpacesRandomDarts(Spaces):
 
                 for tempR in rhos:
 
-                    info["key"] = self.getKey(temp,tempR)
+                    info["key"] = self.get_key(temp,tempR)
 
                     info["covMatrix"] = self.domain.getCovMatrix(temp,tempR)
 
@@ -307,7 +307,7 @@ class SpacesRandomDarts(Spaces):
             self.focalActions[str(state)] = []
 
         if self.domainName == "2d-multi":
-            key = self.getKey(givenInfo[:-1],givenInfo[-1])
+            key = self.get_key(givenInfo[:-1],givenInfo[-1])
             self.focalActions[str(state)].append(self.convolutionsPerXskill[key][str(state)]["ts"])
 
         else:
@@ -351,7 +351,7 @@ class SpacesRandomDarts(Spaces):
         """Convenience wrapper to fetch convolution info based on parameters."""
         if self.domainName == "2d-multi":
             # [x1,x2,rho]
-            info = self.getKey(params[0],params[1])
+            info = self.get_key(params[0],params[1])
             toSend = {"params": params}
             # code.interact("getSpace()...", local=dict(globals(), **locals()))
             return self.get(rng,S,info,toSend)
@@ -365,7 +365,7 @@ class SpacesRandomDarts(Spaces):
     def verifyIfExists(self,X,S):
         """Check whether a convolution already exists for the given state/skill."""
         if type(X) == list:
-            info = self.getKey(X[:-1],X[-1])
+            info = self.get_key(X[:-1],X[-1])
         else:
             info = X
 
@@ -866,7 +866,7 @@ class SpacesBaseball(Spaces):
 
             for xi in range(len(info)):
                 x = info[xi]
-                key = self.getKey(x[0],x[1])
+                key = self.get_key(x[0],x[1])
                 self.allCovs[key] = self.domain.getCovMatrix(x[0],x[1])
 
         else:
@@ -1122,7 +1122,7 @@ class SpacesBaseball(Spaces):
         self.infoPerRow = {}
 
 
-    def getKey(self,info,r):
+    def get_key(self,info,r):
         return "|".join(map(str,info))+f"|{r}"
 
 
@@ -1172,7 +1172,7 @@ class SpacesBaseball(Spaces):
 
             # Assuming method will get called only with multi domain
             covMatrix = self.domain.getCovMatrix(each[:-2],each[-2])
-            key = self.getKey(each[:-2],each[-2])
+            key = self.get_key(each[:-2],each[-2])
 
 
             if key not in self.pdfsPerXskill:
@@ -1203,7 +1203,7 @@ class SpacesBaseball(Spaces):
 
     def deleteSpaceParticles(self,each,state):
 
-        key = self.getKey(each[:-2],each[-2])
+        key = self.get_key(each[:-2],each[-2])
 
         try:
             # print(f"Removing convolution for x = {key}")
@@ -1621,151 +1621,151 @@ class SpacesHockey(Spaces):
 
         # code.interact("spaces init()...", local=dict(globals(), **locals()))
 
-        # @profile
-        def initInfoForExps(self):
-                """Pre-compute covariance matrices used by downstream convolution calls."""
+    # @profile
+    def initInfoForExps(self):
+            """Pre-compute covariance matrices used by downstream convolution calls."""
 
-                self.allCovs = {}
+            self.allCovs = {}
 
-                # For hockey multi-domain experiments store covariances keyed by stringified x-skill.
-                if "multi" in self.domainName:
+            # For hockey multi-domain experiments store covariances keyed by stringified x-skill.
+            if "multi" in self.domainName:
 
-                        # Computing for symmetric set only since for normal JTM only.
-                        # The ones for JTM-Particles will be managed within addObservation().
-                        info = list(product(self.estimatorXskills,[0.0]))
+                    # Computing for symmetric set only since for normal JTM only.
+                    # The ones for JTM-Particles will be managed within addObservation().
+                    info = list(product(self.estimatorXskills,[0.0]))
 
-                        for xi in range(len(info)):
-                                x = info[xi]
-                                key = self.getKey(x[0],x[1])
-                                self.allCovs[key] = self.domain.getCovMatrix(x[0],x[1])
+                    for xi in range(len(info)):
+                            x = info[xi]
+                            key = self.get_key(x[0],x[1])
+                            self.allCovs[key] = self.domain.getCovMatrix(x[0],x[1])
 
-                else:
+            else:
 
-                        for xi in range(len(self.estimatorXskills)):
-                                x = self.estimatorXskills[xi]
+                    for xi in range(len(self.estimatorXskills)):
+                            x = self.estimatorXskills[xi]
 
-                                val = x**2
-                                cvs = np.zeros((2,2))
-                                np.fill_diagonal(cvs,val)
+                            val = x**2
+                            cvs = np.zeros((2,2))
+                            np.fill_diagonal(cvs,val)
 
-                                self.allCovs[x] = cvs
+                            self.allCovs[x] = cvs
 
-        # @profile
-        def getAgentData(self,rf,player,typeShot,maxRows):
-                """Load recent angular heatmap data for a player/type combination.
+    # @profile
+    def getAgentData(self,rf,player,typeShot,maxRows):
+            """Load recent angular heatmap data for a player/type combination.
 
-                Args:
-                        rf: Run folder string used to locate experiment outputs.
-                        player: Identifier of the player to load.
-                        typeShot: Shot type index used in file naming.
-                        maxRows: Maximum number of entries to retain (oldest entries are dropped).
+            Args:
+                    rf: Run folder string used to locate experiment outputs.
+                    player: Identifier of the player to load.
+                    typeShot: Shot type index used in file naming.
+                    maxRows: Maximum number of entries to retain (oldest entries are dropped).
 
-                Returns:
-                        Dictionary keyed by game-state identifiers or an empty list when data is missing.
-                """
+            Returns:
+                    Dictionary keyed by game-state identifiers or an empty list when data is missing.
+            """
 
-                rfup = str(rf.replace(f"Experiment",""))
+            rfup = str(rf.replace(f"Experiment",""))
 
-                folder = f"Experiments{os.sep}{rfup}{os.sep}Data{os.sep}AngularHeatmaps{os.sep}"
-                fileName = f"angular_heatmap_data_player_{player}_type_shot_{typeShot}.pkl"
+            folder = f"Experiments{os.sep}{rfup}{os.sep}Data{os.sep}AngularHeatmaps{os.sep}"
+            fileName = f"angular_heatmap_data_player_{player}_type_shot_{typeShot}.pkl"
 
-                try:
-                        with open(folder+fileName,"rb") as infile:
-                                agentData = pickle.load(infile)
+            try:
+                    with open(folder+fileName,"rb") as infile:
+                            agentData = pickle.load(infile)
 
-                        # Select only the most recent ``maxRows`` entries to keep processing lightweight.
-                        if len(agentData) > maxRows:
-                                agentData = {k:agentData[k] for i,k in enumerate(agentData) if i < maxRows}
+                    # Select only the most recent ``maxRows`` entries to keep processing lightweight.
+                    if len(agentData) > maxRows:
+                            agentData = {k:agentData[k] for i,k in enumerate(agentData) if i < maxRows}
 
 
-                except Exception as e:
-                        print(e)
-                        print("File not present.")
-                        agentData = []
+            except Exception as e:
+                    print(e)
+                    print("File not present.")
+                    agentData = []
 
-                # code.interact("...", local=dict(globals(), **locals()))
+            # code.interact("...", local=dict(globals(), **locals()))
 
-                return agentData
+            return agentData
 
-        def reset(self):
-                """Clear reward caches for a fresh experiment run."""
-                self.expectedRewardsPerXskill = {}
+    def reset(self):
+            """Clear reward caches for a fresh experiment run."""
+            self.expectedRewardsPerXskill = {}
 
-        def getKey(self,info,r):
-                """Build a deterministic cache key from an x-skill vector and rho value."""
-                return "|".join(map(str,info))+f"|{r}"
+    def get_key(self,info,r):
+            """Build a deterministic cache key from an x-skill vector and rho value."""
+            return "|".join(map(str,info))+f"|{r}"
 
-        def updateSpace(self,rng,givenXskills,fromEstimator=False):
-                """Record estimator-requested x-skills so covariances can be prepared later."""
+    def updateSpace(self,rng,givenXskills,fromEstimator=False):
+            """Record estimator-requested x-skills so covariances can be prepared later."""
 
-                if "multi" in self.domainName:
-                        givenXskills = givenXskills[0]
+            if "multi" in self.domainName:
+                    givenXskills = givenXskills[0]
 
-                for x in givenXskills:
+            for x in givenXskills:
 
-                        # Adding symmetric set only since for normal JTM only
-                        # The ones for JTM-Particles will be managed within addObservation()
-                        if fromEstimator and x not in self.estimatorXskills:
+                    # Adding symmetric set only since for normal JTM only
+                    # The ones for JTM-Particles will be managed within addObservation()
+                    if fromEstimator and x not in self.estimatorXskills:
 
-                                if "multi" in self.domainName:
-                                     if x[0] == x[1]:
-                                            self.estimatorXskills.append(x)
-                                else:
+                            if "multi" in self.domainName:
+                                    if x[0] == x[1]:
                                         self.estimatorXskills.append(x)
+                            else:
+                                    self.estimatorXskills.append(x)
 
-        def updateSpaceParticles(self,rng,each,state,info,wid=None):
-                """Compute PDFs/EVs for particle filter states in the multi-domain setting."""
+    def updateSpaceParticles(self,rng,each,state,info,wid=None):
+            """Compute PDFs/EVs for particle filter states in the multi-domain setting."""
 
-                if "multi" in self.domainName:
+            if "multi" in self.domainName:
 
-                        # Assuming method will get called only with multi domain
-                        covMatrix = self.domain.getCovMatrix(each[:-2],each[-2])
-                        key = self.getKey(each[:-2],each[-2])
-
-
-                        if key not in self.pdfsPerXskill:
-                                # print(f"Computing pdfs for {key}... (wid: {wid})")
-                                self.pdfsPerXskill[key] = self.domain.getNormalDistribution(rng,covMatrix,self.delta,self.mean,self.grid)
-                        else:
-                                # print(f"Pdfs info is present for {key}. (wid: {wid})")
-                                pass
+                    # Assuming method will get called only with multi domain
+                    covMatrix = self.domain.getCovMatrix(each[:-2],each[-2])
+                    key = self.get_key(each[:-2],each[-2])
 
 
-                        if key not in self.evsPerXskill:
-                                # print(f"Computing EVs for {key}... (wid: {wid})")
-                                # t1 = time.perf_counter()
-
-                                Zs = info["Zs"]
-                                # print(Zs)
-                                minUtility = np.min(Zs)
-
-                                # t1 = time.perf_counter()
-                                self.evsPerXskill[key] = convolve2d(Zs,self.pdfsPerXskill[key],mode="same",fillvalue=0.0)
-                                # print(f"Total time for convolve2d: {time.perf_counter()-t1:.4f}")
-                        else:
-                                # print(f"EVs info present for {key}... (wid: {wid})")
-                                pass
+                    if key not in self.pdfsPerXskill:
+                            # print(f"Computing pdfs for {key}... (wid: {wid})")
+                            self.pdfsPerXskill[key] = self.domain.getNormalDistribution(rng,covMatrix,self.delta,self.mean,self.grid)
+                    else:
+                            # print(f"Pdfs info is present for {key}. (wid: {wid})")
+                            pass
 
 
-                        # if "0.7854" in key:
-                                # code.interact("updateSpaceParticles()...", local=dict(globals(), **locals()))
+                    if key not in self.evsPerXskill:
+                            # print(f"Computing EVs for {key}... (wid: {wid})")
+                            # t1 = time.perf_counter()
 
-        def deleteSpaceParticles(self,each,state):
-                """Remove cached PDF/EV entries when a particle is discarded."""
+                            Zs = info["Zs"]
+                            # print(Zs)
+                            minUtility = np.min(Zs)
 
-                key = self.getKey(each[:-2],each[-2])
+                            # t1 = time.perf_counter()
+                            self.evsPerXskill[key] = convolve2d(Zs,self.pdfsPerXskill[key],mode="same",fillvalue=0.0)
+                            # print(f"Total time for convolve2d: {time.perf_counter()-t1:.4f}")
+                    else:
+                            # print(f"EVs info present for {key}... (wid: {wid})")
+                            pass
 
-                try:
-                        # print(f"Removing convolution for x = {key}")
 
-                        self.pdfsPerXskill[key].clear()
-                        self.evsPerXskill[key].clear()
+                    # if "0.7854" in key:
+                            # code.interact("updateSpaceParticles()...", local=dict(globals(), **locals()))
 
-                        del self.pdfsPerXskill[key]
-                        del self.evsPerXskill[key]
+    def deleteSpaceParticles(self,each,state):
+            """Remove cached PDF/EV entries when a particle is discarded."""
 
-                except:
-                        pass
+            key = self.get_key(each[:-2],each[-2])
+
+            try:
+                    # print(f"Removing convolution for x = {key}")
+
+                    self.pdfsPerXskill[key].clear()
+                    self.evsPerXskill[key].clear()
+
+                    del self.pdfsPerXskill[key]
+                    del self.evsPerXskill[key]
+
+            except:
+                    pass
 
 
 class SpacesSoccer(Spaces):

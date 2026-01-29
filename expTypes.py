@@ -426,7 +426,7 @@ class RandomDartsExp(Experiment):
 			'''
 			if "2d-multi" in self.env.domainName and self.env.mode != "normal":
 				print("DELETING")
-				kk = self.env.spaces.getKey(self.params[0],self.params[1])
+				kk = self.env.spaces.get_key(self.params[0],self.params[1])
 				del self.env.spaces.convolutionsPerXskill[kk][str(state)]
 
 

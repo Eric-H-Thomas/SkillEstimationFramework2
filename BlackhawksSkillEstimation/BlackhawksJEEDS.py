@@ -60,7 +60,7 @@ class SimpleHockeySpaces:
     ``delta``
         Grid spacing (dy, dz); maintained for parity with the framework API.
     ``allCovs``
-        Covariance matrices keyed by ``getKey([x, x], 0.0)``.
+        Covariance matrices keyed by ``get_key([x, x], 0.0)``.
     """
 
     y_grid: np.ndarray
