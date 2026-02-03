@@ -26,14 +26,21 @@ print(f"Rationality: {estimates['rationality']:.2f} (higher=better, experimental
 from __future__ import annotations
 
 import argparse
+import pickle
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+import pandas as pd
 from scipy.ndimage import gaussian_filter, zoom
 
-from BlackhawksAPI import query_player_game_info, get_game_shot_maps
+from BlackhawksAPI import (
+    get_game_shot_maps,
+    query_player_game_info,
+    query_player_season_shots,
+)
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
 
@@ -44,7 +51,12 @@ from Estimators.joint import JointMethodQRE
 #   20 hypotheses: ~0.04 rad spacing, balanced for most uses
 #   30 hypotheses: ~0.025 rad spacing, matches production experiments
 #   50 hypotheses: ~0.015 rad spacing, high precision for research
-DEFAULT_NUM_EXECUTION_SKILLS = 30  # Recommended for overnight cluster runs
+DEFAULT_NUM_EXECUTION_SKILLS = 10
+
+# Default number of planning/rationality skill hypotheses for JEEDS estimation.
+# Higher values give finer rationality resolution but increase compute cost.
+# Default used to be 25, so consider that for research computation.
+DEFAULT_NUM_PLANNING_SKILLS = 10
 
 
 @dataclass
@@ -258,64 +270,195 @@ def ensure_results_directories(results_folder: Path) -> None:
     times_dir.mkdir(parents=True, exist_ok=True)
 
 
-def estimate_player_skill(
-    player_id: int,
-    game_ids: Sequence[int],
-    *,
-    candidate_skills: Sequence[float] | None = None,
-    num_planning_skills: int = 25,
-    results_folder: Path | str = Path("blackhawks-jeeds"),
-    rng_seed: int | None = 0,
-    return_intermediate_estimates: bool = False,
-) -> dict[str, object]:
-    """Return JEEDS MAP estimates of execution skill and rationality for a player.
+@lru_cache(maxsize=256)
+def _get_game_shot_maps_cached(game_id: int) -> dict[int, dict[str, object]]:
+    """LRU-cached wrapper for get_game_shot_maps to avoid redundant DB queries."""
+    return get_game_shot_maps(game_id)
 
-    Parameters mirror :func:`transform_shots_for_jeeds` with additional JEEDS
-    configuration knobs.  The estimator relies on the standard Blackhawks
-    Snowflake environment variables to authenticate when fetching shots.
+
+def clear_shot_maps_cache() -> None:
+    """Clear the shot maps cache (useful between estimation runs)."""
+    _get_game_shot_maps_cached.cache_clear()
+
+
+# =============================================================================
+# OFFLINE DATA PERSISTENCE
+# =============================================================================
+
+
+def save_player_data(
+    player_id: int,
+    seasons: list[int],
+    output_dir: Path | str = Path("Data/Hockey"),
+    overwrite: bool = False,
+) -> dict[int, dict[str, Path]]:
+    """Fetch and save player shot data + shot maps to disk for offline use.
+
+    Creates pickle files in ``output_dir/player_{player_id}/`` with:
+    - ``shots_{season}.pkl``: DataFrame of shots for that season
+    - ``shot_maps_{season}.pkl``: Dict mapping event_id -> shot_map_data
 
     Parameters
     ----------
-    return_intermediate_estimates : bool
-        If True, return a 'skill_log' key with MAP estimates after each shot.
-        Default is False.
+    player_id : int
+        The player identifier.
+    seasons : list[int]
+        List of season identifiers (e.g., ``[20232024, 20242025]``).
+    output_dir : Path | str
+        Base directory for saved data (default: ``Data/Hockey``).
+    overwrite : bool
+        If False (default), skip seasons where files already exist.
+        If True, overwrite existing files.
 
     Returns
     -------
-    dict
-        Dictionary with keys:
-        - 'execution_skill': MAP estimate of xskill in radians.
-          **Lower is better** (tight execution). Range: [0.004, π/4].
-        - 'rationality': MAP estimate of decision-making optimality.
-          **Higher is better** (optimal aim selection).
-          **EXPERIMENTAL**: May not fully account for game context (defenders, time pressure).
-        - 'num_shots': Number of shots used in estimation.
-        - 'skill_log' (if return_intermediate_estimates=True): List of dicts with
-          intermediate MAP estimates after each shot, including 'shot_idx',
-          'execution_skill', and 'rationality'.
+    dict[int, dict[str, Path]]
+        Mapping of season -> {"shots": path, "shot_maps": path} for saved files.
     """
+    output_dir = Path(output_dir)
+    player_dir = output_dir / f"player_{player_id}"
+    player_dir.mkdir(parents=True, exist_ok=True)
 
-    # Default to DEFAULT_NUM_EXECUTION_SKILLS execution skill hypotheses spanning
-    # practical angular range (radians). 0.004 rad ≈ 0.23°, π/4 ≈ 45°: the same
-    # range used in getAngularHeatMapsPerPlayer.py for min_skill and max_skill.
-    # Adjust DEFAULT_NUM_EXECUTION_SKILLS at top of file for accuracy vs. speed trade-off.
-    candidate_skills = list(
-        candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
-    )
+    saved_files: dict[int, dict[str, Path]] = {}
 
-    df = query_player_game_info(player_id=player_id, game_ids=list(game_ids))
+    for season in seasons:
+        shots_path = player_dir / f"shots_{season}.pkl"
+        maps_path = player_dir / f"shot_maps_{season}.pkl"
+
+        # Check for existing files
+        if not overwrite and shots_path.exists() and maps_path.exists():
+            print(f"Warning: Files for season {season} already exist. Skipping. Use overwrite=True to replace.")
+            saved_files[season] = {"shots": shots_path, "shot_maps": maps_path}
+            continue
+
+        print(f"Fetching data for player {player_id}, season {season}...")
+
+        # Fetch shots for this season
+        df = query_player_season_shots(player_id=player_id, seasons=[season])
+        df = df.rename(columns=str.lower)
+
+        if df.empty:
+            print(f"  No shots found for season {season}. Skipping.")
+            continue
+
+        # Fetch shot maps for all games in this season
+        game_ids = df["game_id"].unique().tolist()
+        shot_maps: dict[int, dict[str, object]] = {}
+
+        print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
+        for game_id in game_ids:
+            try:
+                game_shot_maps = get_game_shot_maps(game_id)
+                shot_maps.update(game_shot_maps)
+            except Exception as e:
+                print(f"  Warning: Could not fetch shot maps for game {game_id}: {e}")
+
+        # Save to pickle
+        with open(shots_path, "wb") as f:
+            pickle.dump(df, f)
+        with open(maps_path, "wb") as f:
+            pickle.dump(shot_maps, f)
+
+        print(f"  Saved: {shots_path.name}, {maps_path.name}")
+        saved_files[season] = {"shots": shots_path, "shot_maps": maps_path}
+
+    return saved_files
+
+
+def load_player_data(
+    player_id: int,
+    seasons: list[int],
+    data_dir: Path | str = Path("Data/Hockey"),
+) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
+    """Load previously saved player data from disk.
+
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    seasons : list[int]
+        List of season identifiers to load.
+    data_dir : Path | str
+        Base directory containing saved data (default: ``Data/Hockey``).
+
+    Returns
+    -------
+    tuple[pd.DataFrame, dict[int, dict[str, object]]]
+        (shots_df, shot_maps_dict) ready for estimation.
+        The DataFrame includes all shots across requested seasons.
+        The shot_maps dict maps event_id -> shot_map_data.
+
+    Raises
+    ------
+    FileNotFoundError
+        If pickle files for any requested season are missing.
+    """
+    data_dir = Path(data_dir)
+    player_dir = data_dir / f"player_{player_id}"
+
+    all_dfs: list[pd.DataFrame] = []
+    all_shot_maps: dict[int, dict[str, object]] = {}
+
+    for season in seasons:
+        shots_path = player_dir / f"shots_{season}.pkl"
+        maps_path = player_dir / f"shot_maps_{season}.pkl"
+
+        if not shots_path.exists():
+            raise FileNotFoundError(f"Missing shots file: {shots_path}")
+        if not maps_path.exists():
+            raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+
+        with open(shots_path, "rb") as f:
+            df = pickle.load(f)
+        with open(maps_path, "rb") as f:
+            shot_maps = pickle.load(f)
+
+        all_dfs.append(df)
+        all_shot_maps.update(shot_maps)
+
+    combined_df = pd.concat(all_dfs, ignore_index=True)
+    return combined_df, all_shot_maps
+
+
+def _run_jeeds_estimation(
+    df,
+    game_ids: Sequence[int],
+    player_id: int,
+    candidate_skills: list[float],
+    num_planning_skills: int,
+    results_folder: Path,
+    rng_seed: int | None,
+    return_intermediate_estimates: bool,
+    tag_suffix: str = "",
+    preloaded_shot_maps: dict[int, dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Internal helper to run JEEDS on a DataFrame of shots.
+    
+    Returns a result dict with execution_skill, rationality, num_shots, and optionally skill_log.
+    
+    If preloaded_shot_maps is provided, uses those instead of fetching from DB.
+    """
     if df.empty:
-        raise RuntimeError("No shot data returned for the requested player/games.")
+        return {
+            "execution_skill": None,
+            "rationality": None,
+            "num_shots": 0,
+            "status": "no_data",
+            "warning": "No shot data for this estimation.",
+        }
 
-    # Fetch Blackhawks precomputed reward surfaces for each game
-    shot_maps: dict[int, dict[str, object]] = {}
-    for game_id in game_ids:
-        try:
-            game_shot_maps = get_game_shot_maps(game_id)
-            shot_maps.update(game_shot_maps)
-        except Exception as e:
-            # Log but continue if a game's shot maps aren't available
-            print(f"Warning: Could not fetch shot maps for game {game_id}: {e}")
+    # Use preloaded shot maps if provided, otherwise fetch from DB
+    if preloaded_shot_maps is not None:
+        shot_maps = preloaded_shot_maps
+    else:
+        # Fetch Blackhawks precomputed reward surfaces for each game (with caching)
+        shot_maps = {}
+        for game_id in game_ids:
+            try:
+                game_shot_maps = _get_game_shot_maps_cached(game_id)
+                shot_maps.update(game_shot_maps)
+            except Exception as e:
+                print(f"Warning: Could not fetch shot maps for game {game_id}: {e}")
 
     jeeds_inputs = transform_shots_for_jeeds(
         df,
@@ -323,14 +466,19 @@ def estimate_player_skill(
         candidate_skills=candidate_skills,
     )
     if not jeeds_inputs.actions:
-        raise RuntimeError("No usable shot data remained after angular conversion.")
+        return {
+            "execution_skill": None,
+            "rationality": None,
+            "num_shots": 0,
+            "status": "no_usable_shots",
+            "warning": "No usable shot data remained after angular conversion.",
+        }
 
     estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, "hockey-multi")
-    results_folder = Path(results_folder)
     ensure_results_directories(results_folder)
 
     rng = np.random.default_rng(rng_seed)
-    tag = f"Player_{player_id}"
+    tag = f"Player_{player_id}{tag_suffix}"
 
     skill_log: list[dict[str, object]] = []
     xskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
@@ -350,7 +498,6 @@ def estimate_player_skill(
             s=str(idx),
         )
 
-        # Optionally track intermediate MAP estimates after each shot
         if return_intermediate_estimates:
             results = estimator.get_results()
             xskill_estimates = results.get(xskill_key, [])
@@ -364,20 +511,23 @@ def estimate_player_skill(
                 })
 
     results = estimator.get_results()
-    
-    # Extract MAP estimates for both execution skill and rationality
     xskill_estimates = results.get(xskill_key, [])
     pskill_estimates = results.get(pskill_key, [])
     
-    if not xskill_estimates:
-        raise RuntimeError("JEEDS returned no MAP execution-skill estimate.")
-    if not pskill_estimates:
-        raise RuntimeError("JEEDS returned no MAP rationality estimate.")
+    if not xskill_estimates or not pskill_estimates:
+        return {
+            "execution_skill": None,
+            "rationality": None,
+            "num_shots": len(jeeds_inputs.actions),
+            "status": "estimation_failed",
+            "warning": "JEEDS returned no MAP estimates.",
+        }
 
-    result = {
+    result: dict[str, object] = {
         "execution_skill": float(xskill_estimates[-1]),
         "rationality": float(pskill_estimates[-1]),
         "num_shots": len(jeeds_inputs.actions),
+        "status": "success",
     }
     
     if return_intermediate_estimates:
@@ -386,12 +536,233 @@ def estimate_player_skill(
     return result
 
 
+def estimate_player_skill(
+    player_id: int,
+    game_ids: Sequence[int] | None = None,
+    *,
+    seasons: Sequence[int] | None = None,
+    per_season: bool = True,
+    candidate_skills: Sequence[float] | None = None,
+    num_planning_skills: int = DEFAULT_NUM_PLANNING_SKILLS,
+    results_folder: Path | str = Path("blackhawks-jeeds"),
+    rng_seed: int | None = 0,
+    return_intermediate_estimates: bool = False,
+    confirm: bool = True,
+    offline_data: tuple[pd.DataFrame, dict[int, dict[str, object]]] | None = None,
+) -> dict[str, object]:
+    """Return JEEDS MAP estimates of execution skill and rationality for a player.
+
+    Supports three modes of operation:
+    1. **Game-based**: Pass ``game_ids`` to estimate across specific games.
+    2. **Season-based**: Pass ``seasons`` to auto-discover games and estimate.
+       When ``per_season=True`` (default), returns separate estimates per season.
+    3. **Offline**: Pass ``offline_data`` from :func:`load_player_data` to skip DB queries.
+
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    game_ids : Sequence[int] | None
+        Explicit list of game IDs to include. If provided, ``seasons`` is ignored.
+    seasons : Sequence[int] | None
+        List of season identifiers (e.g., ``[20232024, 20242025]``).
+        Used to auto-discover games when ``game_ids`` is not provided.
+    per_season : bool
+        If True (default), return separate estimates for each season.
+        If False, aggregate all shots across seasons into one estimate.
+    candidate_skills : Sequence[float] | None
+        Execution-skill hypotheses for JEEDS (defaults to 50 values in [0.004, π/4]).
+    num_planning_skills : int
+        Number of planning-skill hypotheses passed to JEEDS.
+    results_folder : Path | str
+        Directory where JEEDS timing hooks can write logs.
+    rng_seed : int | None
+        Seed for the numpy random generator used during estimation.
+    return_intermediate_estimates : bool
+        If True, return a 'skill_log' key with MAP estimates after each shot.
+    confirm : bool
+        If True (default), prompt for confirmation before running estimation.
+        Set to False for batch/automated runs.
+    offline_data : tuple[pd.DataFrame, dict] | None
+        Pre-loaded data from :func:`load_player_data`. When provided, skips all
+        DB queries and uses the loaded data directly. Format: (shots_df, shot_maps).
+
+    Returns
+    -------
+    dict
+        When ``per_season=False`` or using ``game_ids``:
+            - 'execution_skill': MAP estimate of xskill in radians (lower is better).
+            - 'rationality': MAP estimate of decision-making optimality (higher is better).
+            - 'num_shots': Number of shots used.
+            - 'skill_log' (optional): Intermediate estimates per shot.
+        
+        When ``per_season=True`` and using ``seasons``:
+            - 'per_season_results': Dict mapping season -> result dict.
+            - Each season result contains execution_skill, rationality, num_shots.
+    """
+    # Validate inputs
+    if game_ids is None and seasons is None and offline_data is None:
+        raise ValueError("Must provide 'game_ids', 'seasons', or 'offline_data'.")
+
+    candidate_skills = list(
+        candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
+    )
+    results_folder = Path(results_folder)
+
+    # Mode 0: Offline data (pre-loaded from disk)
+    if offline_data is not None:
+        df, preloaded_shot_maps = offline_data
+        df = df.rename(columns=str.lower) if not df.empty else df
+        
+        if df.empty:
+            raise RuntimeError("Offline data contains no shots.")
+        
+        if confirm:
+            num_shots = len(df)
+            print(f"\n{num_shots} shots loaded from offline data for player {player_id}.")
+            response = input("Proceed with estimation? [y/n]: ").strip().lower()
+            if response != "y":
+                print("Estimation cancelled.")
+                return {"status": "cancelled", "num_shots": num_shots}
+
+        # Check if we should do per-season (only if seasons column exists)
+        if per_season and "season" in df.columns:
+            per_season_results: dict[int, dict[str, object]] = {}
+            
+            for season in sorted(df["season"].unique()):
+                season_df = df[df["season"] == season]
+                season_game_ids = season_df["game_id"].unique().tolist()
+                
+                season_result = _run_jeeds_estimation(
+                    df=season_df,
+                    game_ids=season_game_ids,
+                    player_id=player_id,
+                    candidate_skills=candidate_skills,
+                    num_planning_skills=num_planning_skills,
+                    results_folder=results_folder,
+                    rng_seed=rng_seed,
+                    return_intermediate_estimates=return_intermediate_estimates,
+                    tag_suffix=f"_S{season}",
+                    preloaded_shot_maps=preloaded_shot_maps,
+                )
+                season_result["season"] = int(season)
+                per_season_results[int(season)] = season_result
+
+            return {
+                "player_id": player_id,
+                "seasons": sorted(df["season"].unique().tolist()),
+                "per_season_results": per_season_results,
+            }
+        else:
+            # Aggregate mode
+            all_game_ids = df["game_id"].unique().tolist()
+            return _run_jeeds_estimation(
+                df=df,
+                game_ids=all_game_ids,
+                player_id=player_id,
+                candidate_skills=candidate_skills,
+                num_planning_skills=num_planning_skills,
+                results_folder=results_folder,
+                rng_seed=rng_seed,
+                return_intermediate_estimates=return_intermediate_estimates,
+                preloaded_shot_maps=preloaded_shot_maps,
+            )
+
+    # Mode 1: Explicit game_ids (original behavior)
+    if game_ids is not None:
+        df = query_player_game_info(player_id=player_id, game_ids=list(game_ids))
+        if df.empty:
+            raise RuntimeError("No shot data returned for the requested player/games.")
+        
+        if confirm:
+            num_shots = len(df)
+            print(f"\n{num_shots} shots found for player {player_id}.")
+            response = input("Proceed with estimation? [y/n]: ").strip().lower()
+            if response != "y":
+                print("Estimation cancelled.")
+                return {"status": "cancelled", "num_shots": num_shots}
+        
+        return _run_jeeds_estimation(
+            df=df,
+            game_ids=game_ids,
+            player_id=player_id,
+            candidate_skills=candidate_skills,
+            num_planning_skills=num_planning_skills,
+            results_folder=results_folder,
+            rng_seed=rng_seed,
+            return_intermediate_estimates=return_intermediate_estimates,
+        )
+
+    # Mode 2: Season-based discovery
+    seasons_list = list(seasons)
+    df = query_player_season_shots(player_id=player_id, seasons=seasons_list)
+    df = df.rename(columns=str.lower)
+    
+    if df.empty:
+        raise RuntimeError(
+            f"No shot data returned for player {player_id} in seasons {seasons_list}."
+        )
+
+    # Get all game IDs we'll need for shot maps
+    all_game_ids = df["game_id"].unique().tolist()
+
+    if confirm:
+        num_shots = len(df)
+        seasons_str = ", ".join(str(s) for s in seasons_list)
+        print(f"\n{num_shots} shots found for player {player_id} across seasons [{seasons_str}].")
+        response = input("Proceed with estimation? [y/n]: ").strip().lower()
+        if response != "y":
+            print("Estimation cancelled.")
+            return {"status": "cancelled", "num_shots": num_shots, "seasons": seasons_list}
+
+    if not per_season:
+        # Aggregate mode: single estimate across all seasons
+        return _run_jeeds_estimation(
+            df=df,
+            game_ids=all_game_ids,
+            player_id=player_id,
+            candidate_skills=candidate_skills,
+            num_planning_skills=num_planning_skills,
+            results_folder=results_folder,
+            rng_seed=rng_seed,
+            return_intermediate_estimates=return_intermediate_estimates,
+        )
+
+    # Per-season mode: separate estimate for each season
+    per_season_results: dict[int, dict[str, object]] = {}
+    
+    for season in sorted(df["season"].unique()):
+        season_df = df[df["season"] == season]
+        season_game_ids = season_df["game_id"].unique().tolist()
+        
+        season_result = _run_jeeds_estimation(
+            df=season_df,
+            game_ids=season_game_ids,
+            player_id=player_id,
+            candidate_skills=candidate_skills,
+            num_planning_skills=num_planning_skills,
+            results_folder=results_folder,
+            rng_seed=rng_seed,
+            return_intermediate_estimates=return_intermediate_estimates,
+            tag_suffix=f"_S{season}",
+        )
+        season_result["season"] = int(season)
+        per_season_results[int(season)] = season_result
+
+    return {
+        "player_id": player_id,
+        "seasons": seasons_list,
+        "per_season_results": per_season_results,
+    }
+
+# TODO: add per-season support for multiple players
+# Currently only works with game ids. Should be simple fix
 def estimate_multiple_players(
     player_ids: Sequence[int],
     game_ids: Sequence[int],
     *,
     candidate_skills: Sequence[float] | None = None,
-    num_planning_skills: int = 25,
+    num_planning_skills: int = DEFAULT_NUM_PLANNING_SKILLS,
     results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
     capture_skill_logs: bool = False,
@@ -434,6 +805,7 @@ def estimate_multiple_players(
                 results_folder=results_folder,
                 rng_seed=rng_seed,
                 return_intermediate_estimates=capture_skill_logs,
+                confirm=False,  # Disable confirmation for batch runs
             )
             player_result["player_id"] = player_id
             player_result["status"] = "success"
@@ -474,8 +846,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num-planning-skills",
         type=int,
-        default=25,
-        help="Number of planning-skill hypotheses passed to JEEDS.",
+        default=DEFAULT_NUM_PLANNING_SKILLS,
+        help=f"Number of planning-skill hypotheses passed to JEEDS (defaults to {DEFAULT_NUM_PLANNING_SKILLS}).",
     )
     parser.add_argument(
         "--results-folder",

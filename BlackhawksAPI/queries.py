@@ -52,18 +52,109 @@ def shot_games(season: int) -> pd.Series:
     Parameters
     ----------
     season : int
-        The season identifier (e.g., ``20242025``). The underlying database query
-        mirrors the reference implementation, leaving the season filter commented
-        to match the temporary workaround in the supplied reference code.
+        The season identifier (e.g., ``20242025``).
     """
 
     query = """
-        SELECT DISTINCT game_id_hawks
+        SELECT DISTINCT e.game_id_hawks
         FROM hawks_analytics.post_shot_xg_value_maps p
         JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
+        JOIN public.game g ON g.game_id_hawks = e.game_id_hawks
+        WHERE g.season = %(season)s
     """
 
-    return db.get_df(query).rename(columns=str.lower)["game_id_hawks"]
+    return db.get_df(query, query_params={"season": season}).rename(columns=str.lower)["game_id_hawks"]
+
+
+def get_games_for_seasons(seasons: list[int]) -> pd.DataFrame:
+    """Return game IDs and their seasons for the given season list.
+
+    Parameters
+    ----------
+    seasons : list[int]
+        List of season identifiers (e.g., ``[20232024, 20242025]``).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns 'game_id_hawks' and 'season'.
+    """
+    seasons_str = ",".join(str(s) for s in seasons)
+    query = f"""
+        SELECT DISTINCT g.game_id_hawks, g.season
+        FROM public.game g
+        JOIN hawks_analytics.post_shot_xg_value_maps p
+          ON p.event_id_hawks IN (
+              SELECT e.event_id_hawks
+              FROM public.event e
+              WHERE e.game_id_hawks = g.game_id_hawks
+          )
+        WHERE g.season IN ({seasons_str})
+        ORDER BY g.season, g.game_id_hawks
+    """
+    return db.get_df(query).rename(columns=str.lower)
+
+
+def query_player_season_shots(
+    player_id: int,
+    seasons: list[int],
+) -> pd.DataFrame:
+    """Fetch shot-level metadata for a player across specified seasons.
+
+    This query joins EVENT → GAME → SHOT_TRAJECTORIES to filter by season
+    without requiring explicit game IDs.
+
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    seasons : list[int]
+        List of season identifiers (e.g., ``[20232024, 20242025]``).
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per shot with event metadata, player position, shot location,
+        and the season the shot occurred in.
+    """
+    seasons_str = ",".join(str(s) for s in seasons)
+    query = f"""
+        SELECT
+            e.PLAYER_ID_HAWKS        AS player_id,
+            e.GAME_ID_HAWKS          AS game_id,
+            e.EVENT_ID_HAWKS         AS event_id,
+            g.SEASON                 AS season,
+            e.SHOT_IS_BLOCKED,
+            e.SHOT_IS_CONTACT_PRESSURE,
+            e.SHOT_IS_FANNED_SHOT,
+            e.SHOT_IS_GOAL,
+            e.SHOT_IS_HIGH_DANGER_MISSED_SHOT_RECOVERY,
+            e.SHOT_IS_LOW_HIGH,
+            e.SHOT_IS_ONE_TIMER,
+            e.SHOT_IS_OUTSIDE,
+            e.SHOT_IS_PENALTY_SHOT,
+            e.SHOT_IS_QUICK_RELEASE,
+            e.SHOT_IS_SCREENED,
+            e.SHOT_IS_SEAM,
+            e.SHOT_IS_SLOT,
+            e.SHOT_IS_SPACE_PRESSURE,
+            e.SHOT_IS_TIME_PRESSURE,
+            e.SHOT_IS_WITH_PRESSURE,
+            e.SHOT_IS_WITH_REBOUND,
+            e.X_ADJ_COORD             AS start_x,
+            e.Y_ADJ_COORD             AS start_y,
+            st.GOALLINE_Y_MODEL       AS location_y,
+            st.GOALLINE_Z_MODEL       AS location_z
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.PUBLIC.GAME AS g
+          ON g.GAME_ID_HAWKS = e.GAME_ID_HAWKS
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE e.PLAYER_ID_HAWKS = %(player_id)s
+          AND g.SEASON IN ({seasons_str})
+          AND e.EVENT_NAME = 'shot';
+    """
+    return db.get_df(query, query_params={"player_id": player_id})
 
 
 def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
