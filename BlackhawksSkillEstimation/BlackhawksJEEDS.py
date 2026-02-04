@@ -38,6 +38,7 @@ from scipy.ndimage import gaussian_filter, zoom
 
 from BlackhawksAPI import (
     get_game_shot_maps,
+    get_games_shot_maps_batch,
     query_player_game_info,
     query_player_season_shots,
 )
@@ -341,17 +342,15 @@ def save_player_data(
             print(f"  No shots found for season {season}. Skipping.")
             continue
 
-        # Fetch shot maps for all games in this season
+        # Fetch shot maps for all games in this season (single batched query)
         game_ids = df["game_id"].unique().tolist()
-        shot_maps: dict[int, dict[str, object]] = {}
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
-        for game_id in game_ids:
-            try:
-                game_shot_maps = get_game_shot_maps(game_id)
-                shot_maps.update(game_shot_maps)
-            except Exception as e:
-                print(f"  Warning: Could not fetch shot maps for game {game_id}: {e}")
+        try:
+            shot_maps = get_games_shot_maps_batch(game_ids)
+        except Exception as e:
+            print(f"  Warning: Could not fetch shot maps: {e}")
+            shot_maps = {}
 
         # Save to pickle
         with open(shots_path, "wb") as f:

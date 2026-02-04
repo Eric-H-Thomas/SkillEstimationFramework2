@@ -55,7 +55,7 @@ def one_player_two_seasons():
         print(f"Season {season}: skill={data['execution_skill']:.4f}, shots={data['num_shots']}")
 
 
-def download_player_data():
+def download_season_player_data():
     """Download and save player data to disk for offline use."""
     player_id = 950160
     # seasons = [20232024, 20242025]
@@ -106,6 +106,6 @@ def run_offline_estimation():
             print(f"  Season {season}: {data['status']} - {data.get('warning', '')}")
 
 
-TEST_TO_RUN = download_player_data
+TEST_TO_RUN = one_player
 if __name__ == "__main__":
     TEST_TO_RUN()

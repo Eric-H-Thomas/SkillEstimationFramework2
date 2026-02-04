@@ -2,6 +2,7 @@
 
 from .queries import (
     get_game_shot_maps,
+    get_games_shot_maps_batch,
     get_games_for_seasons,
     plot_ellipse,
     query_player_game_info,
@@ -11,6 +12,7 @@ from .queries import (
 
 __all__ = [
     "get_game_shot_maps",
+    "get_games_shot_maps_batch",
     "get_games_for_seasons",
     "plot_ellipse",
     "query_player_game_info",

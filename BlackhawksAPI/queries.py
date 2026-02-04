@@ -159,9 +159,36 @@ def query_player_season_shots(
 
 def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
     """Return shot metadata for a given game keyed by ``event_id_hawks``."""
+    return get_games_shot_maps_batch([game_id_hawks])
 
-    query = """
+
+def get_games_shot_maps_batch(game_ids: list[int]) -> dict[int, dict[str, object]]:
+    """Return shot metadata for multiple games keyed by ``event_id_hawks``.
+    
+    This is a batched version of get_game_shot_maps that fetches all games
+    in a single query, significantly reducing database round-trips.
+    
+    Parameters
+    ----------
+    game_ids : list[int]
+        List of game identifiers to fetch shot maps for.
+        
+    Returns
+    -------
+    dict[int, dict[str, object]]
+        Mapping of event_id_hawks -> shot data dict containing:
+        - 'df': DataFrame slice for this shot
+        - 'value_map': 2D numpy array of post-shot xG values
+        - 'net_cov': 2x2 covariance matrix
+        - 'net_coords': [y, z] goal line coordinates
+    """
+    if not game_ids:
+        return {}
+    
+    game_ids_str = ",".join(str(g) for g in game_ids)
+    query = f"""
             SELECT p.*
+                , e.game_id_hawks
                 , st.goalline_y_model
                 , st.goalline_z_model
                 , st.cov_00
@@ -172,13 +199,11 @@ def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
             FROM hawks_analytics.post_shot_xg_value_maps p
             JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
             JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
-            WHERE e.game_id_hawks = %(game_id_hawks)s
+            WHERE e.game_id_hawks IN ({game_ids_str})
             ORDER BY p.event_id_hawks ASC, location_y DESC, location_z ASC
             ;
             """
-    df = db.get_df(query, query_params={"game_id_hawks": game_id_hawks}).rename(
-        columns=str.lower
-    )
+    df = db.get_df(query).rename(columns=str.lower)
 
     shot_maps: dict[int, dict[str, object]] = {}
     for event_id_hawks in df["event_id_hawks"].unique():
