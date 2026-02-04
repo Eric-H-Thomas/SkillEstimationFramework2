@@ -52,12 +52,12 @@ from Estimators.joint import JointMethodQRE
 #   20 hypotheses: ~0.04 rad spacing, balanced for most uses
 #   30 hypotheses: ~0.025 rad spacing, matches production experiments
 #   50 hypotheses: ~0.015 rad spacing, high precision for research
-DEFAULT_NUM_EXECUTION_SKILLS = 10
+DEFAULT_NUM_EXECUTION_SKILLS = 30
 
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
 # Default used to be 25, so consider that for research computation.
-DEFAULT_NUM_PLANNING_SKILLS = 10
+DEFAULT_NUM_PLANNING_SKILLS = 25
 
 
 @dataclass
@@ -285,6 +285,126 @@ def clear_shot_maps_cache() -> None:
 # =============================================================================
 # OFFLINE DATA PERSISTENCE
 # =============================================================================
+
+
+def save_player_data_by_games(
+    player_id: int,
+    game_ids: list[int],
+    output_dir: Path | str = Path("Data/Hockey"),
+    overwrite: bool = False,
+    tag: str = "games",
+) -> dict[str, Path]:
+    """Fetch and save player shot data + shot maps for specific games.
+
+    Creates pickle files in ``output_dir/player_{player_id}/`` with:
+    - ``shots_{tag}.pkl``: DataFrame of shots for the specified games
+    - ``shot_maps_{tag}.pkl``: Dict mapping event_id -> shot_map_data
+
+    This is a lighter-weight alternative to save_player_data() when you only
+    need a few games (e.g., for testing the pipeline on limited hardware).
+
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    game_ids : list[int]
+        List of game identifiers to fetch data for.
+    output_dir : Path | str
+        Base directory for saved data (default: ``Data/Hockey``).
+    overwrite : bool
+        If False (default), skip if files already exist.
+        If True, overwrite existing files.
+    tag : str
+        Tag to use in the filename (default: "games"). Use something
+        descriptive like "2games_test" or a hash of game_ids.
+
+    Returns
+    -------
+    dict[str, Path]
+        {"shots": path, "shot_maps": path} for saved files.
+    """
+    output_dir = Path(output_dir)
+    player_dir = output_dir / f"player_{player_id}"
+    player_dir.mkdir(parents=True, exist_ok=True)
+
+    shots_path = player_dir / f"shots_{tag}.pkl"
+    maps_path = player_dir / f"shot_maps_{tag}.pkl"
+
+    # Check for existing files
+    if not overwrite and shots_path.exists() and maps_path.exists():
+        print(f"Files for {tag} already exist. Skipping. Use overwrite=True to replace.")
+        return {"shots": shots_path, "shot_maps": maps_path}
+
+    print(f"Fetching data for player {player_id}, games {game_ids}...")
+
+    # Fetch shots for these games
+    df = query_player_game_info(player_id=player_id, game_ids=game_ids)
+    df = df.rename(columns=str.lower)
+
+    if df.empty:
+        print(f"  No shots found for games {game_ids}.")
+        return {}
+
+    print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
+    try:
+        shot_maps = get_games_shot_maps_batch(game_ids)
+    except Exception as e:
+        print(f"  Warning: Could not fetch shot maps: {e}")
+        shot_maps = {}
+
+    # Save to pickle
+    with open(shots_path, "wb") as f:
+        pickle.dump(df, f)
+    with open(maps_path, "wb") as f:
+        pickle.dump(shot_maps, f)
+
+    print(f"  Saved: {shots_path.name}, {maps_path.name}")
+    return {"shots": shots_path, "shot_maps": maps_path}
+
+
+def load_player_data_by_games(
+    player_id: int,
+    tag: str = "games",
+    data_dir: Path | str = Path("Data/Hockey"),
+) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
+    """Load previously saved player data from disk (saved by game IDs).
+
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    tag : str
+        The tag used when saving (default: "games").
+    data_dir : Path | str
+        Base directory containing saved data (default: ``Data/Hockey``).
+
+    Returns
+    -------
+    tuple[pd.DataFrame, dict[int, dict[str, object]]]
+        (shots_df, shot_maps_dict) ready for estimation.
+
+    Raises
+    ------
+    FileNotFoundError
+        If pickle files are missing.
+    """
+    data_dir = Path(data_dir)
+    player_dir = data_dir / f"player_{player_id}"
+
+    shots_path = player_dir / f"shots_{tag}.pkl"
+    maps_path = player_dir / f"shot_maps_{tag}.pkl"
+
+    if not shots_path.exists():
+        raise FileNotFoundError(f"Missing shots file: {shots_path}")
+    if not maps_path.exists():
+        raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+
+    with open(shots_path, "rb") as f:
+        df = pickle.load(f)
+    with open(maps_path, "rb") as f:
+        shot_maps = pickle.load(f)
+
+    return df, shot_maps
 
 
 def save_player_data(

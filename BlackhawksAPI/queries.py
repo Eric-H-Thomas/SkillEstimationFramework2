@@ -266,3 +266,71 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
           AND e.EVENT_NAME = 'shot';
     """
     return db.get_df(query, query_params={"player_id": player_id})
+
+
+def get_top_shooters_in_games(game_ids: list[int], min_shots: int = 3) -> pd.DataFrame:
+    """Find players with the most shots in specific games.
+    
+    Useful for finding valid player/game combinations for testing.
+    
+    Parameters
+    ----------
+    game_ids : list[int]
+        List of game identifiers to search.
+    min_shots : int
+        Minimum number of shots to include a player (default: 3).
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with player_id, shot_count, and game_ids they shot in.
+    """
+    game_ids_str = ",".join(str(g) for g in game_ids)
+    query = f"""
+        SELECT 
+            e.PLAYER_ID_HAWKS AS player_id,
+            COUNT(*) AS shot_count,
+            ARRAY_AGG(DISTINCT e.GAME_ID_HAWKS) AS game_ids
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE e.GAME_ID_HAWKS IN ({game_ids_str})
+          AND e.EVENT_NAME = 'shot'
+        GROUP BY e.PLAYER_ID_HAWKS
+        HAVING COUNT(*) >= {min_shots}
+        ORDER BY shot_count DESC
+        LIMIT 20;
+    """
+    return db.get_df(query).rename(columns=str.lower)
+
+
+def get_games_for_player(player_id: int, limit: int = 10) -> pd.DataFrame:
+    """Find games where a specific player took shots (with shot maps available).
+    
+    Parameters
+    ----------
+    player_id : int
+        The player identifier.
+    limit : int
+        Maximum number of games to return (default: 10).
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with game_id and shot_count per game.
+    """
+    query = f"""
+        SELECT 
+            e.GAME_ID_HAWKS AS game_id,
+            COUNT(*) AS shot_count
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE e.PLAYER_ID_HAWKS = %(player_id)s
+          AND e.EVENT_NAME = 'shot'
+        GROUP BY e.GAME_ID_HAWKS
+        ORDER BY shot_count DESC
+        LIMIT {limit};
+    """
+    return db.get_df(query, query_params={"player_id": player_id}).rename(columns=str.lower)
+
