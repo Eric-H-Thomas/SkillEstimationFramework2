@@ -377,6 +377,126 @@ def generate_all_plots():
     print("=" * 60)
 
 
+# =============================================================================
+# PER-SEASON MULTI-PLAYER TEST
+# =============================================================================
+# Edit these two variables to control which players and seasons to test.
+
+SEASON_TEST_PLAYERS = [
+    {"player_id": 950160, "name": "Nathan MacKinnon"},
+    {"player_id": 950184, "name": "Cale Makar"},
+    {"player_id": 949352, "name": "Kris Letang"},
+]
+
+SEASON_TEST_SEASONS = [20232024, 20242025]
+
+
+def per_season_multi_player_test():
+    """Download (if needed), estimate, and plot for each player x season independently."""
+    from pathlib import Path
+
+    players = SEASON_TEST_PLAYERS
+    seasons = SEASON_TEST_SEASONS
+    data_dir = Path("Data/Hockey")
+
+    print("=" * 60)
+    print("PER-SEASON MULTI-PLAYER TEST")
+    print(f"Players: {len(players)}  |  Seasons: {seasons}")
+    print("=" * 60)
+
+    summary = []
+
+    for player in players:
+        pid = player["player_id"]
+        name = player["name"]
+        print(f"\n{'='*60}")
+        print(f"{name} (ID: {pid})")
+        print(f"{'='*60}")
+
+        # Download any missing season data (skips existing files)
+        save_player_data(
+            player_id=pid,
+            seasons=seasons,
+            output_dir=data_dir,
+            overwrite=False,
+        )
+
+        # Load all seasons together; the DataFrame has a "season" column
+        try:
+            df, shot_maps = load_player_data(
+                player_id=pid,
+                seasons=seasons,
+                data_dir=data_dir,
+            )
+        except FileNotFoundError as e:
+            print(f"  SKIP (no data): {e}")
+            for s in seasons:
+                summary.append({"name": name, "season": s, "status": "no_data"})
+            continue
+
+        if df.empty:
+            print("  SKIP (0 shots)")
+            for s in seasons:
+                summary.append({"name": name, "season": s, "status": "no_shots"})
+            continue
+
+        print(f"  {len(df)} total shots loaded across {len(seasons)} season(s)")
+
+        # per_season=True splits by the "season" column and estimates each independently
+        result = estimate_player_skill(
+            player_id=pid,
+            offline_data=(df, shot_maps),
+            per_season=True,
+            confirm=False,
+            save_intermediate_csv=True,
+        )
+
+        per_season_results = result.get("per_season_results", {})
+
+        for season in seasons:
+            data = per_season_results.get(season)
+            if data is None:
+                print(f"\n  Season {season}: no data returned")
+                summary.append({"name": name, "season": season, "status": "no_data"})
+                continue
+
+            if data.get("status") != "success" and "execution_skill" not in data:
+                print(f"\n  Season {season}: {data.get('status', 'unknown')}")
+                summary.append({"name": name, "season": season, "status": "failed"})
+                continue
+
+            print(f"\n  Season {season}:")
+            _print_all_estimates(data, prefix="    ")
+
+            if "csv_path" in data:
+                plot_path = plot_intermediate_estimates(data["csv_path"])
+                print(f"    CSV:  {data['csv_path']}")
+                print(f"    Plot: {plot_path}")
+
+            summary.append({
+                "name": name,
+                "season": season,
+                "status": "success",
+                "execution_skill": data["execution_skill"],
+                "ees": data["ees"],
+                "rationality": data["rationality"],
+                "eps": data["eps"],
+                "num_shots": data["num_shots"],
+            })
+
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+    for s in summary:
+        if s["status"] == "success":
+            print(f"  {s['name']:20s}  {s['season']}  "
+                  f"MAP={s['execution_skill']:.4f}  EES={s['ees']:.4f}  "
+                  f"rat={s['rationality']:.2f}  EPS={s['eps']:.2f}  "
+                  f"({s['num_shots']} shots)")
+        else:
+            print(f"  {s['name']:20s}  {s['season']}  {s['status']}")
+
+
 # Set which test to run
 # Options:
 #   - one_player: Quick test with 1 player, 2 games
@@ -388,7 +508,8 @@ def generate_all_plots():
 #   - full_lightweight_pipeline_test: Download + estimate (full pipeline test)
 #   - test_intermediate_csv_and_plot: Test CSV export and plotting
 #   - generate_all_plots: Generate plots for all players with logged data
+#   - per_season_multi_player_test: Per-season estimation for configurable players/seasons
 
-TEST_TO_RUN = test_intermediate_csv_and_plot
+TEST_TO_RUN = per_season_multi_player_test
 if __name__ == "__main__":
     TEST_TO_RUN()
