@@ -6,19 +6,34 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import (
     save_player_data_by_games,
     load_player_data_by_games,
 )
+from BlackhawksSkillEstimation.plot_intermediate_estimates import (
+    plot_intermediate_estimates,
+    plot_all_intermediate_for_player,
+)
 
 # At the bottom, set TEST_TO_RUN
 
+
+def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
+    """Helper to print all 4 estimates from a result dict."""
+    print(f"{prefix}MAP Execution Skill: {result['execution_skill']:.4f} rad (lower is better)")
+    print(f"{prefix}EES:                 {result['ees']:.4f} rad")
+    print(f"{prefix}MAP Rationality:     {result['rationality']:.2f} (higher is better)")
+    print(f"{prefix}EPS:                 {result['eps']:.2f}")
+    print(f"{prefix}Shots Used:          {result['num_shots']}")
+
+
 def one_player():
+    """Quick test with 1 player, 2 games."""
     estimates = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
-    print(f"JEEDS MAP execution skill: {estimates['execution_skill']:.4f} rad (lower is better)")
-    print(f"JEEDS MAP rationality:     {estimates['rationality']:.2f} (higher is better)")
+    print("\nPlayer 950160 Estimates:")
+    _print_all_estimates(estimates)
+
 
 def three_players():
-    # Test case for multiple player IDs
-    # TODO: Fetch actual player IDs from snowflake. I didn't have access when I made this
-    player_ids = [950160, 123456, 789012]  # Example player IDs
-    game_ids = [44604, 270247]  # Example game IDs
+    """Test with 3 players, 2 games each."""
+    player_ids = [950160, 123456, 789012]
+    game_ids = [44604, 270247]
     results = estimate_multiple_players(player_ids=player_ids, game_ids=game_ids)
 
     for result in results:
@@ -27,9 +42,7 @@ def three_players():
 
         if status == "success":
             print(f"\nPlayer {player_id}:")
-            print(f"  Execution Skill: {result['execution_skill']:.4f} rad (lower is better)")
-            print(f"  Rationality:     {result['rationality']:.2f} (higher is better, EXPERIMENTAL)")
-            print(f"  Shots Used:      {result['num_shots']}")
+            _print_all_estimates(result)
 
             if "skill_log" in result and result["skill_log"]:
                 print(f"  Tracked {len(result['skill_log'])} intermediate estimates")
@@ -38,29 +51,30 @@ def three_players():
             print(f"  {result.get('error', 'Unknown error')}")
 
 def one_player_one_season():
-    # Per-season estimates (default)
+    """Per-season estimates for a single season."""
     result = estimate_player_skill(
         player_id=950160,
         seasons=[20242025],
     )
     for season, data in result["per_season_results"].items():
-        print(f"Season {season}: skill={data['execution_skill']:.4f}, shots={data['num_shots']}")
+        print(f"\nSeason {season}:")
+        _print_all_estimates(data)
             
 def one_player_two_seasons():
-    # Per-season estimates (default)
+    """Per-season estimates across two seasons."""
     result = estimate_player_skill(
         player_id=950160,
         seasons=[20232024, 20242025],
     )
     for season, data in result["per_season_results"].items():
-        print(f"Season {season}: skill={data['execution_skill']:.4f}, shots={data['num_shots']}")
+        print(f"\nSeason {season}:")
+        _print_all_estimates(data)
 
 
-def download_season_player_data():
+def download_season_test_data():
     """Download and save player data to disk for offline use."""
     player_id = 950160
-    # seasons = [20232024, 20242025]
-    seasons = [20242025]
+    seasons = [20232024, 20242025]
     
     print(f"Downloading data for player {player_id}, seasons {seasons}...")
     saved = save_player_data(
@@ -77,7 +91,7 @@ def download_season_player_data():
         print(f"    Shot maps: {paths['shot_maps']}")
 
 
-def run_offline_estimation():
+def run_offline_season_estimation():
     """Run estimation using previously downloaded data (no DB access needed)."""
     player_id = 950160
     seasons = [20232024, 20242025]
@@ -96,19 +110,20 @@ def run_offline_estimation():
         player_id=player_id,
         offline_data=offline_data,
         per_season=True,
-        confirm=False,  # Skip confirmation for automated runs
+        confirm=False,
     )
     
     print("\nResults:")
     for season, data in result["per_season_results"].items():
         if data["status"] == "success":
-            print(f"  Season {season}: skill={data['execution_skill']:.4f}, rationality={data['rationality']:.2f}, shots={data['num_shots']}")
+            print(f"\nSeason {season}:")
+            _print_all_estimates(data)
         else:
             print(f"  Season {season}: {data['status']} - {data.get('warning', '')}")
 
 
 # =============================================================================
-# LIGHTWEIGHT PIPELINE TESTING (for laptops / limited hardware)
+# LIGHTWEIGHT PIPELINE TESTING 
 # =============================================================================
 
 # Players and games for lightweight testing
@@ -204,26 +219,22 @@ def run_offline_lightweight_estimation():
             result = estimate_player_skill(
                 player_id=player_id,
                 offline_data=(df, shot_maps),
-                per_season=False,  # Not season-based for game-specific data
+                per_season=False,
                 confirm=False,
             )
             
             if result.get("status") == "success" or "execution_skill" in result:
-                exec_skill = result.get("execution_skill")
-                rationality = result.get("rationality")
-                num_shots = result.get("num_shots", len(df))
-                
-                print(f"  Execution Skill: {exec_skill:.4f} rad (lower is better)")
-                print(f"  Rationality:     {rationality:.2f} (higher is better)")
-                print(f"  Shots Used:      {num_shots}")
+                _print_all_estimates(result)
                 
                 results.append({
                     "player_id": player_id,
                     "name": name,
                     "status": "success",
-                    "execution_skill": exec_skill,
-                    "rationality": rationality,
-                    "num_shots": num_shots,
+                    "execution_skill": result.get("execution_skill"),
+                    "ees": result.get("ees"),
+                    "rationality": result.get("rationality"),
+                    "eps": result.get("eps"),
+                    "num_shots": result.get("num_shots", len(df)),
                 })
             else:
                 print(f"  Status: {result.get('status', 'unknown')}")
@@ -255,7 +266,8 @@ def run_offline_lightweight_estimation():
     print("=" * 60)
     for r in results:
         if r["status"] == "success":
-            print(f"{r['name']}: skill={r['execution_skill']:.4f}, rationality={r['rationality']:.2f}")
+            print(f"{r['name']}:")
+            _print_all_estimates(r, prefix="  ")
         else:
             print(f"{r['name']}: {r['status']}")
     
@@ -282,16 +294,101 @@ def full_lightweight_pipeline_test():
     print("=" * 60)
 
 
+def test_intermediate_csv_and_plot():
+    """Test intermediate estimate logging to CSV and plotting.
+    
+    Uses previously downloaded lightweight test data.
+    Saves intermediate estimates to CSV and generates convergence plots.
+    """
+    print("=" * 60)
+    print("TESTING INTERMEDIATE CSV EXPORT AND PLOTTING")
+    print("=" * 60)
+    
+    player_id = 950160
+    
+    try:
+        df, shot_maps = load_player_data_by_games(
+            player_id=player_id,
+            tag="2games_test",
+            data_dir="Data/Hockey",
+        )
+        print(f"Loaded {len(df)} shots for player {player_id}")
+    except FileNotFoundError:
+        print("ERROR: Data not found. Run download_lightweight_test_data() first.")
+        return
+    
+    # Run estimation with CSV export enabled
+    print("\nRunning estimation with save_intermediate_csv=True...")
+    result = estimate_player_skill(
+        player_id=player_id,
+        offline_data=(df, shot_maps),
+        per_season=False,
+        confirm=False,
+        save_intermediate_csv=True,
+    )
+    
+    print("\nFinal Estimates:")
+    _print_all_estimates(result)
+    
+    if "csv_path" in result:
+        csv_path = result["csv_path"]
+        print(f"\nCSV saved to: {csv_path}")
+        
+        # Show first few rows
+        print("\nFirst 5 rows of skill_log:")
+        for i, row in enumerate(result["skill_log"][:5]):
+            print(f"  Shot {row['shot_count']}: "
+                  f"MAP skill={row['map_execution_skill']:.4f}, "
+                  f"EES={row['ees']:.4f}, "
+                  f"MAP rat={row['map_rationality']:.2f}, "
+                  f"EPS={row['eps']:.2f}")
+        
+        # Generate plot
+        print("\nGenerating convergence plot...")
+        plot_path = plot_intermediate_estimates(csv_path)
+        print(f"Plot saved to: {plot_path}")
+    else:
+        print("\nWARNING: No CSV path in result")
+    
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
+
+
+def generate_all_plots():
+    """Generate convergence plots for all players with logged data."""
+    print("=" * 60)
+    print("GENERATING ALL INTERMEDIATE ESTIMATE PLOTS")
+    print("=" * 60)
+    
+    for player_info in LIGHTWEIGHT_TEST_PLAYERS:
+        player_id = player_info["player_id"]
+        name = player_info["name"]
+        
+        print(f"\n--- {name} (ID: {player_id}) ---")
+        plots = plot_all_intermediate_for_player(player_id)
+        if plots:
+            print(f"  Generated {len(plots)} plot(s)")
+        else:
+            print("  No intermediate estimate data found")
+    
+    print("\n" + "=" * 60)
+    print("DONE")
+    print("=" * 60)
+
+
 # Set which test to run
 # Options:
 #   - one_player: Quick test with 1 player, 2 games
 #   - three_players: Test with 3 players, 2 games each
-#   - one_player_one_season: 1 player, full season (heavy)
-#   - download_season_player_data: Download full season data
+#   - one_player_one_season: 1 player, full season (requires DB access)
+#   - download_season_test_data: Download full season data
 #   - download_lightweight_test_data: Download 3 players × 2 games (lightweight)
 #   - run_offline_lightweight_estimation: Run estimation on downloaded data
 #   - full_lightweight_pipeline_test: Download + estimate (full pipeline test)
+#   - test_intermediate_csv_and_plot: Test CSV export and plotting
+#   - generate_all_plots: Generate plots for all players with logged data
 
-TEST_TO_RUN = run_offline_lightweight_estimation
+TEST_TO_RUN = test_intermediate_csv_and_plot
 if __name__ == "__main__":
     TEST_TO_RUN()

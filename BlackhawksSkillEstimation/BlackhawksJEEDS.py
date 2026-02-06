@@ -26,6 +26,7 @@ print(f"Rationality: {estimates['rationality']:.2f} (higher=better, experimental
 from __future__ import annotations
 
 import argparse
+import csv
 import pickle
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -58,6 +59,59 @@ DEFAULT_NUM_EXECUTION_SKILLS = 50
 # Higher values give finer rationality resolution but increase compute cost.
 # Default used to be 25, so consider that for research computation.
 DEFAULT_NUM_PLANNING_SKILLS = 25
+
+
+def save_intermediate_estimates_csv(
+    skill_log: list[dict[str, object]],
+    player_id: int,
+    output_dir: Path | str,
+    tag: str = "",
+) -> Path:
+    """Save intermediate estimates to a CSV file.
+    
+    Parameters
+    ----------
+    skill_log : list[dict]
+        List of dicts with keys: shot_count, ees (expected execution skill),
+        map_execution_skill, eps (expected rationality), map_rationality
+    player_id : int
+        Player ID for filename.
+    output_dir : Path | str
+        Base directory (e.g., "Data/Hockey/player_950160").
+    tag : str
+        Optional tag for filename (e.g., "20242025" for season or "2games_test").
+    
+    Returns
+    -------
+    Path
+        Path to the saved CSV file.
+    """
+    output_dir = Path(output_dir)
+    logs_dir = output_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    
+    tag_str = f"_{tag}" if tag else ""
+    csv_path = logs_dir / f"intermediate_estimates{tag_str}.csv"
+    
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "shot_count",
+            "expected_execution_skill",
+            "map_execution_skill", 
+            "expected_rationality",
+            "map_rationality",
+        ])
+        for row in skill_log:
+            writer.writerow([
+                row["shot_count"],
+                row["ees"],
+                row["map_execution_skill"],
+                row["eps"],
+                row["map_rationality"],
+            ])
+    
+    return csv_path
 
 
 @dataclass
@@ -550,12 +604,16 @@ def _run_jeeds_estimation(
     return_intermediate_estimates: bool,
     tag_suffix: str = "",
     preloaded_shot_maps: dict[int, dict[str, object]] | None = None,
+    save_intermediate_csv: bool = False,
+    csv_output_dir: Path | str | None = None,
+    csv_tag: str = "",
 ) -> dict[str, object]:
     """Internal helper to run JEEDS on a DataFrame of shots.
     
     Returns a result dict with execution_skill, rationality, num_shots, and optionally skill_log.
     
     If preloaded_shot_maps is provided, uses those instead of fetching from DB.
+    If save_intermediate_csv is True, saves the skill_log to a CSV file.
     """
     if df.empty:
         return {
@@ -600,8 +658,13 @@ def _run_jeeds_estimation(
     tag = f"Player_{player_id}{tag_suffix}"
 
     skill_log: list[dict[str, object]] = []
-    xskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-xSkills"
-    pskill_key = f"{estimator.method_type}-MAP-{estimator.num_execution_skills}-{estimator.num_rationality_levels}-pSkills"
+    # Keys for retrieving estimates from JEEDS
+    # JEEDS uses "xSkills" for execution skill and "pSkills" for planning skill (rationality)
+    base_key = f"{estimator.method_type}-{{}}-{estimator.num_execution_skills}-{estimator.num_rationality_levels}"
+    map_xskill_key = f"{base_key.format('MAP')}-xSkills"
+    map_rationality_key = f"{base_key.format('MAP')}-pSkills"
+    ees_key = f"{base_key.format('EES')}-xSkills"
+    eps_key = f"{base_key.format('EES')}-pSkills"
 
     for idx, (spaces, info, action) in enumerate(
         zip(jeeds_inputs.spaces_per_shot, jeeds_inputs.info_rows, jeeds_inputs.actions)
@@ -617,23 +680,29 @@ def _run_jeeds_estimation(
             s=str(idx),
         )
 
-        if return_intermediate_estimates:
+        if return_intermediate_estimates or save_intermediate_csv:
             results = estimator.get_results()
-            xskill_estimates = results.get(xskill_key, [])
-            pskill_estimates = results.get(pskill_key, [])
+            map_xskill = results.get(map_xskill_key, [])
+            map_rationality = results.get(map_rationality_key, [])
+            ees = results.get(ees_key, [])
+            eps = results.get(eps_key, [])
             
-            if xskill_estimates and pskill_estimates:
+            if map_xskill and map_rationality and ees and eps:
                 skill_log.append({
-                    "shot_idx": idx,
-                    "execution_skill": float(xskill_estimates[-1]),
-                    "rationality": float(pskill_estimates[-1]),
+                    "shot_count": idx + 1,  # 1-indexed
+                    "ees": float(ees[-1]),  # Expected Execution Skill
+                    "map_execution_skill": float(map_xskill[-1]),
+                    "eps": float(eps[-1]),  # Expected Rationality
+                    "map_rationality": float(map_rationality[-1]),
                 })
 
     results = estimator.get_results()
-    xskill_estimates = results.get(xskill_key, [])
-    pskill_estimates = results.get(pskill_key, [])
+    map_xskill_estimates = results.get(map_xskill_key, [])
+    map_rationality_estimates = results.get(map_rationality_key, [])
+    ees_estimates = results.get(ees_key, [])
+    eps_estimates = results.get(eps_key, [])
     
-    if not xskill_estimates or not pskill_estimates:
+    if not map_xskill_estimates or not map_rationality_estimates:
         return {
             "execution_skill": None,
             "rationality": None,
@@ -643,14 +712,28 @@ def _run_jeeds_estimation(
         }
 
     result: dict[str, object] = {
-        "execution_skill": float(xskill_estimates[-1]),
-        "rationality": float(pskill_estimates[-1]),
+        # MAP estimates (primary)
+        "execution_skill": float(map_xskill_estimates[-1]),
+        "rationality": float(map_rationality_estimates[-1]),
+        # EES/EPS estimates (expected values under posterior)
+        "ees": float(ees_estimates[-1]) if ees_estimates else None,
+        "eps": float(eps_estimates[-1]) if eps_estimates else None,
         "num_shots": len(jeeds_inputs.actions),
         "status": "success",
     }
     
-    if return_intermediate_estimates:
+    if return_intermediate_estimates or save_intermediate_csv:
         result["skill_log"] = skill_log
+    
+    # Save CSV if requested
+    if save_intermediate_csv and csv_output_dir and skill_log:
+        csv_path = save_intermediate_estimates_csv(
+            skill_log=skill_log,
+            player_id=player_id,
+            output_dir=csv_output_dir,
+            tag=csv_tag,
+        )
+        result["csv_path"] = str(csv_path)
 
     return result
 
@@ -666,10 +749,12 @@ def estimate_player_skill(
     results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
     return_intermediate_estimates: bool = False,
+    save_intermediate_csv: bool = False,
+    data_dir: Path | str = Path("Data/Hockey"),
     confirm: bool = True,
     offline_data: tuple[pd.DataFrame, dict[int, dict[str, object]]] | None = None,
 ) -> dict[str, object]:
-    """Return JEEDS MAP estimates of execution skill and rationality for a player.
+    """Return JEEDS MAP and EES estimates of execution skill and rationality for a player.
 
     Supports three modes of operation:
     1. **Game-based**: Pass ``game_ids`` to estimate across specific games.
@@ -698,7 +783,11 @@ def estimate_player_skill(
     rng_seed : int | None
         Seed for the numpy random generator used during estimation.
     return_intermediate_estimates : bool
-        If True, return a 'skill_log' key with MAP estimates after each shot.
+        If True, return a 'skill_log' key with all 4 estimates after each shot.
+    save_intermediate_csv : bool
+        If True, save intermediate estimates to a CSV file under data_dir/player_{id}/logs/.
+    data_dir : Path | str
+        Base directory for saving CSV files. Default is "Data/Hockey".
     confirm : bool
         If True (default), prompt for confirmation before running estimation.
         Set to False for batch/automated runs.
@@ -712,12 +801,15 @@ def estimate_player_skill(
         When ``per_season=False`` or using ``game_ids``:
             - 'execution_skill': MAP estimate of xskill in radians (lower is better).
             - 'rationality': MAP estimate of decision-making optimality (higher is better).
+            - 'ees_execution_skill': Expected value estimate of xskill.
+            - 'ees_rationality': Expected value estimate of rationality.
             - 'num_shots': Number of shots used.
             - 'skill_log' (optional): Intermediate estimates per shot.
+            - 'csv_path' (optional): Path to saved CSV if save_intermediate_csv=True.
         
         When ``per_season=True`` and using ``seasons``:
             - 'per_season_results': Dict mapping season -> result dict.
-            - Each season result contains execution_skill, rationality, num_shots.
+            - Each season result contains all skill estimates plus num_shots.
     """
     # Validate inputs
     if game_ids is None and seasons is None and offline_data is None:
@@ -727,6 +819,8 @@ def estimate_player_skill(
         candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
     )
     results_folder = Path(results_folder)
+    data_dir = Path(data_dir)
+    player_data_dir = data_dir / f"player_{player_id}"
 
     # Mode 0: Offline data (pre-loaded from disk)
     if offline_data is not None:
@@ -763,6 +857,9 @@ def estimate_player_skill(
                     return_intermediate_estimates=return_intermediate_estimates,
                     tag_suffix=f"_S{season}",
                     preloaded_shot_maps=preloaded_shot_maps,
+                    save_intermediate_csv=save_intermediate_csv,
+                    csv_output_dir=player_data_dir,
+                    csv_tag=str(season),
                 )
                 season_result["season"] = int(season)
                 per_season_results[int(season)] = season_result
@@ -785,6 +882,9 @@ def estimate_player_skill(
                 rng_seed=rng_seed,
                 return_intermediate_estimates=return_intermediate_estimates,
                 preloaded_shot_maps=preloaded_shot_maps,
+                save_intermediate_csv=save_intermediate_csv,
+                csv_output_dir=player_data_dir,
+                csv_tag="aggregate",
             )
 
     # Mode 1: Explicit game_ids (original behavior)
@@ -810,6 +910,9 @@ def estimate_player_skill(
             results_folder=results_folder,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
+            save_intermediate_csv=save_intermediate_csv,
+            csv_output_dir=player_data_dir,
+            csv_tag="games",
         )
 
     # Mode 2: Season-based discovery
@@ -845,6 +948,9 @@ def estimate_player_skill(
             results_folder=results_folder,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
+            save_intermediate_csv=save_intermediate_csv,
+            csv_output_dir=player_data_dir,
+            csv_tag="aggregate",
         )
 
     # Per-season mode: separate estimate for each season
@@ -864,6 +970,9 @@ def estimate_player_skill(
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
             tag_suffix=f"_S{season}",
+            save_intermediate_csv=save_intermediate_csv,
+            csv_output_dir=player_data_dir,
+            csv_tag=str(season),
         )
         season_result["season"] = int(season)
         per_season_results[int(season)] = season_result
