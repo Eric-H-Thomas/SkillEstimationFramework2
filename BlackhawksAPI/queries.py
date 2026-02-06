@@ -157,12 +157,25 @@ def query_player_season_shots(
     return db.get_df(query, query_params={"player_id": player_id})
 
 
-def get_game_shot_maps(game_id_hawks: int) -> dict[int, dict[str, object]]:
-    """Return shot metadata for a given game keyed by ``event_id_hawks``."""
-    return get_games_shot_maps_batch([game_id_hawks])
+def get_game_shot_maps(game_id_hawks: int, player_id: int | None = None) -> dict[int, dict[str, object]]:
+    """Return shot metadata for a given game keyed by ``event_id_hawks``.
+    
+    Parameters
+    ----------
+    game_id_hawks : int
+        The game identifier.
+    player_id : int | None
+        If provided, only fetch shot maps for this player's shots.
+        This dramatically reduces query size and is recommended for
+        single-player analysis.
+    """
+    return get_games_shot_maps_batch([game_id_hawks], player_id=player_id)
 
 
-def get_games_shot_maps_batch(game_ids: list[int]) -> dict[int, dict[str, object]]:
+def get_games_shot_maps_batch(
+    game_ids: list[int],
+    player_id: int | None = None,
+) -> dict[int, dict[str, object]]:
     """Return shot metadata for multiple games keyed by ``event_id_hawks``.
     
     This is a batched version of get_game_shot_maps that fetches all games
@@ -172,6 +185,11 @@ def get_games_shot_maps_batch(game_ids: list[int]) -> dict[int, dict[str, object
     ----------
     game_ids : list[int]
         List of game identifiers to fetch shot maps for.
+    player_id : int | None
+        If provided, only fetch shot maps for this player's shots.
+        This dramatically reduces query size (e.g., from ~230 maps to ~37
+        for a typical player across a few games) and is recommended for
+        single-player analysis.
         
     Returns
     -------
@@ -186,6 +204,7 @@ def get_games_shot_maps_batch(game_ids: list[int]) -> dict[int, dict[str, object
         return {}
     
     game_ids_str = ",".join(str(g) for g in game_ids)
+    player_filter = f"AND e.player_id_hawks = {player_id}" if player_id else ""
     query = f"""
             SELECT p.*
                 , e.game_id_hawks
@@ -200,6 +219,7 @@ def get_games_shot_maps_batch(game_ids: list[int]) -> dict[int, dict[str, object
             JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
             JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
             WHERE e.game_id_hawks IN ({game_ids_str})
+            {player_filter}
             ORDER BY p.event_id_hawks ASC, location_y DESC, location_z ASC
             ;
             """

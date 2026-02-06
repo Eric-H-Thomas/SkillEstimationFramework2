@@ -52,7 +52,7 @@ from Estimators.joint import JointMethodQRE
 #   20 hypotheses: ~0.04 rad spacing, balanced for most uses
 #   30 hypotheses: ~0.025 rad spacing, matches production experiments
 #   50 hypotheses: ~0.015 rad spacing, high precision for research
-DEFAULT_NUM_EXECUTION_SKILLS = 30
+DEFAULT_NUM_EXECUTION_SKILLS = 50
 
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
@@ -347,7 +347,7 @@ def save_player_data_by_games(
 
     print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
     try:
-        shot_maps = get_games_shot_maps_batch(game_ids)
+        shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
     except Exception as e:
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
@@ -467,7 +467,7 @@ def save_player_data(
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
         try:
-            shot_maps = get_games_shot_maps_batch(game_ids)
+            shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
         except Exception as e:
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}
