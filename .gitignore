@@ -22,6 +22,12 @@ slurm-*.out
 Experiments/**/times/
 Experiments/**/plots/
 Experiments/**/logs/
+
+# Player data outputs (pkl, timing, plots)
+Data/**/data/
+Data/**/times/
+Data/**/plots/
+Data/**/logs/
 /.idea/dictionaries
 /.idea
 *.so

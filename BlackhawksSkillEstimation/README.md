@@ -57,7 +57,7 @@ python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
   44604 270247 \
   --candidate-skills 0.004 0.1 0.2 0.3 0.4 0.5 0.6 0.785 \
   --num-planning-skills 25 \
-  --results-folder Experiments/blackhawks-jeeds \
+  --data-dir Data/Hockey \
   --rng-seed 0
 ```
 
@@ -66,9 +66,17 @@ python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
 - **Rationality**: Dimensionless optimality measure. **Higher = better decision-maker**
   (EXPERIMENTAL - see notes above)
 
-The command prints the MAP execution-skill estimate and creates any missing
-`Experiments/blackhawks-jeeds/times/estimators` folders that JEEDS expects when
-writing timing metadata.
+The command prints the MAP execution-skill estimate. All per-player outputs
+(timing logs, intermediate estimate CSVs, plots) are stored under
+`Data/Hockey/player_{id}/` in the following subdirectories:
+
+```
+player_{id}/
+  data/    # .pkl files (shots + shot_maps)
+  logs/    # intermediate estimate CSVs + convergence PNGs
+  plots/   # angular heatmap and rink visualization PNGs
+  times/   # JT-QRE-Times-* estimator timing logs
+```
 
 ## API highlights
 

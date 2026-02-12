@@ -26,11 +26,11 @@ Typical usage
 
     # One shot's angular heatmap (needs its value_map and player location)
     plot_shot_angular_heatmap(value_map, player_location, executed_action,
-                              save_path="Data/Hockey/plots/angular/shot_42.png")
+                              save_path="Data/Hockey/player_950160/plots/angular/shot_42.png")
 
     # Rink diagram with scattered shots
     plot_shot_rink(player_locations, executed_actions,
-                    save_path="Data/Hockey/plots/rink/player_950160.png")
+                    save_path="Data/Hockey/player_950160/plots/rink/all_shots.png")
 
     # Convergence (wraps plot_intermediate_estimates)
     plot_player_convergence(csv_path="Data/Hockey/player_950160/logs/intermediate_estimates_20242025.csv")
@@ -75,8 +75,8 @@ _GOAL_LINE_X = 89
 _LEFT_POST = np.array([_GOAL_LINE_X, -3])
 _RIGHT_POST = np.array([_GOAL_LINE_X,  3])
 
-# Default output base
-_DEFAULT_PLOT_DIR = Path("Data/Hockey/plots")
+# Default base directory for player data
+_DEFAULT_DATA_DIR = Path("Data/Hockey")
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ def plot_shot_angular_heatmap(
         _ensure_dir(out_path.parent)
         fig.savefig(out_path, bbox_inches="tight", dpi=150)
     elif not show:
-        out_path = _DEFAULT_PLOT_DIR / "angular" / "shot.png"
+        out_path = _DEFAULT_DATA_DIR / "plots" / "angular" / "shot.png"
         _ensure_dir(out_path.parent)
         fig.savefig(out_path, bbox_inches="tight", dpi=150)
 
@@ -334,7 +334,7 @@ def plot_shot_rink(
         _ensure_dir(out_path.parent)
         plt.savefig(out_path, bbox_inches="tight", dpi=150)
     elif not show:
-        out_path = _DEFAULT_PLOT_DIR / "rink" / "shots.png"
+        out_path = _DEFAULT_DATA_DIR / "plots" / "rink" / "shots.png"
         _ensure_dir(out_path.parent)
         plt.savefig(out_path, bbox_inches="tight", dpi=150)
 
@@ -367,7 +367,7 @@ def plot_player_convergence(
     csv_path : Path | str
         Path to the intermediate estimates CSV.
     save_path : Path | str | None
-        Output figure path; defaults to placing ``*.png`` next to the CSV.
+        Output figure path; defaults to ``logs/<csv_name>.png`` (next to the CSV).
     show : bool
         Show interactively instead of saving.
     title : str | None
@@ -436,7 +436,7 @@ def plot_player_shots_from_offline(
         Maximum number of shots to render angular heatmaps for.
     output_dir : Path | str | None
         Where to write figures.  Defaults to
-        ``Data/Hockey/plots/player_{id}/``.
+        ``Data/Hockey/player_{id}/plots/``.
 
     Returns
     -------
@@ -449,7 +449,7 @@ def plot_player_shots_from_offline(
 
     data_dir = Path(data_dir)
     if output_dir is None:
-        output_dir = _DEFAULT_PLOT_DIR / f"player_{player_id}"
+        output_dir = data_dir / f"player_{player_id}" / "plots"
     output_dir = Path(output_dir)
 
     # Load data

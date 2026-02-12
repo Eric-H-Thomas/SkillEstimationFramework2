@@ -321,9 +321,16 @@ def transform_shots_for_jeeds(
     return JEEDSInputs(spaces_per_shot=spaces_per_shot, actions=actions, info_rows=info_rows)
 
 
-def ensure_results_directories(results_folder: Path) -> None:
-    times_dir = results_folder / "times" / "estimators"
-    times_dir.mkdir(parents=True, exist_ok=True)
+def ensure_player_directories(player_dir: Path) -> None:
+    """Create the standard per-player subdirectory layout.
+
+    Creates ``data/``, ``logs/``, ``plots/``, and ``times/estimators/``
+    beneath *player_dir*.
+    """
+    (player_dir / "data").mkdir(parents=True, exist_ok=True)
+    (player_dir / "logs").mkdir(parents=True, exist_ok=True)
+    (player_dir / "plots").mkdir(parents=True, exist_ok=True)
+    (player_dir / "times" / "estimators").mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache(maxsize=256)
@@ -380,10 +387,11 @@ def save_player_data_by_games(
     """
     output_dir = Path(output_dir)
     player_dir = output_dir / f"player_{player_id}"
-    player_dir.mkdir(parents=True, exist_ok=True)
+    data_dir_path = player_dir / "data"
+    data_dir_path.mkdir(parents=True, exist_ok=True)
 
-    shots_path = player_dir / f"shots_{tag}.pkl"
-    maps_path = player_dir / f"shot_maps_{tag}.pkl"
+    shots_path = data_dir_path / f"shots_{tag}.pkl"
+    maps_path = data_dir_path / f"shot_maps_{tag}.pkl"
 
     # Check for existing files
     if not overwrite and shots_path.exists() and maps_path.exists():
@@ -445,14 +453,24 @@ def load_player_data_by_games(
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / f"player_{player_id}"
+    data_subdir = player_dir / "data"
 
-    shots_path = player_dir / f"shots_{tag}.pkl"
-    maps_path = player_dir / f"shot_maps_{tag}.pkl"
+    shots_path = data_subdir / f"shots_{tag}.pkl"
+    maps_path = data_subdir / f"shot_maps_{tag}.pkl"
 
+    # Fall back to legacy layout (files directly in player_dir)
     if not shots_path.exists():
-        raise FileNotFoundError(f"Missing shots file: {shots_path}")
+        legacy_shots = player_dir / f"shots_{tag}.pkl"
+        if legacy_shots.exists():
+            shots_path = legacy_shots
+        else:
+            raise FileNotFoundError(f"Missing shots file: {shots_path}")
     if not maps_path.exists():
-        raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+        legacy_maps = player_dir / f"shot_maps_{tag}.pkl"
+        if legacy_maps.exists():
+            maps_path = legacy_maps
+        else:
+            raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
 
     with open(shots_path, "rb") as f:
         df = pickle.load(f)
@@ -470,7 +488,7 @@ def save_player_data(
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
 
-    Creates pickle files in ``output_dir/player_{player_id}/`` with:
+    Creates pickle files in ``output_dir/player_{player_id}/data/`` with:
     - ``shots_{season}.pkl``: DataFrame of shots for that season
     - ``shot_maps_{season}.pkl``: Dict mapping event_id -> shot_map_data
 
@@ -493,13 +511,14 @@ def save_player_data(
     """
     output_dir = Path(output_dir)
     player_dir = output_dir / f"player_{player_id}"
-    player_dir.mkdir(parents=True, exist_ok=True)
+    data_dir_path = player_dir / "data"
+    data_dir_path.mkdir(parents=True, exist_ok=True)
 
     saved_files: dict[int, dict[str, Path]] = {}
 
     for season in seasons:
-        shots_path = player_dir / f"shots_{season}.pkl"
-        maps_path = player_dir / f"shot_maps_{season}.pkl"
+        shots_path = data_dir_path / f"shots_{season}.pkl"
+        maps_path = data_dir_path / f"shot_maps_{season}.pkl"
 
         # Check for existing files
         if not overwrite and shots_path.exists() and maps_path.exists():
@@ -569,18 +588,28 @@ def load_player_data(
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / f"player_{player_id}"
+    data_subdir = player_dir / "data"
 
     all_dfs: list[pd.DataFrame] = []
     all_shot_maps: dict[int, dict[str, object]] = {}
 
     for season in seasons:
-        shots_path = player_dir / f"shots_{season}.pkl"
-        maps_path = player_dir / f"shot_maps_{season}.pkl"
+        shots_path = data_subdir / f"shots_{season}.pkl"
+        maps_path = data_subdir / f"shot_maps_{season}.pkl"
 
+        # Fall back to legacy layout (files directly in player_dir)
         if not shots_path.exists():
-            raise FileNotFoundError(f"Missing shots file: {shots_path}")
+            legacy_shots = player_dir / f"shots_{season}.pkl"
+            if legacy_shots.exists():
+                shots_path = legacy_shots
+            else:
+                raise FileNotFoundError(f"Missing shots file: {shots_path}")
         if not maps_path.exists():
-            raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+            legacy_maps = player_dir / f"shot_maps_{season}.pkl"
+            if legacy_maps.exists():
+                maps_path = legacy_maps
+            else:
+                raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
 
         with open(shots_path, "rb") as f:
             df = pickle.load(f)
@@ -600,18 +629,20 @@ def _run_jeeds_estimation(
     player_id: int,
     candidate_skills: list[float],
     num_planning_skills: int,
-    results_folder: Path,
+    player_dir: Path,
     rng_seed: int | None,
     return_intermediate_estimates: bool,
     tag_suffix: str = "",
     preloaded_shot_maps: dict[int, dict[str, object]] | None = None,
     save_intermediate_csv: bool = False,
-    csv_output_dir: Path | str | None = None,
     csv_tag: str = "",
 ) -> dict[str, object]:
     """Internal helper to run JEEDS on a DataFrame of shots.
     
     Returns a result dict with execution_skill, rationality, num_shots, and optionally skill_log.
+    
+    Timing logs are written to ``player_dir/times/estimators/``.
+    Intermediate CSVs are written to ``player_dir/logs/``.
     
     If preloaded_shot_maps is provided, uses those instead of fetching from DB.
     If save_intermediate_csv is True, saves the skill_log to a CSV file.
@@ -652,8 +683,11 @@ def _run_jeeds_estimation(
             "warning": "No usable shot data remained after angular conversion.",
         }
 
-    estimator = JointMethodQRE(list(candidate_skills), num_planning_skills, "hockey-multi")
-    ensure_results_directories(results_folder)
+    estimator = JointMethodQRE(
+        list(candidate_skills), num_planning_skills, "hockey-multi",
+        times_base_dir=str(player_dir),
+    )
+    ensure_player_directories(player_dir)
 
     rng = np.random.default_rng(rng_seed)
     tag = f"Player_{player_id}{tag_suffix}"
@@ -675,7 +709,7 @@ def _run_jeeds_estimation(
             spaces,
             state=None,
             action=action,
-            resultsFolder=str(results_folder),
+            resultsFolder=str(player_dir),
             tag=tag,
             infoPerRow=info,
             s=str(idx),
@@ -727,11 +761,11 @@ def _run_jeeds_estimation(
         result["skill_log"] = skill_log
     
     # Save CSV if requested
-    if save_intermediate_csv and csv_output_dir and skill_log:
+    if save_intermediate_csv and skill_log:
         csv_path = save_intermediate_estimates_csv(
             skill_log=skill_log,
             player_id=player_id,
-            output_dir=csv_output_dir,
+            output_dir=player_dir,
             tag=csv_tag,
         )
         result["csv_path"] = str(csv_path)
@@ -747,7 +781,6 @@ def estimate_player_skill(
     per_season: bool = True,
     candidate_skills: Sequence[float] | None = None,
     num_planning_skills: int = DEFAULT_NUM_PLANNING_SKILLS,
-    results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
     return_intermediate_estimates: bool = False,
     save_intermediate_csv: bool = False,
@@ -779,8 +812,6 @@ def estimate_player_skill(
         Execution-skill hypotheses for JEEDS (defaults to 50 values in [0.004, π/4]).
     num_planning_skills : int
         Number of planning-skill hypotheses passed to JEEDS.
-    results_folder : Path | str
-        Directory where JEEDS timing hooks can write logs.
     rng_seed : int | None
         Seed for the numpy random generator used during estimation.
     return_intermediate_estimates : bool
@@ -788,7 +819,9 @@ def estimate_player_skill(
     save_intermediate_csv : bool
         If True, save intermediate estimates to a CSV file under data_dir/player_{id}/logs/.
     data_dir : Path | str
-        Base directory for saving CSV files. Default is "Data/Hockey".
+        Base directory for player data. Default is "Data/Hockey".
+        Each player's outputs (timing logs, CSVs, plots) live under
+        ``data_dir/player_{id}/{data,logs,plots,times}/``.
     confirm : bool
         If True (default), prompt for confirmation before running estimation.
         Set to False for batch/automated runs.
@@ -819,7 +852,6 @@ def estimate_player_skill(
     candidate_skills = list(
         candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
     )
-    results_folder = Path(results_folder)
     data_dir = Path(data_dir)
     player_data_dir = data_dir / f"player_{player_id}"
 
@@ -853,13 +885,12 @@ def estimate_player_skill(
                     player_id=player_id,
                     candidate_skills=candidate_skills,
                     num_planning_skills=num_planning_skills,
-                    results_folder=results_folder,
+                    player_dir=player_data_dir,
                     rng_seed=rng_seed,
                     return_intermediate_estimates=return_intermediate_estimates,
                     tag_suffix=f"_S{season}",
                     preloaded_shot_maps=preloaded_shot_maps,
                     save_intermediate_csv=save_intermediate_csv,
-                    csv_output_dir=player_data_dir,
                     csv_tag=str(season),
                 )
                 season_result["season"] = int(season)
@@ -879,12 +910,11 @@ def estimate_player_skill(
                 player_id=player_id,
                 candidate_skills=candidate_skills,
                 num_planning_skills=num_planning_skills,
-                results_folder=results_folder,
+                player_dir=player_data_dir,
                 rng_seed=rng_seed,
                 return_intermediate_estimates=return_intermediate_estimates,
                 preloaded_shot_maps=preloaded_shot_maps,
                 save_intermediate_csv=save_intermediate_csv,
-                csv_output_dir=player_data_dir,
                 csv_tag="aggregate",
             )
 
@@ -908,11 +938,10 @@ def estimate_player_skill(
             player_id=player_id,
             candidate_skills=candidate_skills,
             num_planning_skills=num_planning_skills,
-            results_folder=results_folder,
+            player_dir=player_data_dir,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
             save_intermediate_csv=save_intermediate_csv,
-            csv_output_dir=player_data_dir,
             csv_tag="games",
         )
 
@@ -946,11 +975,10 @@ def estimate_player_skill(
             player_id=player_id,
             candidate_skills=candidate_skills,
             num_planning_skills=num_planning_skills,
-            results_folder=results_folder,
+            player_dir=player_data_dir,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
             save_intermediate_csv=save_intermediate_csv,
-            csv_output_dir=player_data_dir,
             csv_tag="aggregate",
         )
 
@@ -967,12 +995,11 @@ def estimate_player_skill(
             player_id=player_id,
             candidate_skills=candidate_skills,
             num_planning_skills=num_planning_skills,
-            results_folder=results_folder,
+            player_dir=player_data_dir,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
             tag_suffix=f"_S{season}",
             save_intermediate_csv=save_intermediate_csv,
-            csv_output_dir=player_data_dir,
             csv_tag=str(season),
         )
         season_result["season"] = int(season)
@@ -992,9 +1019,9 @@ def estimate_multiple_players(
     *,
     candidate_skills: Sequence[float] | None = None,
     num_planning_skills: int = DEFAULT_NUM_PLANNING_SKILLS,
-    results_folder: Path | str = Path("blackhawks-jeeds"),
     rng_seed: int | None = 0,
     capture_skill_logs: bool = False,
+    data_dir: Path | str = Path("Data/Hockey"),
 ) -> list[dict[str, object]]:
     """Estimate execution skill and rationality for multiple players.
 
@@ -1031,9 +1058,9 @@ def estimate_multiple_players(
                 game_ids=game_ids,
                 candidate_skills=candidate_skills,
                 num_planning_skills=num_planning_skills,
-                results_folder=results_folder,
                 rng_seed=rng_seed,
                 return_intermediate_estimates=capture_skill_logs,
+                data_dir=data_dir,
                 confirm=False,  # Disable confirmation for batch runs
             )
             player_result["player_id"] = player_id
@@ -1079,10 +1106,10 @@ def _parse_args() -> argparse.Namespace:
         help=f"Number of planning-skill hypotheses passed to JEEDS (defaults to {DEFAULT_NUM_PLANNING_SKILLS}).",
     )
     parser.add_argument(
-        "--results-folder",
+        "--data-dir",
         type=Path,
-        default=Path("Experiments/blackhawks-jeeds"),
-        help="Directory where JEEDS timing hooks can write logs.",
+        default=Path("Data/Hockey"),
+        help="Base directory for player data (default: Data/Hockey).",
     )
     parser.add_argument(
         "--rng-seed",
@@ -1109,9 +1136,9 @@ def main() -> None:
         game_ids=args.game_ids,
         candidate_skills=args.candidate_skills,
         num_planning_skills=args.num_planning_skills,
-        results_folder=args.results_folder,
         rng_seed=args.rng_seed,
         capture_skill_logs=args.capture_logs,
+        data_dir=args.data_dir,
     )
     
     # Print results summary

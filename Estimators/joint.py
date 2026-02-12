@@ -228,7 +228,7 @@ class JointMethodQRE:
         return ""
 
     def __init__(self, execution_skills, num_rationality_levels, domain_name, given_prior=False, min_lambda=False,
-                 other_args=None):
+                 other_args=None, *, times_base_dir=None):
         """Initialize a joint estimator over execution skills and rationality levels.
 
         Parameters
@@ -245,11 +245,17 @@ class JointMethodQRE:
                 Whether to shift the minimum lambda value when building rationality priors.
         other_args : dict | None
                 Additional tuning parameters used when givenPrior/minLambda are enabled.
+        times_base_dir : str | None
+                If set, timing logs are written under ``<times_base_dir>/times/estimators/``
+                instead of the default ``Experiments/<resultsFolder>/times/estimators/``.
+                Useful when the caller manages its own output directory layout
+                (e.g. per-player directories under ``Data/``).
         """
 
         self.execution_skills = execution_skills
         self.num_rationality_levels = num_rationality_levels
         self.domain_name = domain_name
+        self._times_base_dir = times_base_dir
         self.method_type = "JT-QRE"  # (same thing as JEEDS)
 
         # Baseline names used for MAP and EES estimates
@@ -565,7 +571,11 @@ class JointMethodQRE:
               "\n")
 
         # Ensure output folders exist
-        times_dir = os.path.join("Experiments", results_folder, "times")
+        if self._times_base_dir is not None:
+            base_dir = self._times_base_dir
+        else:
+            base_dir = os.path.join("Experiments", results_folder)
+        times_dir = os.path.join(base_dir, "times")
         estimators_dir = os.path.join(times_dir, "estimators")
         os.makedirs(estimators_dir, exist_ok=True)
 

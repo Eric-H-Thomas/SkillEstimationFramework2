@@ -95,7 +95,8 @@ def plot_intermediate_estimates(
     csv_path : Path | str
         Intermediate-estimates CSV produced by ``BlackhawksJEEDS``.
     output_path : Path | str | None
-        Destination PNG.  Defaults to ``<csv_path>.png``.
+        Destination PNG.  Defaults to the CSV path with a ``.png`` suffix
+        (i.e. next to the CSV in ``logs/``).
     title, show, figsize
         Standard matplotlib knobs.
 
@@ -109,7 +110,11 @@ def plot_intermediate_estimates(
     if not data["shot_count"]:
         raise ValueError(f"No data in {csv_path}")
 
-    output_path = Path(output_path) if output_path else csv_path.with_suffix(".png")
+    if output_path is not None:
+        output_path = Path(output_path)
+    else:
+        # Keep convergence PNGs next to their CSVs in logs/
+        output_path = csv_path.with_suffix(".png")
     title = title or _auto_title(csv_path)
 
     fig, ax_skill = plt.subplots(figsize=figsize)
