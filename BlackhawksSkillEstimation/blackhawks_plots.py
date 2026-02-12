@@ -62,14 +62,6 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# Value-map dimensions produced by BlackhawksAPI.queries
-_BH_VALUE_MAP_Z = 72   # axis-0 = Z (vertical, 72 pixels)
-_BH_VALUE_MAP_Y = 120  # axis-1 = Y (lateral, 120 pixels)
-
-# SpacesHockey target grid sizes (hardcoded in setupSpaces.py)
-_SPACES_NUM_Z = 40
-_SPACES_NUM_Y = 60
-
 # Rink geometry (feet, NHL standard)
 _GOAL_LINE_X = 89
 _LEFT_POST = np.array([_GOAL_LINE_X, -3])
@@ -77,6 +69,14 @@ _RIGHT_POST = np.array([_GOAL_LINE_X,  3])
 
 # Default base directory for player data
 _DEFAULT_DATA_DIR = Path("Data/Hockey")
+
+# Blackhawks value-map native shape (from Snowflake queries.py)
+_BH_VALUE_MAP_Z = 72
+_BH_VALUE_MAP_Y = 120
+
+# SpacesHockey grid dimensions (what getAngularHeatmap expects by default)
+_SPACES_NUM_Y = 60
+_SPACES_NUM_Z = 40
 
 
 # ---------------------------------------------------------------------------
@@ -89,36 +89,25 @@ def _ensure_dir(path: Path) -> Path:
     return path
 
 
+def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
+    """Build a brighter custom colormap for heatmap scatter plots."""
+    n = plt.cm.jet.N
+    cmap = (1.0 - brightness) * plt.get_cmap(base)(np.linspace(0.0, 1.0, n)) + brightness * np.ones((n, 4))
+    return ListedColormap(cmap)
+
+
 def _resize_value_map(value_map: np.ndarray) -> np.ndarray:
-    """Resize a Blackhawks value_map to framework grid dimensions.
+    """Downsample a Blackhawks value map to SpacesHockey grid dimensions.
 
-    The Blackhawks value_map from ``queries.py`` has shape (72, 120) with
-    axis-0 = Z and axis-1 = Y.  ``getAngularHeatmap`` expects shape
-    ``(len(Z), len(Y))`` = ``(40, 60)``, matching the ``SpacesHockey``
-    target grids.
-
-    Parameters
-    ----------
-    value_map : np.ndarray
-        Raw value map with shape ``(72, 120)``.
-
-    Returns
-    -------
-    np.ndarray
-        Resized array with shape ``(40, 60)``.
+    The raw maps from Snowflake are (72, 120) = (Z, Y).  The angular
+    transform in ``getAngularHeatmap`` expects (40, 60) matching the
+    SpacesHockey grid.
     """
     return zoom(
         value_map,
         (_SPACES_NUM_Z / value_map.shape[0], _SPACES_NUM_Y / value_map.shape[1]),
         order=1,
     )
-
-
-def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
-    """Build a brighter custom colormap for heatmap scatter plots."""
-    n = plt.cm.jet.N
-    cmap = (1.0 - brightness) * plt.get_cmap(base)(np.linspace(0.0, 1.0, n)) + brightness * np.ones((n, 4))
-    return ListedColormap(cmap)
 
 
 # ---------------------------------------------------------------------------
@@ -179,13 +168,15 @@ def plot_shot_angular_heatmap(
 ) -> Path | None:
     """Side-by-side Cartesian vs angular heatmap for one shot.
 
-    Resizes the Blackhawks value_map to the framework grid, runs the
-    angular transform, and produces a two-panel figure.
+    Downsamples the value_map from native Snowflake resolution to the
+    SpacesHockey grid (40×60), runs the angular transform, and produces
+    a two-panel figure.
 
     Parameters
     ----------
     value_map : np.ndarray
-        Raw value map from ``queries.py`` with shape ``(72, 120)``.
+        Raw value map from ``queries.py`` with shape ``(Z, Y)``
+        (e.g. ``(72, 120)`` at native Blackhawks resolution).
     player_location : sequence of float
         ``[x, y]`` rink coordinates of the shooter.
     executed_action : sequence of float
@@ -208,6 +199,7 @@ def plot_shot_angular_heatmap(
     Path | None
         Path of the saved figure, or None if only ``show=True``.
     """
+    # Downsample to the 40×60 grid expected by getAngularHeatmap.
     heatmap = _resize_value_map(value_map)
 
     (
@@ -221,15 +213,17 @@ def plot_shot_angular_heatmap(
         executedActionAngular,
         skip,
         _,
-    ) = getAngularHeatmap(heatmap, np.asarray(player_location), np.asarray(executed_action))
+    ) = getAngularHeatmap(
+        heatmap, np.asarray(player_location), np.asarray(executed_action),
+    )
 
     if skip:
         print("Warning: angular heatmap skipped (player location too close to goal line).")
         return None
 
-    # Build Cartesian target grid (matches SpacesHockey)
+    # Build Cartesian target grid matching the downsampled heatmap.
     Y = np.linspace(-3.0, 3.0, _SPACES_NUM_Y)
-    Z = np.linspace(0.0, 4.0, _SPACES_NUM_Z)
+    Z = np.linspace( 0.0, 4.0, _SPACES_NUM_Z)
     tY, tZ = np.meshgrid(Y, Z)
     cartesian_targets = np.stack((tY, tZ), axis=-1).reshape(-1, 2)
 

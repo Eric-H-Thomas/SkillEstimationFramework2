@@ -47,6 +47,14 @@ from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
 
 
+# Net center position used for proximity filtering (NHL standard).
+_NET_CENTER = np.array([89.0, 0.0])
+
+# Minimum distance (in feet) from the net center below which a shot is
+# discarded.  The Blackhawks analytics team cannot accurately model shots
+# taken within this radius, so including them would add noise.
+MIN_DISTANCE_FROM_NET_FT = 10.0
+
 # Default number of execution skill hypotheses for JEEDS estimation.
 # Trade-off between resolution and computational cost:
 #   10 hypotheses: ~0.08 rad spacing, fast, good for testing
@@ -186,6 +194,7 @@ class JEEDSInputs:
     spaces_per_shot: list[SimpleHockeySpaces]
     actions: list[list[float]]
     info_rows: list[dict[str, object]]
+    skipped_proximity: int = 0
 
 
 # ============================================================================
@@ -236,6 +245,8 @@ def transform_shots_for_jeeds(
 
     df = df.rename(columns=str.lower)
 
+    skipped_proximity = 0
+
     info_rows: list[dict[str, object]] = []
     actions: list[list[float]] = []
     spaces_per_shot: list[SimpleHockeySpaces] = []
@@ -246,19 +257,28 @@ def transform_shots_for_jeeds(
         # Skip shots without precomputed Blackhawks reward surfaces
         if event_id not in shot_maps:
             continue
-        
+
+        player_location = np.array([float(row["start_x"]), float(row["start_y"])])
+        executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
+
+        # ---- 10-ft net proximity filter ----
+        # The Blackhawks analytics team cannot accurately gather data for
+        # shots taken within a 10-ft radius of the net center.  Discard
+        # them before they enter the estimation pipeline.
+        dist_to_net = np.linalg.norm(player_location - _NET_CENTER)
+        if dist_to_net < MIN_DISTANCE_FROM_NET_FT:
+            skipped_proximity += 1
+            continue
+
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]
-        
+
         # Resize xG map from (72, 120) = (Z, Y) to (40, 60) = (len(Z), len(Y))
         # queries.py produces axis-0=Z(72), axis-1=Y(120) after .T and flip.
         # getAngularHeatmap expects shape (len(Z), len(Y)) from meshgrid(Y, Z).
         base_ev = zoom(base_ev, (40 / base_ev.shape[0], 60 / base_ev.shape[1]), order=1)
 
-        player_location = np.array([float(row["start_x"]), float(row["start_y"])])
-        executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
-
-        # Convert Blackhawks Cartesian reward surface to anglular coordinates
+        # Convert Blackhawks Cartesian reward surface to angular coordinates.
         (
             dirs,
             elevations,
@@ -318,7 +338,15 @@ def transform_shots_for_jeeds(
         actions.append([float(executed_action_angular[0]), float(executed_action_angular[1])])
         spaces_per_shot.append(spaces)
 
-    return JEEDSInputs(spaces_per_shot=spaces_per_shot, actions=actions, info_rows=info_rows)
+    if skipped_proximity:
+        print(f"  Filtered {skipped_proximity} shot(s) within {MIN_DISTANCE_FROM_NET_FT}ft of the net.")
+
+    return JEEDSInputs(
+        spaces_per_shot=spaces_per_shot,
+        actions=actions,
+        info_rows=info_rows,
+        skipped_proximity=skipped_proximity,
+    )
 
 
 def ensure_player_directories(player_dir: Path) -> None:
@@ -681,6 +709,7 @@ def _run_jeeds_estimation(
             "num_shots": 0,
             "status": "no_usable_shots",
             "warning": "No usable shot data remained after angular conversion.",
+            "skipped_proximity": jeeds_inputs.skipped_proximity,
         }
 
     estimator = JointMethodQRE(

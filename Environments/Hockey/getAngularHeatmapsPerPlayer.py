@@ -101,7 +101,17 @@ def getAngle(point1, point2):
 
 
 def getAngularHeatmap(heatmap, playerLocation, executedAction):
-    """Convert a Cartesian heatmap for one shot into angular space."""
+    """Convert a Cartesian heatmap for one shot into angular space.
+
+    Parameters
+    ----------
+    heatmap : np.ndarray
+        2-D utility/value map with shape ``(len(Z), len(Y))``.
+    playerLocation : array-like
+        ``[x, y]`` rink coordinates of the shooter.
+    executedAction : array-like
+        ``[y, z]`` goal-face coordinates where the shot ended up.
+    """
 
     rng = np.random.default_rng(1000)
 
