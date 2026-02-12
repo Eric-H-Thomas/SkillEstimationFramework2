@@ -239,7 +239,8 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
             )
             prev = np.copy(pdfs)
 
-            pdfs /= np.sum(pdfs)
+            with np.errstate(invalid="ignore"):
+                pdfs /= np.sum(pdfs)
 
             noise_distribution = sys.modules["domain"].draw_noise_sample(rng, mean, covMatrix)
             probability_density = noise_distribution.pdf(gridTargetsAngular)

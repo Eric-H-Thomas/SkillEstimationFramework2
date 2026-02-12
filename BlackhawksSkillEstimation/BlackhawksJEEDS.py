@@ -58,7 +58,7 @@ DEFAULT_NUM_EXECUTION_SKILLS = 50
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
 # Default used to be 25, so consider that for research computation.
-DEFAULT_NUM_PLANNING_SKILLS = 25
+DEFAULT_NUM_PLANNING_SKILLS = 100
 
 
 def save_intermediate_estimates_csv(
@@ -250,9 +250,10 @@ def transform_shots_for_jeeds(
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]
         
-        # Resize xG map from 72x120 (queries.py) to 60x40 (expected by getAngularHeatmap)
-        # The zoom factors are: 60/72 ≈ 0.833 for Y, 40/120 ≈ 0.333 for Z
-        base_ev = zoom(base_ev, (60 / base_ev.shape[0], 40 / base_ev.shape[1]), order=1)
+        # Resize xG map from (72, 120) = (Z, Y) to (40, 60) = (len(Z), len(Y))
+        # queries.py produces axis-0=Z(72), axis-1=Y(120) after .T and flip.
+        # getAngularHeatmap expects shape (len(Z), len(Y)) from meshgrid(Y, Z).
+        base_ev = zoom(base_ev, (40 / base_ev.shape[0], 60 / base_ev.shape[1]), order=1)
 
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])

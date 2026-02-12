@@ -6259,6 +6259,7 @@ def plotPercentRandMaxRewardObtainedPerXskillPerAgentType(processedRFsAgentNames
 		
 		plt.xlabel(r'\textbf{Rationality Parameter}')
 		plt.ylabel(r'\textbf{Rationality Percentage}')
+		plt.xscale('log')
 		
 
 		# sm = ScalarMappable(norm = norm, cmap = cmap)

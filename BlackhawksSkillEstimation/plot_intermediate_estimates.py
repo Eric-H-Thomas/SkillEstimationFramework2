@@ -1,13 +1,20 @@
 """Plot intermediate JEEDS estimates over shots.
 
-This module provides functions to visualize how execution skill and rationality
-estimates evolve as the JEEDS estimator observes more shots. Useful for
-understanding convergence behavior and comparing MAP vs. expected estimates.
+Visualizes how execution skill and rationality estimates evolve as the
+JEEDS estimator processes more shots.  Rationality (lambda) is always
+plotted on a **logarithmic** y-axis because the underlying hypothesis
+grid is built with ``np.logspace`` (see ``Estimators/joint.py``).
 
-Example
--------
-from BlackhawksSkillEstimation.plot_intermediate_estimates import plot_intermediate_estimates
-plot_intermediate_estimates("Data/Hockey/player_950160/logs/intermediate_estimates_20242025.csv")
+Public API
+----------
+load_intermediate_estimates
+    Parse a per-shot CSV into a dict of float arrays.
+plot_intermediate_estimates
+    Dual-axis convergence plot (skill left, rationality right) for one CSV.
+plot_all_intermediate_for_player
+    Batch-plot every CSV found under a player's ``logs/`` directory.
+plot_comparison
+    Overlay one metric from several CSVs (e.g. cross-player or cross-season).
 """
 from __future__ import annotations
 
@@ -19,19 +26,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
 def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
-    """Load intermediate estimates from a CSV file.
-    
-    Parameters
-    ----------
-    csv_path : Path | str
-        Path to the CSV file with columns: shot_count, expected_execution_skill,
-        map_execution_skill, expected_rationality, map_rationality.
-    
-    Returns
-    -------
-    dict
-        Dictionary with keys matching column names, values as lists of floats.
+    """Load an intermediate-estimates CSV into a dict of float lists.
+
+    Expected columns: ``shot_count``, ``expected_execution_skill``,
+    ``map_execution_skill``, ``expected_rationality``, ``map_rationality``.
     """
     csv_path = Path(csv_path)
     data: dict[str, list[float]] = {
@@ -41,18 +44,39 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
         "expected_rationality": [],
         "map_rationality": [],
     }
-    
-    with open(csv_path, "r", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+    with open(csv_path, newline="") as f:
+        for row in csv.DictReader(f):
             data["shot_count"].append(int(row["shot_count"]))
             data["expected_execution_skill"].append(float(row["expected_execution_skill"]))
             data["map_execution_skill"].append(float(row["map_execution_skill"]))
             data["expected_rationality"].append(float(row["expected_rationality"]))
             data["map_rationality"].append(float(row["map_rationality"]))
-    
     return data
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _auto_title(csv_path: Path) -> str:
+    """Derive a human-readable title from the CSV path."""
+    parts = csv_path.stem.replace("intermediate_estimates", "").strip("_")
+    player_id = csv_path.parent.parent.name.replace("player_", "")
+
+    if parts.isdigit() and len(parts) == 8:
+        tag = f"{parts[:4]}-{parts[4:]}"
+    elif parts:
+        tag = parts
+    else:
+        tag = None
+
+    base = f"JEEDS Convergence – Player {player_id}"
+    return f"{base} ({tag})" if tag else base
+
+
+# ---------------------------------------------------------------------------
+# Single-CSV convergence plot
+# ---------------------------------------------------------------------------
 
 def plot_intermediate_estimates(
     csv_path: Path | str,
@@ -61,182 +85,108 @@ def plot_intermediate_estimates(
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
 ) -> Path:
-    """Plot intermediate estimates from a CSV file.
-    
-    Creates a dual-axis line plot showing how estimates evolve over shots:
-    - Left y-axis: Execution skill estimates (in radians)
-    - Right y-axis: Rationality estimates (unitless)
-    
+    """Dual-axis convergence plot of execution skill and rationality.
+
+    Left y-axis (linear): execution skill in radians (lower = better).
+    Right y-axis (**log**): rationality / lambda (higher = better).
+
     Parameters
     ----------
     csv_path : Path | str
-        Path to the intermediate estimates CSV file.
+        Intermediate-estimates CSV produced by ``BlackhawksJEEDS``.
     output_path : Path | str | None
-        Where to save the plot. If None, saves alongside the CSV with .png extension.
-    title : str | None
-        Plot title. If None, auto-generates from filename.
-    show : bool
-        If True, display the plot interactively.
-    figsize : tuple[float, float]
-        Figure size in inches (width, height).
-    
+        Destination PNG.  Defaults to ``<csv_path>.png``.
+    title, show, figsize
+        Standard matplotlib knobs.
+
     Returns
     -------
     Path
-        Path to the saved plot image.
+        Path to the saved image.
     """
     csv_path = Path(csv_path)
     data = load_intermediate_estimates(csv_path)
-    
     if not data["shot_count"]:
-        raise ValueError(f"No data found in {csv_path}")
-    
-    # Determine output path
-    if output_path is None:
-        output_path = csv_path.with_suffix(".png")
-    else:
-        output_path = Path(output_path)
-    
-    # Auto-generate title from filename if not provided
-    if title is None:
-        # Extract player ID and tag from path
-        # e.g., "Data/Hockey/player_950160/logs/intermediate_estimates_20242025.csv"
-        parts = csv_path.stem.replace("intermediate_estimates", "").strip("_")
-        player_dir = csv_path.parent.parent.name  # "player_950160"
-        player_id = player_dir.replace("player_", "")
-        
-        # Format tag nicely - check if it's a season (8-digit number like 20242025)
-        if parts and parts.isdigit() and len(parts) == 8:
-            # Format as "2024-2025" season
-            tag = f"{parts[:4]}-{parts[4:]}"
-        elif parts:
-            tag = parts
-        else:
-            tag = None
-        
-        if tag:
-            title = f"JEEDS Estimate Convergence - Player {player_id} ({tag})"
-        else:
-            title = f"JEEDS Estimate Convergence - Player {player_id}"
-    
-    # Create figure with dual y-axes
-    fig, ax1 = plt.subplots(figsize=figsize)
-    ax2 = ax1.twinx()
-    
+        raise ValueError(f"No data in {csv_path}")
+
+    output_path = Path(output_path) if output_path else csv_path.with_suffix(".png")
+    title = title or _auto_title(csv_path)
+
+    fig, ax_skill = plt.subplots(figsize=figsize)
+    ax_rat = ax_skill.twinx()
+
     shots = data["shot_count"]
-    
-    # Plot execution skill on left axis (warm colors: orange/red)
-    line_ees_skill = ax1.plot(
-        shots, data["expected_execution_skill"],
-        color="#FF7F50",  # coral
-        linewidth=2,
-        label="EES",
-        linestyle="-",
-    )
-    line_map_skill = ax1.plot(
-        shots, data["map_execution_skill"],
-        color="#DC143C",  # crimson
-        linewidth=2,
-        label="MAP Skill",
-        linestyle="--",
-    )
-    
-    # Plot rationality on right axis (cool colors: blue/cyan)
-    line_ees_rat = ax2.plot(
-        shots, data["expected_rationality"],
-        color="#40E0D0",  # turquoise
-        linewidth=2,
-        label="EPS",
-        linestyle="-",
-    )
-    line_map_rat = ax2.plot(
-        shots, data["map_rationality"],
-        color="#4169E1",  # royal blue
-        linewidth=2,
-        label="MAP Rationality",
-        linestyle="--",
-    )
-    
-    # Labels and formatting
-    ax1.set_xlabel("Shot Count", fontsize=12)
-    ax1.set_ylabel("Execution Skill (radians, lower = better)", color="#DC143C", fontsize=11)
-    ax2.set_ylabel("Rationality (higher = better)", color="#4169E1", fontsize=11)
-    
-    ax1.tick_params(axis="y", labelcolor="#DC143C")
-    ax2.tick_params(axis="y", labelcolor="#4169E1")
-    
-    # Combine legends from both axes with transparency
-    lines = line_ees_skill + line_map_skill + line_ees_rat + line_map_rat
-    labels = [line.get_label() for line in lines]
-    legend = ax1.legend(
-        lines, labels,
-        loc="upper right",
-        fontsize=10,
-        framealpha=0.7,
-        fancybox=True,
-    )
-    
+
+    # Execution skill – warm colours, left axis
+    l1 = ax_skill.plot(shots, data["expected_execution_skill"],
+                       color="#FF7F50", lw=2, label="EES (skill)")
+    l2 = ax_skill.plot(shots, data["map_execution_skill"],
+                       color="#DC143C", lw=2, ls="--", label="MAP (skill)")
+
+    # Rationality – cool colours, right axis, LOG scale
+    l3 = ax_rat.plot(shots, data["expected_rationality"],
+                     color="#40E0D0", lw=2, label="EPS (rationality)")
+    l4 = ax_rat.plot(shots, data["map_rationality"],
+                     color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
+    ax_rat.set_yscale("log")
+
+    ax_skill.set_xlabel("Shot Count", fontsize=12)
+    ax_skill.set_ylabel("Execution Skill (rad, lower = better)",
+                        color="#DC143C", fontsize=11)
+    ax_rat.set_ylabel("Rationality (higher = better)",
+                      color="#4169E1", fontsize=11)
+    ax_skill.tick_params(axis="y", labelcolor="#DC143C")
+    ax_rat.tick_params(axis="y", labelcolor="#4169E1")
+
+    lines = l1 + l2 + l3 + l4
+    ax_skill.legend(lines, [l.get_label() for l in lines],
+                    loc="upper right", fontsize=10, framealpha=0.7)
+
     plt.title(title, fontsize=14)
     plt.tight_layout()
-    
-    # Save the plot
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-    
+    plt.show() if show else plt.close(fig)
     return output_path
 
+
+# ---------------------------------------------------------------------------
+# Batch: all CSVs for one player
+# ---------------------------------------------------------------------------
 
 def plot_all_intermediate_for_player(
     player_id: int,
     data_dir: Path | str = Path("Data/Hockey"),
     show: bool = False,
 ) -> list[Path]:
-    """Generate plots for all intermediate estimate CSVs for a player.
-    
-    Parameters
-    ----------
-    player_id : int
-        Player ID to process.
-    data_dir : Path | str
-        Base data directory containing player folders.
-    show : bool
-        If True, display each plot interactively.
-    
-    Returns
-    -------
-    list[Path]
-        Paths to all generated plot images.
-    """
-    data_dir = Path(data_dir)
-    logs_dir = data_dir / f"player_{player_id}" / "logs"
-    
-    if not logs_dir.exists():
-        print(f"No logs directory found at {logs_dir}")
-        return []
-    
-    csv_files = list(logs_dir.glob("intermediate_estimates*.csv"))
-    
-    if not csv_files:
-        print(f"No intermediate estimate CSVs found in {logs_dir}")
-        return []
-    
-    output_paths = []
-    for csv_file in csv_files:
-        print(f"Plotting {csv_file.name}...")
-        try:
-            output_path = plot_intermediate_estimates(csv_file, show=show)
-            output_paths.append(output_path)
-            print(f"  Saved: {output_path}")
-        except Exception as e:
-            print(f"  Error: {e}")
-    
-    return output_paths
+    """Generate convergence plots for every intermediate CSV of *player_id*.
 
+    Looks in ``<data_dir>/player_<id>/logs/intermediate_estimates*.csv``.
+    """
+    logs_dir = Path(data_dir) / f"player_{player_id}" / "logs"
+    if not logs_dir.exists():
+        print(f"No logs directory: {logs_dir}")
+        return []
+
+    csvs = sorted(logs_dir.glob("intermediate_estimates*.csv"))
+    if not csvs:
+        print(f"No CSVs in {logs_dir}")
+        return []
+
+    paths: list[Path] = []
+    for csv_file in csvs:
+        try:
+            p = plot_intermediate_estimates(csv_file, show=show)
+            paths.append(p)
+            print(f"  {csv_file.name} → {p.name}")
+        except Exception as exc:
+            print(f"  {csv_file.name}: {exc}")
+    return paths
+
+
+# ---------------------------------------------------------------------------
+# Multi-CSV comparison
+# ---------------------------------------------------------------------------
 
 def plot_comparison(
     csv_paths: Sequence[Path | str],
@@ -248,107 +198,72 @@ def plot_comparison(
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
 ) -> Path:
-    """Compare estimates across multiple CSV files (e.g., different players or seasons).
-    
+    """Overlay one metric from several CSVs.
+
     Parameters
     ----------
-    csv_paths : Sequence[Path | str]
-        List of CSV file paths to compare.
-    labels : Sequence[str] | None
-        Labels for each CSV file. If None, uses filenames.
-    output_path : Path | str | None
-        Where to save the plot.
-    title : str
-        Plot title.
     metric : str
-        Which metric to plot: "execution_skill" or "rationality".
+        ``"execution_skill"`` or ``"rationality"``.
     estimate_type : str
-        Which estimate type: "map", "expected" (EES/EPS), or "both".
-    show : bool
-        If True, display the plot interactively.
-    figsize : tuple[float, float]
-        Figure size in inches.
-    
-    Returns
-    -------
-    Path
-        Path to the saved plot image.
+        ``"map"``, ``"expected"``, or ``"both"``.
     """
     csv_paths = [Path(p) for p in csv_paths]
-    
-    if labels is None:
-        labels = [p.stem for p in csv_paths]
-    
-    if output_path is None:
-        output_path = csv_paths[0].parent / f"comparison_{metric}_{estimate_type}.png"
-    else:
-        output_path = Path(output_path)
-    
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    colors = plt.cm.tab10(np.linspace(0, 1, len(csv_paths)))
-    
-    # Map metric to column names
+    labels = list(labels) if labels else [p.stem for p in csv_paths]
+    output_path = (
+        Path(output_path) if output_path
+        else csv_paths[0].parent / f"comparison_{metric}_{estimate_type}.png"
+    )
+
     map_key = "map_execution_skill" if metric == "execution_skill" else "map_rationality"
-    expected_key = "expected_execution_skill" if metric == "execution_skill" else "expected_rationality"
-    expected_label = "EES" if metric == "execution_skill" else "EPS"
-    
-    for i, (csv_path, label) in enumerate(zip(csv_paths, labels)):
-        data = load_intermediate_estimates(csv_path)
+    exp_key = "expected_execution_skill" if metric == "execution_skill" else "expected_rationality"
+    exp_label = "EES" if metric == "execution_skill" else "EPS"
+
+    fig, ax = plt.subplots(figsize=figsize)
+    colours = plt.cm.tab10(np.linspace(0, 1, len(csv_paths)))
+
+    for i, (cp, label) in enumerate(zip(csv_paths, labels)):
+        data = load_intermediate_estimates(cp)
         shots = data["shot_count"]
-        
         if estimate_type in ("map", "both"):
-            ax.plot(
-                shots, data[map_key],
-                color=colors[i],
-                linewidth=2,
-                label=f"{label} (MAP)" if estimate_type == "both" else label,
-                linestyle="--" if estimate_type == "both" else "-",
-            )
-        
+            ax.plot(shots, data[map_key], color=colours[i], lw=2,
+                    label=f"{label} (MAP)" if estimate_type == "both" else label,
+                    ls="--" if estimate_type == "both" else "-")
         if estimate_type in ("expected", "both"):
-            ax.plot(
-                shots, data[expected_key],
-                color=colors[i],
-                linewidth=2,
-                label=f"{label} ({expected_label})" if estimate_type == "both" else label,
-                linestyle="-",
-                alpha=0.7 if estimate_type == "both" else 1.0,
-            )
-    
-    ylabel = "Execution Skill (radians)" if metric == "execution_skill" else "Rationality"
+            ax.plot(shots, data[exp_key], color=colours[i], lw=2,
+                    label=f"{label} ({exp_label})" if estimate_type == "both" else label,
+                    alpha=0.7 if estimate_type == "both" else 1.0)
+
+    ylabel = "Execution Skill (rad)" if metric == "execution_skill" else "Rationality"
     ax.set_xlabel("Shot Count", fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
+    if metric == "rationality":
+        ax.set_yscale("log")
+
     ax.legend(fontsize=10)
     plt.title(title, fontsize=14)
     plt.tight_layout()
-    
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-    
+    plt.show() if show else plt.close(fig)
     return output_path
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) < 2:
         print("Usage: python plot_intermediate_estimates.py <csv_path> [--show]")
         print("       python plot_intermediate_estimates.py --player <player_id> [--show]")
         sys.exit(1)
-    
+
     show = "--show" in sys.argv
-    
     if "--player" in sys.argv:
         idx = sys.argv.index("--player")
-        player_id = int(sys.argv[idx + 1])
-        plot_all_intermediate_for_player(player_id, show=show)
+        plot_all_intermediate_for_player(int(sys.argv[idx + 1]), show=show)
     else:
-        csv_path = sys.argv[1]
-        output = plot_intermediate_estimates(csv_path, show=show)
-        print(f"Plot saved to: {output}")
+        out = plot_intermediate_estimates(sys.argv[1], show=show)
+        print(f"Saved: {out}")

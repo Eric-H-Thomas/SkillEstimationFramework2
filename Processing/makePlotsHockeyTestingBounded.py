@@ -304,6 +304,7 @@ def plotNumObsVsEstimates(agentInfo):
 
 			ax2.scatter(range(len(estimatedPS)),estimatedPS)
 			ax2.plot(range(len(estimatedPS)),estimatedPS)
+			ax2.set_yscale('log')
 			ax2.set_title(f'Lambda - Final Estimate: {estimatedPS[-1]}')
 
 		else:
@@ -325,6 +326,7 @@ def plotNumObsVsEstimates(agentInfo):
 
 			ax4.scatter(range(len(estimatedPS)),estimatedPS)
 			ax4.plot(range(len(estimatedPS)),estimatedPS)
+			ax4.set_yscale('log')
 			ax4.set_title(f'Lambda - Final Estimate: {estimatedPS[-1]}')
 
 

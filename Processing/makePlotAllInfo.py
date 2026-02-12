@@ -859,6 +859,7 @@ def plotAllInfo(i,row,rfunc,listedTargetsAngular,rfuncAngular,action,executedAct
 
 	ax8.scatter(range(len(psEES_all)),psEES_all)
 	ax8.plot(range(len(psEES_all)),psEES_all)
+	ax8.set_yscale('log')
 
 	ax8.axvline(x=i, color='red', linestyle='--', linewidth=2)
 

@@ -457,6 +457,7 @@ def computeCredibleIntervals(resultsDict,methodsAllProbs,resultsFolder):
 					else:
 						lookingAt = pskills
 						plt.xlabel("Planning Skill")
+						plt.xscale('log')
 
 
 					# low = np.where(lookingAt == low)
@@ -488,6 +489,7 @@ def computeCredibleIntervals(resultsDict,methodsAllProbs,resultsFolder):
 					cbar = plt.colorbar(cs)
 					plt.xlabel("Execution Skill")
 					plt.ylabel("Planning Skill")
+					plt.yscale('log')
 
 				plt.title(f"Final Posterior Probability: Method: {ma.split('-allProbs')[0].replace('-EES-','-')}")
 				plt.savefig(f"{resultsFolder}{os.sep}plots{os.sep}{folder}{os.sep}{pitcherNames[pitcherID].replace(' ','')}{os.sep}{pitchType}{os.sep}pitcherID{pitcherID}-pitchType{pitchType}-{ma.split('-allProbs')[0].replace('-EES-','-')}.png", bbox_inches='tight')

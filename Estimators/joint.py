@@ -334,7 +334,7 @@ class JointMethodQRE:
                 return np.logspace(other_args["minLambda"], 3.6, num_rationality_levels)
             return np.logspace(-3, 3.6, num_rationality_levels)
         if domain_name == "hockey-multi":
-            return np.round(np.logspace(-3, 1.6, num_rationality_levels), 4)
+            return np.round(np.logspace(-3, 3.5, num_rationality_levels), 4)
         return None
 
     def get_estimator_name(self):

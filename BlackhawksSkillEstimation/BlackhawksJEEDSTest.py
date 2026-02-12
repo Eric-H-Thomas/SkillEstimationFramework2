@@ -10,8 +10,12 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     plot_intermediate_estimates,
     plot_all_intermediate_for_player,
 )
+from BlackhawksSkillEstimation.blackhawks_plots import (
+    plot_player_shots_from_offline,
+    plot_all_player_convergence,
+)
 
-# At the bottom, set TEST_TO_RUN
+# NOTE: At the bottom, set TEST_TO_RUN
 
 
 def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
@@ -21,105 +25,6 @@ def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
     print(f"{prefix}MAP Rationality:     {result['rationality']:.2f} (higher is better)")
     print(f"{prefix}EPS:                 {result['eps']:.2f}")
     print(f"{prefix}Shots Used:          {result['num_shots']}")
-
-
-def one_player():
-    """Quick test with 1 player, 2 games."""
-    estimates = estimate_player_skill(player_id=950160, game_ids=[44604, 270247])
-    print("\nPlayer 950160 Estimates:")
-    _print_all_estimates(estimates)
-
-
-def three_players():
-    """Test with 3 players, 2 games each."""
-    player_ids = [950160, 123456, 789012]
-    game_ids = [44604, 270247]
-    results = estimate_multiple_players(player_ids=player_ids, game_ids=game_ids)
-
-    for result in results:
-        player_id = result.get("player_id")
-        status = result.get("status")
-
-        if status == "success":
-            print(f"\nPlayer {player_id}:")
-            _print_all_estimates(result)
-
-            if "skill_log" in result and result["skill_log"]:
-                print(f"  Tracked {len(result['skill_log'])} intermediate estimates")
-        else:
-            print(f"\nPlayer {player_id}: ERROR")
-            print(f"  {result.get('error', 'Unknown error')}")
-
-def one_player_one_season():
-    """Per-season estimates for a single season."""
-    result = estimate_player_skill(
-        player_id=950160,
-        seasons=[20242025],
-    )
-    for season, data in result["per_season_results"].items():
-        print(f"\nSeason {season}:")
-        _print_all_estimates(data)
-            
-def one_player_two_seasons():
-    """Per-season estimates across two seasons."""
-    result = estimate_player_skill(
-        player_id=950160,
-        seasons=[20232024, 20242025],
-    )
-    for season, data in result["per_season_results"].items():
-        print(f"\nSeason {season}:")
-        _print_all_estimates(data)
-
-
-def download_season_test_data():
-    """Download and save player data to disk for offline use."""
-    player_id = 950160
-    seasons = [20232024, 20242025]
-    
-    print(f"Downloading data for player {player_id}, seasons {seasons}...")
-    saved = save_player_data(
-        player_id=player_id,
-        seasons=seasons,
-        output_dir="Data/Hockey",
-        overwrite=True,
-    )
-    
-    print("\nSaved files:")
-    for season, paths in saved.items():
-        print(f"  Season {season}:")
-        print(f"    Shots: {paths['shots']}")
-        print(f"    Shot maps: {paths['shot_maps']}")
-
-
-def run_offline_season_estimation():
-    """Run estimation using previously downloaded data (no DB access needed)."""
-    player_id = 950160
-    seasons = [20232024, 20242025]
-    
-    print(f"Loading offline data for player {player_id}...")
-    offline_data = load_player_data(
-        player_id=player_id,
-        seasons=seasons,
-        data_dir="Data/Hockey",
-    )
-    
-    df, shot_maps = offline_data
-    print(f"Loaded {len(df)} shots, {len(shot_maps)} shot maps")
-    
-    result = estimate_player_skill(
-        player_id=player_id,
-        offline_data=offline_data,
-        per_season=True,
-        confirm=False,
-    )
-    
-    print("\nResults:")
-    for season, data in result["per_season_results"].items():
-        if data["status"] == "success":
-            print(f"\nSeason {season}:")
-            _print_all_estimates(data)
-        else:
-            print(f"  Season {season}: {data['status']} - {data.get('warning', '')}")
 
 
 # =============================================================================
@@ -221,6 +126,7 @@ def run_offline_lightweight_estimation():
                 offline_data=(df, shot_maps),
                 per_season=False,
                 confirm=False,
+                save_intermediate_csv=True,
             )
             
             if result.get("status") == "success" or "execution_skill" in result:
@@ -272,26 +178,6 @@ def run_offline_lightweight_estimation():
             print(f"{r['name']}: {r['status']}")
     
     return results
-
-
-def full_lightweight_pipeline_test():
-    """Run the complete lightweight pipeline: download then estimate."""
-    print("\n" + "=" * 60)
-    print("FULL LIGHTWEIGHT PIPELINE TEST")
-    print("=" * 60)
-    print("\nStep 1: Download data for a few players (2 games each)")
-    print("-" * 40)
-    
-    download_lightweight_test_data()
-    
-    print("\n\nStep 2: Run offline estimation")
-    print("-" * 40)
-    
-    run_offline_lightweight_estimation()
-    
-    print("\n\n" + "=" * 60)
-    print("PIPELINE TEST COMPLETE")
-    print("=" * 60)
 
 
 def test_intermediate_csv_and_plot():
@@ -383,8 +269,8 @@ def generate_all_plots():
 # Edit these two variables to control which players and seasons to test.
 
 SEASON_TEST_PLAYERS = [
-    {"player_id": 950160, "name": "Nathan MacKinnon"},
-    {"player_id": 950184, "name": "Cale Makar"},
+    #{"player_id": 950160, "name": "Nathan MacKinnon"},
+    #{"player_id": 950184, "name": "Cale Makar"},
     {"player_id": 949352, "name": "Kris Letang"},
 ]
 
@@ -497,18 +383,88 @@ def per_season_multi_player_test():
             print(f"  {s['name']:20s}  {s['season']}  {s['status']}")
 
 
+# =============================================================================
+# VISUALIZATION TEST
+# =============================================================================
+
+def generate_all_viz():
+    """Generate all visualizations (angular heatmaps, rink, convergence).
+
+    Uses offline data from LIGHTWEIGHT_TEST_PLAYERS (2-game tag) or
+    per-season data if available.  Outputs go to Data/Hockey/plots/.
+    Requires download_lightweight_test_data() or download_season_test_data()
+    to have been run first.
+    """
+    from pathlib import Path
+
+    print("=" * 60)
+    print("GENERATING ALL VISUALIZATIONS")
+    print("=" * 60)
+
+    data_dir = Path("Data/Hockey")
+
+    for player_info in LIGHTWEIGHT_TEST_PLAYERS:
+        player_id = player_info["player_id"]
+        name = player_info["name"]
+        print(f"\n{'='*60}")
+        print(f"{name} (ID: {player_id})")
+        print(f"{'='*60}")
+
+        # --- Angular heatmaps + rink scatter ---
+        # Try season data first (more shots), fall back to 2-game tag
+        try:
+            result = plot_player_shots_from_offline(
+                player_id=player_id,
+                data_dir=data_dir,
+                seasons=SEASON_TEST_SEASONS,
+                max_shots=10,
+            )
+            source = "season"
+        except (FileNotFoundError, ValueError):
+            try:
+                result = plot_player_shots_from_offline(
+                    player_id=player_id,
+                    data_dir=data_dir,
+                    tag="2games_test",
+                    max_shots=10,
+                )
+                source = "2games_test"
+            except FileNotFoundError:
+                print("  No offline data found. Skipping angular/rink plots.")
+                result = None
+                source = None
+
+        if result:
+            print(f"  Source: {source}")
+            print(f"  Angular heatmaps: {len(result['angular'])} plot(s)")
+            print(f"  Rink diagrams:    {len(result['rink'])} plot(s)")
+            for p in result["angular"]:
+                print(f"    {p}")
+            for p in result["rink"]:
+                print(f"    {p}")
+
+        # --- Convergence plots ---
+        conv_plots = plot_all_player_convergence(player_id, data_dir=data_dir)
+        if conv_plots:
+            print(f"  Convergence:      {len(conv_plots)} plot(s)")
+            for p in conv_plots:
+                print(f"    {p}")
+        else:
+            print("  No intermediate estimate CSVs found for convergence plots.")
+
+    print("\n" + "=" * 60)
+    print("DONE")
+    print("=" * 60)
+
+
 # Set which test to run
 # Options:
-#   - one_player: Quick test with 1 player, 2 games
-#   - three_players: Test with 3 players, 2 games each
-#   - one_player_one_season: 1 player, full season (requires DB access)
-#   - download_season_test_data: Download full season data
-#   - download_lightweight_test_data: Download 3 players × 2 games (lightweight)
-#   - run_offline_lightweight_estimation: Run estimation on downloaded data
-#   - full_lightweight_pipeline_test: Download + estimate (full pipeline test)
-#   - test_intermediate_csv_and_plot: Test CSV export and plotting
-#   - generate_all_plots: Generate plots for all players with logged data
-#   - per_season_multi_player_test: Per-season estimation for configurable players/seasons
+#   - download_lightweight_test_data: Download 3 players x 2 games (lightweight)
+#   - run_offline_lightweight_estimation: Run estimation on lightweight data
+#   - test_intermediate_csv_and_plot: Test CSV export and convergence plotting
+#   - generate_all_plots: Convergence plots only (all players with CSVs)
+#   - generate_all_viz: Full visualization suite (angular, rink, convergence)
+#   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 
 TEST_TO_RUN = per_season_multi_player_test
 if __name__ == "__main__":
