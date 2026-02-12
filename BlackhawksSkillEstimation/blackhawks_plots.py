@@ -174,6 +174,8 @@ def plot_shot_angular_heatmap(
     save_path: Path | str | None = None,
     show: bool = False,
     title: str | None = None,
+    event_id: int | None = None,
+    is_goal: bool = False,
 ) -> Path | None:
     """Side-by-side Cartesian vs angular heatmap for one shot.
 
@@ -195,6 +197,11 @@ def plot_shot_angular_heatmap(
         If True, call ``plt.show()`` instead of closing.
     title : str | None
         Optional super-title for the figure.
+    event_id : int | None
+        Event identifier shown in the title annotation.
+    is_goal : bool
+        Whether the shot resulted in a goal.  Goals are rendered as a
+        green star; misses as a black X.
 
     Returns
     -------
@@ -236,27 +243,46 @@ def plot_shot_angular_heatmap(
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
+    # Marker style depends on whether the shot was a goal
+    _marker = "*" if is_goal else "x"
+    _color = "green" if is_goal else "black"
+    _label = "Goal" if is_goal else "Shot"
+    _size = 160 if is_goal else 80
+
     # Left: Cartesian
     ax1.scatter(cartesian_targets[:, 0], cartesian_targets[:, 1],
                 c=cmap(norm(flat_utils)))
-    ax1.scatter(executed_action[0], executed_action[1], c="black", marker="x", s=80)
+    ax1.scatter(executed_action[0], executed_action[1],
+                c=_color, marker=_marker, s=_size, zorder=5, label=_label)
     ax1.set_title("Cartesian (Y, Z)")
     ax1.set_xlabel("Y")
     ax1.set_ylabel("Z")
+    ax1.legend(loc="upper right", fontsize=8)
     fig.colorbar(sm, ax=ax1)
 
     # Right: Angular
     ax2.scatter(listedTargetsAngular[:, 0], listedTargetsAngular[:, 1],
                 c=cmap(norm(listedUtilitiesComputed)))
     ax2.scatter(executedActionAngular[0], executedActionAngular[1],
-                c="black", marker="x", s=80)
+                c=_color, marker=_marker, s=_size, zorder=5, label=_label)
     ax2.set_title("Angular (direction, elevation)")
     ax2.set_xlabel("Direction (rad)")
     ax2.set_ylabel("Elevation (rad)")
+    ax2.legend(loc="upper right", fontsize=8)
     fig.colorbar(sm, ax=ax2)
 
+    # Build informative super-title with event ID and player XY
+    suptitle_parts: list[str] = []
     if title:
-        plt.suptitle(title)
+        suptitle_parts.append(title)
+    if event_id is not None:
+        suptitle_parts.append(f"Event {event_id}")
+    suptitle_parts.append(
+        f"Player XY=({player_location[0]:.1f}, {player_location[1]:.1f})"
+    )
+    outcome_tag = "GOAL" if is_goal else "Shot"
+    suptitle_parts.append(outcome_tag)
+    plt.suptitle(" | ".join(suptitle_parts), fontsize=10)
     plt.tight_layout()
 
     out_path = None
@@ -476,6 +502,7 @@ def plot_player_shots_from_offline(
 
         player_loc = [float(row["start_x"]), float(row["start_y"])]
         exec_act = [float(row["location_y"]), float(row["location_z"])]
+        is_goal = bool(row.get("shot_is_goal", False))
         player_locs.append(player_loc)
         executed_acts.append(exec_act)
 
@@ -484,7 +511,9 @@ def plot_player_shots_from_offline(
             out = plot_shot_angular_heatmap(
                 value_map, player_loc, exec_act,
                 save_path=output_dir / "angular" / f"shot_{event_id}.png",
-                title=f"Player {player_id} – Event {event_id}",
+                title=f"Player {player_id}",
+                event_id=event_id,
+                is_goal=is_goal,
             )
             if out is not None:
                 angular_paths.append(out)

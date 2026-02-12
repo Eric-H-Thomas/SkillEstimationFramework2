@@ -466,6 +466,6 @@ def generate_all_viz():
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 
-TEST_TO_RUN = per_season_multi_player_test
+TEST_TO_RUN = generate_all_viz
 if __name__ == "__main__":
     TEST_TO_RUN()
