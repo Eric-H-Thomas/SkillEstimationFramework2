@@ -18,12 +18,15 @@ from BlackhawksSkillEstimation.blackhawks_plots import (
 # NOTE: At the bottom, set TEST_TO_RUN
 
 
+def _fmt_log10(val):
+    return f"{val:.4f}" if val is not None else "N/A"
+
 def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
     """Helper to print all 4 estimates from a result dict."""
     print(f"{prefix}MAP Execution Skill: {result['execution_skill']:.4f} rad (lower is better)")
     print(f"{prefix}EES:                 {result['ees']:.4f} rad")
-    print(f"{prefix}MAP Rationality:     {result['rationality']:.2f} (higher is better)")
-    print(f"{prefix}EPS:                 {result['eps']:.2f}")
+    print(f"{prefix}MAP Rationality:     {_fmt_log10(result.get('log10_rationality'))}")
+    print(f"{prefix}EPS:                 {_fmt_log10(result.get('log10_eps'))}")
     print(f"{prefix}Shots Used:          {result['num_shots']}")
 
 
@@ -140,6 +143,8 @@ def run_offline_lightweight_estimation():
                     "ees": result.get("ees"),
                     "rationality": result.get("rationality"),
                     "eps": result.get("eps"),
+                    "log10_rationality": result.get("log10_rationality"),
+                    "log10_eps": result.get("log10_eps"),
                     "num_shots": result.get("num_shots", len(df)),
                 })
             else:
@@ -226,8 +231,8 @@ def test_intermediate_csv_and_plot():
             print(f"  Shot {row['shot_count']}: "
                   f"MAP skill={row['map_execution_skill']:.4f}, "
                   f"EES={row['ees']:.4f}, "
-                  f"MAP rat={row['map_rationality']:.2f}, "
-                  f"EPS={row['eps']:.2f}")
+                  f"MAP rat={_fmt_log10(row.get('log10_map_rationality'))}, "
+                  f"EPS={_fmt_log10(row.get('log10_eps'))}")
         
         # Generate plot
         print("\nGenerating convergence plot...")
@@ -241,7 +246,7 @@ def test_intermediate_csv_and_plot():
     print("=" * 60)
 
 
-def generate_all_plots():
+def generate_all_logs_plots():
     """Generate convergence plots for all players with logged data."""
     print("=" * 60)
     print("GENERATING ALL INTERMEDIATE ESTIMATE PLOTS")
@@ -270,8 +275,8 @@ def generate_all_plots():
 
 SEASON_TEST_PLAYERS = [
     #{"player_id": 950160, "name": "Nathan MacKinnon"},
-    #{"player_id": 950184, "name": "Cale Makar"},
-    {"player_id": 949352, "name": "Kris Letang"},
+    {"player_id": 950184, "name": "Cale Makar"},
+    #{"player_id": 949352, "name": "Kris Letang"},
 ]
 
 SEASON_TEST_SEASONS = [20232024, 20242025]
@@ -367,6 +372,8 @@ def per_season_multi_player_test():
                 "ees": data["ees"],
                 "rationality": data["rationality"],
                 "eps": data["eps"],
+                "log10_rationality": data.get("log10_rationality"),
+                "log10_eps": data.get("log10_eps"),
                 "num_shots": data["num_shots"],
             })
 
@@ -377,7 +384,7 @@ def per_season_multi_player_test():
         if s["status"] == "success":
             print(f"  {s['name']:20s}  {s['season']}  "
                   f"MAP={s['execution_skill']:.4f}  EES={s['ees']:.4f}  "
-                  f"rat={s['rationality']:.2f}  EPS={s['eps']:.2f}  "
+                  f"rat={_fmt_log10(s.get('log10_rationality'))}  EPS={_fmt_log10(s.get('log10_eps'))}  "
                   f"({s['num_shots']} shots)")
         else:
             print(f"  {s['name']:20s}  {s['season']}  {s['status']}")
@@ -462,10 +469,10 @@ def generate_all_viz():
 #   - download_lightweight_test_data: Download 3 players x 2 games (lightweight)
 #   - run_offline_lightweight_estimation: Run estimation on lightweight data
 #   - test_intermediate_csv_and_plot: Test CSV export and convergence plotting
-#   - generate_all_plots: Convergence plots only (all players with CSVs)
+#   - generate_all_logs_plots: Convergence plots only (all players with CSVs)
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 
-TEST_TO_RUN = generate_all_viz
+TEST_TO_RUN = per_season_multi_player_test
 if __name__ == "__main__":
     TEST_TO_RUN()

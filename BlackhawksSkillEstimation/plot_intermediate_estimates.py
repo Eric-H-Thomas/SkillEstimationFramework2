@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Sequence
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 
 
@@ -35,6 +36,8 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
 
     Expected columns: ``shot_count``, ``expected_execution_skill``,
     ``map_execution_skill``, ``expected_rationality``, ``map_rationality``.
+    Also reads ``log10_expected_rationality`` and ``log10_map_rationality``
+    when present.
     """
     csv_path = Path(csv_path)
     data: dict[str, list[float]] = {
@@ -43,14 +46,27 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
         "map_execution_skill": [],
         "expected_rationality": [],
         "map_rationality": [],
+        "log10_expected_rationality": [],
+        "log10_map_rationality": [],
     }
     with open(csv_path, newline="") as f:
         for row in csv.DictReader(f):
             data["shot_count"].append(int(row["shot_count"]))
             data["expected_execution_skill"].append(float(row["expected_execution_skill"]))
             data["map_execution_skill"].append(float(row["map_execution_skill"]))
-            data["expected_rationality"].append(float(row["expected_rationality"]))
-            data["map_rationality"].append(float(row["map_rationality"]))
+            er = float(row["expected_rationality"])
+            mr = float(row["map_rationality"])
+            data["expected_rationality"].append(er)
+            data["map_rationality"].append(mr)
+            # Derive log10 if not in CSV (backward compatibility)
+            if "log10_expected_rationality" in row and row["log10_expected_rationality"]:
+                data["log10_expected_rationality"].append(float(row["log10_expected_rationality"]))
+            else:
+                data["log10_expected_rationality"].append(np.log10(er) if er > 0 else float("nan"))
+            if "log10_map_rationality" in row and row["log10_map_rationality"]:
+                data["log10_map_rationality"].append(float(row["log10_map_rationality"]))
+            else:
+                data["log10_map_rationality"].append(np.log10(mr) if mr > 0 else float("nan"))
     return data
 
 
@@ -84,6 +100,7 @@ def plot_intermediate_estimates(
     title: str | None = None,
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
+    burnin: int = 5,
 ) -> Path:
     """Dual-axis convergence plot of execution skill and rationality.
 
@@ -99,6 +116,10 @@ def plot_intermediate_estimates(
         (i.e. next to the CSV in ``logs/``).
     title, show, figsize
         Standard matplotlib knobs.
+    burnin : int
+        Number of initial shots to omit from the plot.  The prior dominates
+        these early updates, producing misleading spikes.  Set to 0 to show
+        everything.  Default is 5.
 
     Returns
     -------
@@ -120,20 +141,33 @@ def plot_intermediate_estimates(
     fig, ax_skill = plt.subplots(figsize=figsize)
     ax_rat = ax_skill.twinx()
 
-    shots = data["shot_count"]
+    shots = data["shot_count"][burnin:]
+    ees_data = data["expected_execution_skill"][burnin:]
+    map_skill_data = data["map_execution_skill"][burnin:]
+    eps_data = data["expected_rationality"][burnin:]
+    map_rat_data = data["map_rationality"][burnin:]
 
     # Execution skill – warm colours, left axis
-    l1 = ax_skill.plot(shots, data["expected_execution_skill"],
+    l1 = ax_skill.plot(shots, ees_data,
                        color="#FF7F50", lw=2, label="EES (skill)")
-    l2 = ax_skill.plot(shots, data["map_execution_skill"],
+    l2 = ax_skill.plot(shots, map_skill_data,
                        color="#DC143C", lw=2, ls="--", label="MAP (skill)")
 
     # Rationality – cool colours, right axis, LOG scale
-    l3 = ax_rat.plot(shots, data["expected_rationality"],
+    l3 = ax_rat.plot(shots, eps_data,
                      color="#40E0D0", lw=2, label="EPS (rationality)")
-    l4 = ax_rat.plot(shots, data["map_rationality"],
+    l4 = ax_rat.plot(shots, map_rat_data,
                      color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
     ax_rat.set_yscale("log")
+    ax_rat.set_ylim(10, 10 ** 3.5)
+
+    # Show ticks at each half order of magnitude (10^1, 10^1.5, 10^2, ...)
+    _half_log_ticks = [10 ** (x / 2) for x in range(2, 8)]  # 10^1 to 10^3.5
+    ax_rat.yaxis.set_major_locator(mticker.FixedLocator(_half_log_ticks))
+    ax_rat.yaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda val, _: f"10^{np.log10(val):.1f}" if val > 0 else ""
+    ))
+    ax_rat.yaxis.set_minor_locator(mticker.NullLocator())
 
     ax_skill.set_xlabel("Shot Count", fontsize=12)
     ax_skill.set_ylabel("Execution Skill (rad, lower = better)",
@@ -141,7 +175,15 @@ def plot_intermediate_estimates(
     ax_rat.set_ylabel("Rationality (higher = better)",
                       color="#4169E1", fontsize=11)
     ax_skill.tick_params(axis="y", labelcolor="#DC143C")
-    ax_rat.tick_params(axis="y", labelcolor="#4169E1")
+    ax_rat.tick_params(axis="y", labelcolor="#4169E1", which="both", labelsize=9)
+
+    # Burn-in annotation
+    if burnin > 0:
+        ax_skill.annotate(
+            f"first {burnin} shots omitted",
+            xy=(0.01, 0.01), xycoords="axes fraction",
+            fontsize=8, color="grey", fontstyle="italic",
+        )
 
     lines = l1 + l2 + l3 + l4
     ax_skill.legend(lines, [l.get_label() for l in lines],
@@ -202,6 +244,7 @@ def plot_comparison(
     estimate_type: str = "map",
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
+    burnin: int = 5,
 ) -> Path:
     """Overlay one metric from several CSVs.
 
@@ -211,6 +254,8 @@ def plot_comparison(
         ``"execution_skill"`` or ``"rationality"``.
     estimate_type : str
         ``"map"``, ``"expected"``, or ``"both"``.
+    burnin : int
+        Number of initial shots to omit (burn-in).  Default 5.
     """
     csv_paths = [Path(p) for p in csv_paths]
     labels = list(labels) if labels else [p.stem for p in csv_paths]
@@ -228,13 +273,13 @@ def plot_comparison(
 
     for i, (cp, label) in enumerate(zip(csv_paths, labels)):
         data = load_intermediate_estimates(cp)
-        shots = data["shot_count"]
+        shots = data["shot_count"][burnin:]
         if estimate_type in ("map", "both"):
-            ax.plot(shots, data[map_key], color=colours[i], lw=2,
+            ax.plot(shots, data[map_key][burnin:], color=colours[i], lw=2,
                     label=f"{label} (MAP)" if estimate_type == "both" else label,
                     ls="--" if estimate_type == "both" else "-")
         if estimate_type in ("expected", "both"):
-            ax.plot(shots, data[exp_key], color=colours[i], lw=2,
+            ax.plot(shots, data[exp_key][burnin:], color=colours[i], lw=2,
                     label=f"{label} ({exp_label})" if estimate_type == "both" else label,
                     alpha=0.7 if estimate_type == "both" else 1.0)
 
@@ -243,6 +288,21 @@ def plot_comparison(
     ax.set_ylabel(ylabel, fontsize=12)
     if metric == "rationality":
         ax.set_yscale("log")
+        ax.set_ylim(10, 10 ** 3.5)
+        _half_log_ticks = [10 ** (x / 2) for x in range(2, 8)]  # 10^1 to 10^3.5
+        ax.yaxis.set_major_locator(mticker.FixedLocator(_half_log_ticks))
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(
+            lambda val, _: f"10^{np.log10(val):.1f}" if val > 0 else ""
+        ))
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+
+    # Burn-in annotation
+    if burnin > 0:
+        ax.annotate(
+            f"first {burnin} shots omitted",
+            xy=(0.01, 0.01), xycoords="axes fraction",
+            fontsize=8, color="grey", fontstyle="italic",
+        )
 
     ax.legend(fontsize=10)
     plt.title(title, fontsize=14)

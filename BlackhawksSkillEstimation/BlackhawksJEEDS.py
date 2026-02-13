@@ -109,14 +109,20 @@ def save_intermediate_estimates_csv(
             "map_execution_skill", 
             "expected_rationality",
             "map_rationality",
+            "log10_expected_rationality",
+            "log10_map_rationality",
         ])
         for row in skill_log:
+            eps_val = row["eps"]
+            map_rat_val = row["map_rationality"]
             writer.writerow([
                 row["shot_count"],
                 row["ees"],
                 row["map_execution_skill"],
-                row["eps"],
-                row["map_rationality"],
+                eps_val,
+                map_rat_val,
+                np.log10(eps_val) if eps_val and eps_val > 0 else None,
+                np.log10(map_rat_val) if map_rat_val and map_rat_val > 0 else None,
             ])
     
     return csv_path
@@ -752,12 +758,16 @@ def _run_jeeds_estimation(
             eps = results.get(eps_key, [])
             
             if map_xskill and map_rationality and ees and eps:
+                eps_val = float(eps[-1])
+                map_rat_val = float(map_rationality[-1])
                 skill_log.append({
                     "shot_count": idx + 1,  # 1-indexed
                     "ees": float(ees[-1]),  # Expected Execution Skill
                     "map_execution_skill": float(map_xskill[-1]),
-                    "eps": float(eps[-1]),  # Expected Rationality
-                    "map_rationality": float(map_rationality[-1]),
+                    "eps": eps_val,  # Expected Rationality
+                    "map_rationality": map_rat_val,
+                    "log10_eps": np.log10(eps_val) if eps_val > 0 else None,
+                    "log10_map_rationality": np.log10(map_rat_val) if map_rat_val > 0 else None,
                 })
 
     results = estimator.get_results()
@@ -775,13 +785,18 @@ def _run_jeeds_estimation(
             "warning": "JEEDS returned no MAP estimates.",
         }
 
+    final_rationality = float(map_rationality_estimates[-1])
+    final_eps = float(eps_estimates[-1]) if eps_estimates else None
+
     result: dict[str, object] = {
         # MAP estimates (primary)
         "execution_skill": float(map_xskill_estimates[-1]),
-        "rationality": float(map_rationality_estimates[-1]),
+        "rationality": final_rationality,
+        "log10_rationality": np.log10(final_rationality) if final_rationality > 0 else None,
         # EES/EPS estimates (expected values under posterior)
         "ees": float(ees_estimates[-1]) if ees_estimates else None,
-        "eps": float(eps_estimates[-1]) if eps_estimates else None,
+        "eps": final_eps,
+        "log10_eps": np.log10(final_eps) if final_eps and final_eps > 0 else None,
         "num_shots": len(jeeds_inputs.actions),
         "status": "success",
     }

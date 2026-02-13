@@ -340,7 +340,7 @@ class JointMethodQRE:
                 return np.logspace(other_args["minLambda"], 3.6, num_rationality_levels)
             return np.logspace(-3, 3.6, num_rationality_levels)
         if domain_name == "hockey-multi":
-            return np.round(np.logspace(-3, 3.5, num_rationality_levels), 4)
+            return np.round(np.logspace(0, 3.6, num_rationality_levels), 4)
         return None
 
     def get_estimator_name(self):
@@ -1065,11 +1065,16 @@ class QREMethod_Multi:
 
         if domainName in ["2d-multi", "sequentialDarts", "billiards"]:
             self.pskills = np.round(np.logspace(-3, 1.5, self.numPskills), 4)
-        elif domainName in ["baseball", "hockey-multi"]:
+        elif domainName in ["baseball"]:
             if minLambda:
                 self.pskills = np.round(np.logspace(otherArgs["minLambda"], 3.6, self.numPskills), 4)
             else:
                 self.pskills = np.round(np.logspace(-3, 3.6, self.numPskills), 4)
+        elif domainName in ["hockey-multi"]:
+            if minLambda:
+                self.pskills = np.round(np.logspace(otherArgs["minLambda"], 3.6, self.numPskills), 4)
+            else:
+                self.pskills = np.round(np.logspace(0, 3.6, self.numPskills), 4)
 
         # FOR TESTING
         # self.xskills = [self.xskills[0],self.xskills[1],self.xskills[0],self.xskills[1]]
