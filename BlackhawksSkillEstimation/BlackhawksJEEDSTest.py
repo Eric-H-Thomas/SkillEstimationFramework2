@@ -14,6 +14,7 @@ from BlackhawksSkillEstimation.blackhawks_plots import (
     plot_player_shots_from_offline,
     plot_all_player_convergence,
 )
+from BlackhawksSkillEstimation.player_cache import lookup_player
 
 # NOTE: At the bottom, set TEST_TO_RUN
 
@@ -38,20 +39,17 @@ def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
 # These player IDs are from the Hawks database (not NHL API IDs)
 # Each player uses their top 2 games by shot count (via get_games_for_player)
 LIGHTWEIGHT_TEST_PLAYERS = [
-    { 
-        "player_id": 950160,  # 37 shots: 19 + 18
+    {  # Nathan MacKinnon – 37 shots: 19 + 18
+        "player_id": 950160,
         "game_ids": [270247, 44604],
-        "name": "Nathan MacKinnon",
     },
-    {
-        "player_id": 950184,  # 31 shots: 16 + 15
+    {  # Cale Makar – 31 shots: 16 + 15
+        "player_id": 950184,
         "game_ids": [271408, 44840],
-        "name": "Cale Makar",
     },
-    { 
-        "player_id": 949352,  # 25 shots: 13 + 12
+    {  # Kris Letang – 25 shots: 13 + 12
+        "player_id": 949352,
         "game_ids": [44905, 42496],
-        "name": "Kris Letang",
     },
 ]
 
@@ -74,7 +72,7 @@ def download_lightweight_test_data():
     for player_info in LIGHTWEIGHT_TEST_PLAYERS:
         player_id = player_info["player_id"]
         game_ids = player_info["game_ids"]
-        name = player_info["name"]
+        name = lookup_player(player_id)
         
         print(f"\n--- {name} (ID: {player_id}) ---")
         saved = save_player_data_by_games(
@@ -110,9 +108,6 @@ def run_offline_lightweight_estimation():
     results = []
     for player_info in LIGHTWEIGHT_TEST_PLAYERS:
         player_id = player_info["player_id"]
-        name = player_info["name"]
-        
-        print(f"\n--- {name} (ID: {player_id}) ---")
         
         try:
             # Load offline data
@@ -121,6 +116,8 @@ def run_offline_lightweight_estimation():
                 tag="2games_test",
                 data_dir="Data/Hockey",
             )
+            name = lookup_player(player_id)
+            print(f"\n--- {name} (ID: {player_id}) ---")
             print(f"  Loaded {len(df)} shots, {len(shot_maps)} shot maps")
             
             # Run estimation
@@ -156,6 +153,7 @@ def run_offline_lightweight_estimation():
                 })
                 
         except FileNotFoundError as e:
+            name = lookup_player(player_id)
             print(f"  ERROR: Data not found. Run download_lightweight_test_data() first.")
             print(f"  {e}")
             results.append({
@@ -164,6 +162,7 @@ def run_offline_lightweight_estimation():
                 "status": "file_not_found",
             })
         except Exception as e:
+            name = lookup_player(player_id)
             print(f"  ERROR: {e}")
             results.append({
                 "player_id": player_id,
@@ -185,67 +184,6 @@ def run_offline_lightweight_estimation():
     return results
 
 
-def test_intermediate_csv_and_plot():
-    """Test intermediate estimate logging to CSV and plotting.
-    
-    Uses previously downloaded lightweight test data.
-    Saves intermediate estimates to CSV and generates convergence plots.
-    """
-    print("=" * 60)
-    print("TESTING INTERMEDIATE CSV EXPORT AND PLOTTING")
-    print("=" * 60)
-    
-    player_id = 950160
-    
-    try:
-        df, shot_maps = load_player_data_by_games(
-            player_id=player_id,
-            tag="2games_test",
-            data_dir="Data/Hockey",
-        )
-        print(f"Loaded {len(df)} shots for player {player_id}")
-    except FileNotFoundError:
-        print("ERROR: Data not found. Run download_lightweight_test_data() first.")
-        return
-    
-    # Run estimation with CSV export enabled
-    print("\nRunning estimation with save_intermediate_csv=True...")
-    result = estimate_player_skill(
-        player_id=player_id,
-        offline_data=(df, shot_maps),
-        per_season=False,
-        confirm=False,
-        save_intermediate_csv=True,
-    )
-    
-    print("\nFinal Estimates:")
-    _print_all_estimates(result)
-    
-    if "csv_path" in result:
-        csv_path = result["csv_path"]
-        print(f"\nCSV saved to: {csv_path}")
-        
-        # Show first few rows
-        print("\nFirst 5 rows of skill_log:")
-        for i, row in enumerate(result["skill_log"][:5]):
-            print(f"  Shot {row['shot_count']}: "
-                  f"MAP skill={row['map_execution_skill']:.4f}, "
-                  f"EES={row['ees']:.4f}, "
-                  f"MAP rat={_fmt_log10(row.get('log10_map_rationality'))}, "
-                  f"EPS={_fmt_log10(row.get('log10_eps'))}")
-        
-        # Generate plot
-        print("\nGenerating convergence plot...")
-        plot_path = plot_intermediate_estimates(csv_path)
-        print(f"Plot saved to: {plot_path}")
-    else:
-        print("\nWARNING: No CSV path in result")
-    
-    print("\n" + "=" * 60)
-    print("TEST COMPLETE")
-    print("=" * 60)
-
-
 def generate_all_logs_plots():
     """Generate convergence plots for all players with logged data."""
     print("=" * 60)
@@ -254,7 +192,7 @@ def generate_all_logs_plots():
     
     for player_info in LIGHTWEIGHT_TEST_PLAYERS:
         player_id = player_info["player_id"]
-        name = player_info["name"]
+        name = lookup_player(player_id)
         
         print(f"\n--- {name} (ID: {player_id}) ---")
         plots = plot_all_intermediate_for_player(player_id)
@@ -266,20 +204,6 @@ def generate_all_logs_plots():
     print("\n" + "=" * 60)
     print("DONE")
     print("=" * 60)
-
-
-# =============================================================================
-# PER-SEASON MULTI-PLAYER TEST
-# =============================================================================
-# Edit these two variables to control which players and seasons to test.
-
-SEASON_TEST_PLAYERS = [
-    #{"player_id": 950160, "name": "Nathan MacKinnon"},
-    {"player_id": 950184, "name": "Cale Makar"},
-    #{"player_id": 949352, "name": "Kris Letang"},
-]
-
-SEASON_TEST_SEASONS = [20232024, 20242025]
 
 
 def per_season_multi_player_test():
@@ -297,9 +221,8 @@ def per_season_multi_player_test():
 
     summary = []
 
-    for player in players:
-        pid = player["player_id"]
-        name = player["name"]
+    for pid in players:
+        name = lookup_player(pid)
         print(f"\n{'='*60}")
         print(f"{name} (ID: {pid})")
         print(f"{'='*60}")
@@ -324,6 +247,8 @@ def per_season_multi_player_test():
             for s in seasons:
                 summary.append({"name": name, "season": s, "status": "no_data"})
             continue
+
+        name = lookup_player(pid)
 
         if df.empty:
             print("  SKIP (0 shots)")
@@ -412,7 +337,7 @@ def generate_all_viz():
 
     for player_info in LIGHTWEIGHT_TEST_PLAYERS:
         player_id = player_info["player_id"]
-        name = player_info["name"]
+        name = lookup_player(player_id)
         print(f"\n{'='*60}")
         print(f"{name} (ID: {player_id})")
         print(f"{'='*60}")
@@ -464,15 +389,51 @@ def generate_all_viz():
     print("=" * 60)
 
 
+# =============================================================================
+# PER-SEASON MULTI-PLAYER TEST
+# =============================================================================
+# Edit these two variables to control which players and seasons to test.
+
+INFO_PLAYERS = [
+    950182,
+    950169,      
+    950181,
+    950205,
+    949905,
+    950148,
+    950164,
+    950161,
+    949992,
+    950014,
+    949167,
+    950185,
+    950069,
+    949759,
+    949266,
+    949791,
+    950162,
+    949962,
+    950193,
+    950000,
+]
+
+SEASON_TEST_PLAYERS = [
+    #950160,  # Nathan MacKinnon
+    #950184,  # Cale Makar
+    949352,   # Kris Letang
+]
+
+SEASON_TEST_SEASONS = [20232024, 20242025]
+
 # Set which test to run
+# NOTE: Some of these tests that say "all" actually iterate through every player in LIGHTWEIGHT_TEST_PLAYERS
 # Options:
 #   - download_lightweight_test_data: Download 3 players x 2 games (lightweight)
 #   - run_offline_lightweight_estimation: Run estimation on lightweight data
-#   - test_intermediate_csv_and_plot: Test CSV export and convergence plotting
 #   - generate_all_logs_plots: Convergence plots only (all players with CSVs)
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 
-TEST_TO_RUN = per_season_multi_player_test
+TEST_TO_RUN = generate_all_viz
 if __name__ == "__main__":
     TEST_TO_RUN()

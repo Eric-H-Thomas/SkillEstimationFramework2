@@ -48,6 +48,8 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap
 from scipy.ndimage import zoom
 
+from BlackhawksSkillEstimation.player_cache import lookup_player
+
 # ---------------------------------------------------------------------------
 # Framework imports
 # ---------------------------------------------------------------------------
@@ -108,6 +110,33 @@ def _resize_value_map(value_map: np.ndarray) -> np.ndarray:
         (_SPACES_NUM_Z / value_map.shape[0], _SPACES_NUM_Y / value_map.shape[1]),
         order=1,
     )
+
+
+def _format_rink_title(
+    player_id: int | None = None,
+    player_name: str | None = None,
+    shot_count: int | None = None,
+) -> str:
+    """Build a compact, rink-specific title string.
+
+    Examples:
+        "Player 950160 (First Last) — 12 shots"
+        "Player 950160 — 3 shots"
+        "Player 950160 (First Last)"
+    """
+    if player_id is None and player_name is None:
+        if shot_count is not None:
+            return f"{shot_count} shots"
+        return "Shot locations"
+
+    if player_name:
+        base = f"Player {player_id} ({player_name})" if player_id is not None else str(player_name)
+    else:
+        base = f"Player {player_id}"
+
+    if shot_count is not None:
+        return f"{base} — {shot_count} shots"
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +513,8 @@ def plot_player_shots_from_offline(
     else:
         raise ValueError("Provide either 'tag' or 'seasons' to load data.")
 
+    player_name = lookup_player(player_id)
+
     angular_paths: list[Path] = []
     player_locs: list[list[float]] = []
     executed_acts: list[list[float]] = []
@@ -502,10 +533,15 @@ def plot_player_shots_from_offline(
 
         if shot_count < max_shots:
             value_map = shot_maps[event_id]["value_map"]
+            _player_label = (
+                f"Player {player_id} ({player_name})"
+                if player_name is not None
+                else f"Player {player_id}"
+            )
             out = plot_shot_angular_heatmap(
                 value_map, player_loc, exec_act,
                 save_path=output_dir / "angular" / f"shot_{event_id}.png",
-                title=f"Player {player_id}",
+                title=_player_label,
                 event_id=event_id,
                 is_goal=is_goal,
             )
@@ -517,10 +553,16 @@ def plot_player_shots_from_offline(
     # Combined rink diagram
     rink_path = None
     if player_locs:
+        # Build a title consistent with angular plots (player name, seasons, shot count)
+        title_str = _format_rink_title(
+            player_id=player_id,
+            player_name=player_name,
+            shot_count=len(player_locs),
+        )
         rink_path = plot_shot_rink(
             player_locs, executed_acts,
             save_path=output_dir / "rink" / f"player_{player_id}_all_shots.png",
-            title=f"Player {player_id} – {len(player_locs)} shots",
+            title=title_str,
         )
 
     return {

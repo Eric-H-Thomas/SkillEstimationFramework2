@@ -26,6 +26,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 
+from BlackhawksSkillEstimation.player_cache import lookup_player
+
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -85,9 +87,13 @@ def _auto_title(csv_path: Path) -> str:
         tag = parts
     else:
         tag = None
+    
+    player_name = lookup_player(player_id=int(player_id))
 
     base = f"JEEDS Convergence – Player {player_id}"
-    return f"{base} ({tag})" if tag else base
+    if player_name:
+        base += f" ({player_name})"
+    return f"{base} - {tag}" if tag else base
 
 
 # ---------------------------------------------------------------------------

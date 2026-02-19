@@ -65,7 +65,7 @@ DEFAULT_NUM_EXECUTION_SKILLS = 50
 
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
-# Default used to be 25, so consider that for research computation.
+# These are currently between the range of 0-3.5 in logspace.
 DEFAULT_NUM_PLANNING_SKILLS = 100
 
 

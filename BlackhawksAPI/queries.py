@@ -121,6 +121,7 @@ def query_player_season_shots(
     query = f"""
         SELECT
             e.PLAYER_ID_HAWKS        AS player_id,
+            /* e.PLAYER_NAME            AS player_name, */
             e.GAME_ID_HAWKS          AS game_id,
             e.EVENT_ID_HAWKS         AS event_id,
             g.SEASON                 AS season,
@@ -255,6 +256,7 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
     query = f"""
         SELECT
             e.PLAYER_ID_HAWKS        AS player_id,
+            /* e.PLAYER_NAME            AS player_name, */
             e.GAME_ID_HAWKS          AS game_id,
             e.EVENT_ID_HAWKS         AS event_id,
             e.SHOT_IS_BLOCKED,
@@ -353,4 +355,32 @@ def get_games_for_player(player_id: int, limit: int = 10) -> pd.DataFrame:
         LIMIT {limit};
     """
     return db.get_df(query, query_params={"player_id": player_id}).rename(columns=str.lower)
+
+
+def get_player_name(player_id: int) -> str | None:
+    """Look up a player's display name from the PLAYER table.
+
+    Parameters
+    ----------
+    player_id : int
+        The Hawks player identifier.
+
+    Returns
+    -------
+    str | None
+        ``"First Last"`` if found, otherwise *None*.
+    """
+    query = """
+        SELECT p.NAME_FIRST, p.NAME_LAST
+        FROM HAWKS_HOCKEY.PUBLIC.PLAYER AS p
+        WHERE p.PLAYER_ID_HAWKS = %(player_id)s
+        LIMIT 1;
+    """
+    df = db.get_df(query, query_params={"player_id": player_id})
+    if df.empty:
+        return None
+    row = df.iloc[0]
+    first = row.get("name_first") or row.get("NAME_FIRST") or ""
+    last = row.get("name_last") or row.get("NAME_LAST") or ""
+    return f"{first} {last}".strip() or None
 
