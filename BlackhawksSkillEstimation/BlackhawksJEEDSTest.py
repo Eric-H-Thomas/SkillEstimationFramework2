@@ -16,6 +16,8 @@ from BlackhawksSkillEstimation.blackhawks_plots import (
 )
 from BlackhawksSkillEstimation.player_cache import lookup_player
 
+import sys
+
 # NOTE: At the bottom, set TEST_TO_RUN
 
 
@@ -206,11 +208,11 @@ def generate_all_logs_plots():
     print("=" * 60)
 
 
-def per_season_multi_player_test():
+def per_season_multi_player_test(pids: list[int] | None):
     """Download (if needed), estimate, and plot for each player x season independently."""
     from pathlib import Path
 
-    players = SEASON_TEST_PLAYERS
+    players = pids or SEASON_TEST_PLAYERS
     seasons = SEASON_TEST_SEASONS
     data_dir = Path("Data/Hockey")
 
@@ -434,6 +436,13 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 
-TEST_TO_RUN = generate_all_viz
+TEST_TO_RUN = per_season_multi_player_test
 if __name__ == "__main__":
-    TEST_TO_RUN()
+    TEST_TO_RUN([sys.argv[1]])
+
+    # pids = INFO_PLAYERS[1:]
+    # for pid in pids:
+    #     save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS)
+    #     print("\nThat was for " + lookup_player(pid))
+
+    # TEST_TO_RUN()
