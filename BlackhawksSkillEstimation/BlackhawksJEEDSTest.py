@@ -391,6 +391,49 @@ def generate_all_viz():
     print("=" * 60)
 
 
+def plot_info_players_comparison():
+    """Generate a convergence comparison plot for all INFO_PLAYERS"""
+    from BlackhawksSkillEstimation.plot_intermediate_estimates import plot_comparison
+    from pathlib import Path
+
+    for metric in ["execution_skill", "rationality"]:
+        for season in SEASON_TEST_SEASONS:
+
+            csvs: list[Path] = []
+            labels: list[Path] = []
+            for pid in INFO_PLAYERS:
+                logs = Path(f"Data/Hockey/player_{pid}/logs")
+                path = logs / f"intermediate_estimates_{season}.csv"
+                if not path.exists():
+                    print(f"warning: no file for player {pid} ({season})")
+                    continue
+                csvs.append(path)
+                labels.append(lookup_player(pid) or str(pid))
+            if not csvs:
+                raise FileNotFoundError("no intermediate-estimate CSVs found")
+            
+            plot_comparison(
+                csv_paths=csvs,
+                labels=labels,
+                output_path=f"Data/Hockey/general_plots/all_players_{season}_{metric}.png",
+                title=f"{metric.capitalize().replace('_', ' ')} Convergence - All Players ({season})",
+                metric=metric,
+                estimate_type="expected",
+                figsize=(12, 10),
+            )
+
+
+def rank_info_players():
+    from BlackhawksSkillEstimation.plot_intermediate_estimates import rank_final_estimates
+    for metric in ["execution_skill", "rationality"]:
+        for season in SEASON_TEST_SEASONS:
+            rank_final_estimates(
+                season=season,
+                players=INFO_PLAYERS,
+                metric=metric
+            )
+
+
 # =============================================================================
 # PER-SEASON MULTI-PLAYER TEST
 # =============================================================================
@@ -435,14 +478,16 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - generate_all_logs_plots: Convergence plots only (all players with CSVs)
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
+#   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
+#   - rank_info_players: Generate a bar chart ranking for all INFO_PLAYERS
 
-TEST_TO_RUN = per_season_multi_player_test
+TEST_TO_RUN = rank_info_players
 if __name__ == "__main__":
-    TEST_TO_RUN([sys.argv[1]])
+    # TEST_TO_RUN([sys.argv[1]])
 
     # pids = INFO_PLAYERS[1:]
     # for pid in pids:
     #     save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS)
     #     print("\nThat was for " + lookup_player(pid))
 
-    # TEST_TO_RUN()
+    TEST_TO_RUN()

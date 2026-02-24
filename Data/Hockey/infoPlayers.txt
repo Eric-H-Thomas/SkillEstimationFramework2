@@ -13,7 +13,7 @@
 950069    Artemi_Panarin
 949759    Tyler_Toffoli
 949266    Fabian_Zetterlund
-949791    Patrice_Bergeron
+949791    Patrice_Bergeron    (no shots in 23-24 or 24-25)
 950162    Leon_Draisaitl
 949962    Matt_Boldy
 950193    Kirill_Kaprizov

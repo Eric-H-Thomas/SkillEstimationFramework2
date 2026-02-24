@@ -241,13 +241,14 @@ def plot_all_intermediate_for_player(
 # Multi-CSV comparison
 # ---------------------------------------------------------------------------
 
+#TODO: Can we "zoom in" the y axis throughout the plot so we can see their values better once they've converged?
 def plot_comparison(
     csv_paths: Sequence[Path | str],
     labels: Sequence[str] | None = None,
     output_path: Path | str | None = None,
     title: str = "JEEDS Estimate Comparison",
     metric: str = "execution_skill",
-    estimate_type: str = "map",
+    estimate_type: str = "expected",
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
     burnin: int = 5,
@@ -317,6 +318,114 @@ def plot_comparison(
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.show() if show else plt.close(fig)
     return output_path
+
+
+def rank_final_estimates(
+        season: str | int = "20242025",
+        players: list[int] | None = None,
+        metric: str = "execution_skill",
+        data_dir: str | Path = "Data/Hockey",
+        output_dir: str | Path = "Data/Hockey/general_plots",
+        show: bool = False,
+        figsize: tuple[float, float] = (8, 6),
+) -> Path:
+    """Rank final *expected* estimates for a set of players as a horizontal bar chart.
+
+    Parameters
+    ----------
+    season : str | int
+        Season tag used in intermediate CSV filenames.
+    players : list[int] | None
+        List of player IDs to include. This must be provided.
+    metric : str
+        Either "execution_skill" or "rationality". Rankings use the expected
+        estimate only (e.g. `expected_execution_skill` or `expected_rationality`).
+    data_dir, output_dir : str | Path
+        Paths for reading player logs and writing the output image.
+    show : bool
+        If True, display the figure instead of closing it.
+    figsize : tuple[float, float]
+        Figure size passed to `plt.subplots`.
+
+    Returns
+    -------
+    Path
+        Path to the saved PNG.
+    """
+    if players is None:
+        raise ValueError("`players` must be provided (no auto-discovery)")
+
+    if metric not in ("execution_skill", "rationality"):
+        raise ValueError("metric must be 'execution_skill' or 'rationality'")
+
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    names: list[str] = []
+    values: list[float] = []
+
+    for pid in players:
+        logs = data_dir / f"player_{pid}" / "logs"
+        csv = logs / f"intermediate_estimates_{season}.csv"
+        if not csv.exists():
+            print(f"warning: {pid} has no CSV for {season}")
+            continue
+        data = load_intermediate_estimates(csv)
+        if not data["shot_count"]:
+            continue
+        if metric == "execution_skill":
+            val = data["expected_execution_skill"][-1]
+        else:
+            # Use log10 expected rationality (backwards-compatible key exists)
+            val = data.get("log10_expected_rationality", [None])[-1]
+            if val is None:
+                # fall back to raw expected_rationality then take log10 if present
+                raw = data["expected_rationality"][-1]
+                val = np.log10(raw) if raw > 0 else float("nan")
+        names.append(lookup_player(pid) or str(pid))
+        values.append(val)
+
+    if not values:
+        raise ValueError("No data collected for provided players")
+
+    # Sorting: execution_skill -> ascending (lower = better); rationality -> descending
+    reverse = metric == "rationality"
+    order = sorted(range(len(values)), key=lambda i: values[i], reverse=reverse)
+    sorted_names = [names[i] for i in order]
+    sorted_values = [values[i] for i in order]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    y_pos = np.arange(len(sorted_names))
+    ax.barh(y_pos, sorted_values, color="C0")
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(sorted_names, fontsize=9)
+    ax.invert_yaxis()  # best at the top
+
+    if metric == "execution_skill":
+        ax.set_xlabel("Final expected execution skill (rad, lower = better)")
+        fmt = "{:.3f}"
+    else:
+        ax.set_xlabel("Final expected log10(rationality) (log10(lambda))")
+        fmt = "{:.2f}"
+
+    # Annotate values at end of bars
+    max_v = max(sorted_values)
+    min_v = min(sorted_values)
+    rng = max_v - min_v if max_v != min_v else abs(max_v) if max_v != 0 else 1.0
+    offset = rng * 0.01
+    for i, v in enumerate(sorted_values):
+        ax.text(v + offset, i, fmt.format(v), va="center", fontsize=8)
+
+    ax.set_title(f"Final expected {metric.replace('_', ' ')} rankings – season {season}")
+    out = output_dir / f"final_{metric}_rankings_{season}.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+    return out
 
 
 # ---------------------------------------------------------------------------
