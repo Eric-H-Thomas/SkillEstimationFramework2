@@ -434,6 +434,11 @@ def rank_info_players():
             )
 
 
+def table_info_players():
+    from BlackhawksSkillEstimation.plot_intermediate_estimates import compare_execution_rankings_two_seasons
+    compare_execution_rankings_two_seasons(players=INFO_PLAYERS)
+
+
 # =============================================================================
 # PER-SEASON MULTI-PLAYER TEST
 # =============================================================================
@@ -481,7 +486,7 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
 #   - rank_info_players: Generate a bar chart ranking for all INFO_PLAYERS
 
-TEST_TO_RUN = rank_info_players
+TEST_TO_RUN = table_info_players
 if __name__ == "__main__":
     # TEST_TO_RUN([sys.argv[1]])
 

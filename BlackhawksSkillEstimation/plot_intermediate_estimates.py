@@ -428,6 +428,110 @@ def rank_final_estimates(
     return out
 
 
+def compare_execution_rankings_two_seasons(
+    players: list[int] | None,
+    season_a: str | int = "20232024",
+    season_b: str | int = "20242025",
+    data_dir: str | Path = "Data/Hockey",
+    output_dir: str | Path = "Data/Hockey/general_plots",
+    show: bool = False,
+    figsize: tuple[float, float] = (12, 6),
+) -> Path:
+    """Render two adjacent ranking tables (by execution skill) for two seasons.
+
+    Each table has three columns: player name, execution skill in season A,
+    execution skill in season B. The left table is sorted by season A
+    (ascending), the right table by season B (ascending).
+
+    `players` must be provided.
+    """
+    if players is None:
+        raise ValueError("`players` must be provided (no auto-discovery)")
+
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    names: list[str] = []
+    vals_a: list[float] = []
+    vals_b: list[float] = []
+
+    for pid in players:
+        name = lookup_player(pid) or str(pid)
+        csv_a = data_dir / f"player_{pid}" / "logs" / f"intermediate_estimates_{season_a}.csv"
+        csv_b = data_dir / f"player_{pid}" / "logs" / f"intermediate_estimates_{season_b}.csv"
+
+        def _load_exec(csvp):
+            if not csvp.exists():
+                return float("nan")
+            d = load_intermediate_estimates(csvp)
+            return d["expected_execution_skill"][-1] if d["shot_count"] else float("nan")
+
+        va = _load_exec(csv_a)
+        vb = _load_exec(csv_b)
+        names.append(name)
+        vals_a.append(va)
+        vals_b.append(vb)
+
+    # Build rows as (name, a, b)
+    rows = list(zip(names, vals_a, vals_b))
+
+    # Helper to produce display value
+    def _fmt(v: float) -> str:
+        return "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:.3f}"
+
+    # Sort copies for each table
+    def _nan_key(x):
+        v = x[1]
+        return (np.isnan(v), v if not np.isnan(v) else float("inf"))
+
+    left_rows = sorted(rows, key=_nan_key)
+    # For right table sort by season B value
+    def _nan_key_b(x):
+        v = x[2]
+        return (np.isnan(v), v if not np.isnan(v) else float("inf"))
+
+    right_rows = sorted(rows, key=_nan_key_b)
+
+    fig, (axl, axr) = plt.subplots(1, 2, figsize=figsize, gridspec_kw={'wspace':0.1})
+    fig.suptitle("Execution skill estimates (σ in radians, lower=better)", fontsize=14)
+    for ax in (axl, axr):
+        ax.axis("off")
+
+    # Prepare ranked tables showing final values only. Both tables list the
+    # player name and execution scores for both seasons; sort order differs.
+    left_cell = [[r[0], _fmt(r[1]), _fmt(r[2])] for r in left_rows]
+    right_cell = [[r[0], _fmt(r[1]), _fmt(r[2])] for r in right_rows]
+
+    col_labels = ["Player", str(season_a), str(season_b)]
+
+    tbl_l = axl.table(cellText=left_cell, colLabels=col_labels, cellLoc="left", loc="center")
+    tbl_r = axr.table(cellText=right_cell, colLabels=col_labels, cellLoc="left", loc="center")
+
+    # narrow columns since execution skill values are short
+    cols = list(range(len(col_labels)))
+    tbl_l.auto_set_column_width(col=cols)
+    tbl_r.auto_set_column_width(col=cols)
+
+    tbl_l.auto_set_font_size(False)
+    tbl_r.auto_set_font_size(False)
+    tbl_l.set_fontsize(9)
+    tbl_r.set_fontsize(9)
+    tbl_l.scale(1, 1.2)
+    tbl_r.scale(1, 1.2)
+
+    axl.set_title(f"Ranked by {season_a}")
+    axr.set_title(f"Ranked by {season_b}")
+
+    out = output_dir / f"exec_rankings_compare_{season_a}_{season_b}.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+    return out
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
