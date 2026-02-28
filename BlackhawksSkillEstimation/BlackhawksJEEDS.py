@@ -703,8 +703,35 @@ def _run_jeeds_estimation(
             except Exception as e:
                 print(f"Warning: Could not fetch shot maps for game {game_id}: {e}")
 
+    # ----------------- Shot-type filtering (estimator-only) -----------------
+    # Only include shots whose `shot_type` is NULL/missing or one of the
+    # allowed types. This keeps on-disk pickles unchanged while ensuring the
+    # estimator only sees the targeted shot grouping.
+    allowed_types = {"wristshot", "snapshot"}
+
+    # Work with lower-cased column names for robustness
+    df_lc = df.rename(columns=str.lower)
+
+    if "shot_type" in df_lc.columns:
+        # Normalize to lowercase strings (preserve NaNs)
+        shot_series = df_lc["shot_type"].where(pd.notna(df_lc["shot_type"]))
+        shot_lower = shot_series.astype(str).str.lower()
+        mask = shot_series.isna() | shot_lower.isin(allowed_types)
+        filtered_df = df_lc[mask]
+        num_before = len(df_lc)
+        num_after = len(filtered_df)
+        if num_after != num_before:
+            print(f"  Shot-type filter: kept {num_after}/{num_before} shots (allowed: wristshot,snapshot,NULL)")
+    else:
+        # `shot_type` not present in the shots DataFrame
+        print(
+            "  WARNING: 'shot_type' column not found in shots DataFrame; proceeding with all shots."
+        )
+        filtered_df = df_lc
+
+    # Use the filtered DataFrame going forward
     jeeds_inputs = transform_shots_for_jeeds(
-        df,
+        filtered_df,
         shot_maps=shot_maps,
         candidate_skills=candidate_skills,
     )

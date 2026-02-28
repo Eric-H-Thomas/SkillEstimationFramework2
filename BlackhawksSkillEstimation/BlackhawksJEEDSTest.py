@@ -208,7 +208,7 @@ def generate_all_logs_plots():
     print("=" * 60)
 
 
-def per_season_multi_player_test(pids: list[int] | None):
+def per_season_multi_player_test(pids: list[int] | None = None):
     """Download (if needed), estimate, and plot for each player x season independently."""
     from pathlib import Path
 
@@ -484,9 +484,9 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 #   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
-#   - rank_info_players: Generate a bar chart ranking for all INFO_PLAYERS
+#   - rank_info_players | table_info_players: Generate a bar chart (or table) ranking for all INFO_PLAYERS
 
-TEST_TO_RUN = table_info_players
+TEST_TO_RUN = per_season_multi_player_test
 if __name__ == "__main__":
     # TEST_TO_RUN([sys.argv[1]])
 
