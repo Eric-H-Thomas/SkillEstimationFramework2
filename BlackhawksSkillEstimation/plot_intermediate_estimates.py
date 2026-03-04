@@ -107,7 +107,7 @@ def plot_intermediate_estimates(
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
     burnin: int = 5,
-) -> Path:
+) -> plt.Figure:
     """Dual-axis convergence plot of execution skill and rationality.
 
     Left y-axis (linear): execution skill in radians (lower = better).
@@ -198,9 +198,12 @@ def plot_intermediate_estimates(
     plt.title(title, fontsize=14)
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.show() if show else plt.close(fig)
-    return output_path
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +214,7 @@ def plot_all_intermediate_for_player(
     player_id: int,
     data_dir: Path | str = Path("Data/Hockey"),
     show: bool = False,
-) -> list[Path]:
+) -> list[plt.Figure]:
     """Generate convergence plots for every intermediate CSV of *player_id*.
 
     Looks in ``<data_dir>/player_<id>/logs/intermediate_estimates*.csv``.
@@ -226,12 +229,13 @@ def plot_all_intermediate_for_player(
         print(f"No CSVs in {logs_dir}")
         return []
 
-    paths: list[Path] = []
+    paths: list[plt.Figure] = []
     for csv_file in csvs:
         try:
-            p = plot_intermediate_estimates(csv_file, show=show)
-            paths.append(p)
-            print(f"  {csv_file.name} → {p.name}")
+            fig = plot_intermediate_estimates(csv_file, show=show)
+            paths.append(fig)
+            out = csv_file.with_suffix('.png')
+            print(f"  {csv_file.name} → {out.name}")
         except Exception as exc:
             print(f"  {csv_file.name}: {exc}")
     return paths
@@ -252,7 +256,7 @@ def plot_comparison(
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
     burnin: int = 5,
-) -> Path:
+) -> plt.Figure:
     """Overlay one metric from several CSVs.
 
     Parameters
@@ -315,20 +319,23 @@ def plot_comparison(
     plt.title(title, fontsize=14)
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.show() if show else plt.close(fig)
-    return output_path
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+    return fig
 
 
 def rank_final_estimates(
-        season: str | int = "20242025",
-        players: list[int] | None = None,
-        metric: str = "execution_skill",
-        data_dir: str | Path = "Data/Hockey",
-        output_dir: str | Path = "Data/Hockey/general_plots",
-        show: bool = False,
-        figsize: tuple[float, float] = (8, 6),
-) -> Path:
+    season: str | int = "20242025",
+    players: list[int] | None = None,
+    metric: str = "execution_skill",
+    data_dir: str | Path = "Data/Hockey",
+    output_dir: str | Path = "Data/Hockey/general_plots",
+    show: bool = False,
+    figsize: tuple[float, float] = (8, 6),
+) -> plt.Figure:
     """Rank final *expected* estimates for a set of players as a horizontal bar chart.
 
     Parameters
@@ -425,7 +432,7 @@ def rank_final_estimates(
         fig.show()
     else:
         plt.close(fig)
-    return out
+    return fig
 
 
 def compare_execution_rankings_two_seasons(
@@ -436,7 +443,7 @@ def compare_execution_rankings_two_seasons(
     output_dir: str | Path = "Data/Hockey/general_plots",
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
-) -> Path:
+) -> plt.Figure:
     """Render two adjacent ranking tables (by execution skill) for two seasons.
 
     Each table has three columns: player name, execution skill in season A,
@@ -530,7 +537,7 @@ def compare_execution_rankings_two_seasons(
         fig.show()
     else:
         plt.close(fig)
-    return out
+    return fig
 
 # ---------------------------------------------------------------------------
 # CLI

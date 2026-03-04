@@ -44,9 +44,11 @@ from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap
 from scipy.ndimage import zoom
+
 
 from BlackhawksSkillEstimation.player_cache import lookup_player
 
@@ -68,6 +70,10 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
 _GOAL_LINE_X = 89
 _LEFT_POST = np.array([_GOAL_LINE_X, -3])
 _RIGHT_POST = np.array([_GOAL_LINE_X,  3])
+_NET_CENTER = np.array([89.0, 0.0])
+
+# Net proximity filter (shots within 10ft of net are excluded)
+_MIN_DISTANCE_FROM_NET_FT = 10.0
 
 # Default base directory for player data
 _DEFAULT_DATA_DIR = Path("Data/Hockey")
@@ -143,7 +149,7 @@ def _format_rink_title(
 # Rink diagram
 # ---------------------------------------------------------------------------
 
-def draw_rink() -> plt.Axes:
+def draw_rink() -> tuple[plt.Figure, plt.Axes]:
     """Create a stylized offensive half-rink diagram.
 
     Draws the goal line, crease, face-off circle, and net using
@@ -152,7 +158,7 @@ def draw_rink() -> plt.Axes:
 
     Returns
     -------
-    plt.Axes
+    (plt.Figure, plt.Axes)
     """
     fig, ax = plt.subplots()
     ax.set_aspect(1)
@@ -177,7 +183,7 @@ def draw_rink() -> plt.Axes:
     ax.set_ylim(wall_y, -wall_y)
     ax.axis("off")
 
-    return ax
+    return fig, ax
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +200,7 @@ def plot_shot_angular_heatmap(
     title: str | None = None,
     event_id: int | None = None,
     is_goal: bool = False,
-) -> Path | None:
+) -> plt.Figure | None:
     """Side-by-side Cartesian vs angular heatmap for one shot.
 
     Downsamples the value_map from native Snowflake resolution to the
@@ -319,11 +325,12 @@ def plot_shot_angular_heatmap(
         fig.savefig(out_path, bbox_inches="tight", dpi=150)
 
     if show:
-        plt.show()
+        fig.show()
     else:
         plt.close(fig)
 
-    return out_path
+    # Return the Figure for programmatic use (Streamlit can call st.pyplot(fig)).
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +344,7 @@ def plot_shot_rink(
     save_path: Path | str | None = None,
     show: bool = False,
     title: str = "Shot locations",
-) -> Path | None:
+ ) -> plt.Figure | None:
     """Plot one or more shots on a rink diagram.
 
     Parameters
@@ -360,7 +367,7 @@ def plot_shot_rink(
     """
     player_locations = np.atleast_2d(player_locations)
 
-    ax = draw_rink()
+    fig, ax = draw_rink()
     ax.scatter(player_locations[:, 0], player_locations[:, 1],
                c="blue", s=30, zorder=5, label="Shot location")
 
@@ -381,18 +388,18 @@ def plot_shot_rink(
     if save_path is not None:
         out_path = Path(save_path)
         _ensure_dir(out_path.parent)
-        plt.savefig(out_path, bbox_inches="tight", dpi=150)
+        fig.savefig(out_path, bbox_inches="tight", dpi=150)
     elif not show:
         out_path = _DEFAULT_DATA_DIR / "plots" / "rink" / "shots.png"
         _ensure_dir(out_path.parent)
-        plt.savefig(out_path, bbox_inches="tight", dpi=150)
+        fig.savefig(out_path, bbox_inches="tight", dpi=150)
 
     if show:
-        plt.show()
+        fig.show()
     else:
-        plt.close()
+        plt.close(fig)
 
-    return out_path
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +412,7 @@ def plot_player_convergence(
     save_path: Path | str | None = None,
     show: bool = False,
     title: str | None = None,
-) -> Path | None:
+ ) -> plt.Figure | None:
     """Plot JEEDS convergence for one estimation run.
 
     Thin wrapper around
@@ -426,6 +433,7 @@ def plot_player_convergence(
     -------
     Path | None
     """
+    # plot_intermediate_estimates now returns a Figure.
     return plot_intermediate_estimates(
         csv_path,
         output_path=save_path,
@@ -437,7 +445,7 @@ def plot_player_convergence(
 def plot_all_player_convergence(
     player_id: int,
     data_dir: Path | str = Path("Data/Hockey"),
-) -> list[Path]:
+) -> list[plt.Figure]:
     """Generate convergence plots for every CSV under a player's logs/.
 
     Delegates to
@@ -463,7 +471,7 @@ def plot_player_shots_from_offline(
     seasons: list[int] | None = None,
     max_shots: int = 10,
     output_dir: Path | str | None = None,
-) -> dict[str, list[Path]]:
+) -> dict[str, list[plt.Figure]]:
     """Generate rink + angular heatmap plots from offline pickle data.
 
     Loads shot data (via ``load_player_data`` or ``load_player_data_by_games``)
@@ -515,7 +523,7 @@ def plot_player_shots_from_offline(
 
     player_name = lookup_player(player_id)
 
-    angular_paths: list[Path] = []
+    angular_paths: list[plt.Figure] = []
     player_locs: list[list[float]] = []
     executed_acts: list[list[float]] = []
 
@@ -528,6 +536,13 @@ def plot_player_shots_from_offline(
         player_loc = [float(row["start_x"]), float(row["start_y"])]
         exec_act = [float(row["location_y"]), float(row["location_z"])]
         is_goal = bool(row.get("shot_is_goal", False))
+
+        # ---- 10-ft net proximity filter ----
+        # Skip shots within 10ft radius of net center (same as estimator filter)
+        dist_to_net = np.linalg.norm(np.array(player_loc) - _NET_CENTER)
+        if dist_to_net < _MIN_DISTANCE_FROM_NET_FT:
+            continue
+
         player_locs.append(player_loc)
         executed_acts.append(exec_act)
 
@@ -538,15 +553,15 @@ def plot_player_shots_from_offline(
                 if player_name is not None
                 else f"Player {player_id}"
             )
-            out = plot_shot_angular_heatmap(
+            fig = plot_shot_angular_heatmap(
                 value_map, player_loc, exec_act,
                 save_path=output_dir / "angular" / f"shot_{event_id}.png",
                 title=_player_label,
                 event_id=event_id,
                 is_goal=is_goal,
             )
-            if out is not None:
-                angular_paths.append(out)
+            if fig is not None:
+                angular_paths.append(fig)
 
         shot_count += 1
 
@@ -559,13 +574,145 @@ def plot_player_shots_from_offline(
             player_name=player_name,
             shot_count=len(player_locs),
         )
-        rink_path = plot_shot_rink(
+        rink_fig = plot_shot_rink(
             player_locs, executed_acts,
             save_path=output_dir / "rink" / f"player_{player_id}_all_shots.png",
             title=title_str,
         )
-
+        rink_path = rink_fig
     return {
         "angular": angular_paths,
         "rink": [rink_path] if rink_path else [],
     }
+
+
+# ---------------------------------------------------------------------------
+# CLI: Single shot heatmap
+# ---------------------------------------------------------------------------
+
+def plot_single_shot_cli(
+    player_id: int,
+    event_id: int,
+    data_dir: Path | str = Path("Data/Hockey"),
+    output_dir: Path | str | None = None,
+) -> Path | None:
+    """Generate heatmap for a single shot event given player_id and event_id.
+
+    Searches all pickle files in player's data directory for the event_id,
+    extracts shot data, and saves angular heatmap to output_dir.
+
+    Parameters
+    ----------
+    player_id : int
+        Blackhawks player ID.
+    event_id : int
+        Shot event ID to plot.
+    data_dir : Path | str
+        Root data directory (default: "Data/Hockey").
+    output_dir : Path | str | None
+        Output directory (default: Data/Hockey/player_{id}/plots/).
+
+    Returns
+    -------
+    Path | None
+        Path to saved figure, or None if event not found.
+    """
+    import pickle
+    import glob
+
+    data_dir = Path(data_dir)
+    player_dir = data_dir / f"player_{player_id}"
+    data_subdir = player_dir / "data"
+
+    if output_dir is None:
+        output_dir = player_dir / "plots"
+    output_dir = Path(output_dir)
+
+    # Find and load pickle files
+    shots_df = None
+    shot_maps = {}
+
+    for pkl_file in glob.glob(str(data_subdir / "shots_*.pkl")):
+        with open(pkl_file, "rb") as f:
+            df = pickle.load(f)
+            if shots_df is None:
+                shots_df = df
+            else:
+                shots_df = pd.concat([shots_df, df], ignore_index=True)
+
+    for pkl_file in glob.glob(str(data_subdir / "shot_maps_*.pkl")):
+        with open(pkl_file, "rb") as f:
+            maps = pickle.load(f)
+            shot_maps.update(maps)
+
+    if shots_df is None or event_id not in shot_maps:
+        print(f"Event {event_id} not found for player {player_id}")
+        return None
+
+    # Find shot row
+    shot_row = shots_df[shots_df["event_id"] == event_id]
+    if shot_row.empty:
+        print(f"Event {event_id} metadata not found")
+        return None
+
+    shot_row = shot_row.iloc[0]
+    value_map = shot_maps[event_id]["value_map"]
+    player_loc = [float(shot_row.get("start_x", 0)), float(shot_row.get("start_y", 0))]
+    exec_act = [float(shot_row.get("location_y", 0)), float(shot_row.get("location_z", 0))]
+    is_goal = bool(shot_row.get("shot_is_goal", False))
+
+    player_name = lookup_player(player_id)
+    title = f"Player {player_id} ({player_name})" if player_name else f"Player {player_id}"
+
+    fig = plot_shot_angular_heatmap(
+        value_map, player_loc, exec_act,
+        save_path=output_dir / "angular" / f"shot_{event_id}.png",
+        title=title,
+        event_id=event_id,
+        is_goal=is_goal,
+    )
+
+    if fig is not None:
+        return output_dir / "angular" / f"shot_{event_id}.png"
+    return None
+
+
+if __name__ == "__main__":
+    import argparse
+    import pandas as pd
+
+    parser = argparse.ArgumentParser(description="Generate heatmap(s) for shot(s)")
+    parser.add_argument("-player_id", type=int, required=True, help="Player ID")
+    parser.add_argument("-event_id", type=int, default=None, help="Single event ID")
+    parser.add_argument("-season", type=int, default=None, help="Season (e.g., 20242025)")
+    parser.add_argument("-limit", type=int, default=10, help="Max shots to plot (default: 10)")
+    parser.add_argument("-data_dir", type=str, default="Data/Hockey", help="Data directory")
+    parser.add_argument("-output_dir", type=str, default=None, help="Output directory")
+
+    args = parser.parse_args()
+
+    if args.event_id is not None:
+        result = plot_single_shot_cli(
+            player_id=args.player_id,
+            event_id=args.event_id,
+            data_dir=args.data_dir,
+            output_dir=args.output_dir,
+        )
+        if result:
+            print(f"Saved: {result}")
+        else:
+            print("Failed to generate heatmap")
+            sys.exit(1)
+    elif args.season is not None:
+        result = plot_player_shots_from_offline(
+            player_id=args.player_id,
+            data_dir=args.data_dir,
+            seasons=[args.season],
+            max_shots=args.limit,
+            output_dir=args.output_dir,
+        )
+        print(f"Generated {len(result.get('angular', []))} angular heatmaps")
+        print(f"Generated {len(result.get('rink', []))} rink diagram(s)")
+    else:
+        parser.print_help()
+        sys.exit(1)
