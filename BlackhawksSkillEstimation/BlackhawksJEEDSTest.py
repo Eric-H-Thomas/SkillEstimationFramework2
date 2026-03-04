@@ -337,8 +337,7 @@ def generate_all_viz():
 
     data_dir = Path("Data/Hockey")
 
-    for player_info in LIGHTWEIGHT_TEST_PLAYERS:
-        player_id = player_info["player_id"]
+    for player_id in INFO_PLAYERS:
         name = lookup_player(player_id)
         print(f"\n{'='*60}")
         print(f"{name} (ID: {player_id})")
@@ -486,7 +485,7 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
 #   - rank_info_players | table_info_players: Generate a bar chart (or table) ranking for all INFO_PLAYERS
 
-TEST_TO_RUN = per_season_multi_player_test
+TEST_TO_RUN = generate_all_viz
 if __name__ == "__main__":
     # TEST_TO_RUN([sys.argv[1]])
 
@@ -494,5 +493,15 @@ if __name__ == "__main__":
     # for pid in pids:
     #     save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS)
     #     print("\nThat was for " + lookup_player(pid))
+
+    '''
+    save_player_data(player_id=950182, seasons=[20242025],)# overwrite=True)
+
+    plot_player_shots_from_offline(
+        player_id=950182,
+        seasons=[20242025],
+        max_shots=15,
+    )
+    '''
 
     TEST_TO_RUN()

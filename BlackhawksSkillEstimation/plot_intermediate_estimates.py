@@ -165,7 +165,7 @@ def plot_intermediate_estimates(
     l4 = ax_rat.plot(shots, map_rat_data,
                      color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
     ax_rat.set_yscale("log")
-    ax_rat.set_ylim(10, 10 ** 3.5)
+    ax_rat.set_ylim(10 ** 0.95, 10 ** 3.65)
 
     # Show ticks at each half order of magnitude (10^1, 10^1.5, 10^2, ...)
     _half_log_ticks = [10 ** (x / 2) for x in range(2, 8)]  # 10^1 to 10^3.5
