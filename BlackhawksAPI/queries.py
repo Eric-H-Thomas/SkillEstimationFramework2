@@ -121,7 +121,6 @@ def query_player_season_shots(
     query = f"""
         SELECT
             e.PLAYER_ID_HAWKS        AS player_id,
-            /* e.PLAYER_NAME            AS player_name, */
             e.GAME_ID_HAWKS          AS game_id,
             e.EVENT_ID_HAWKS         AS event_id,
             g.SEASON                 AS season,
@@ -156,7 +155,11 @@ def query_player_season_shots(
           AND g.SEASON IN ({seasons_str})
           AND e.EVENT_NAME = 'shot';
     """
-    return db.get_df(query, query_params={"player_id": player_id})
+    df = db.get_df(query, query_params={"player_id": player_id})
+    df = df.rename(columns=str.lower)
+    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    df["location_y"] = -df["location_y"]
+    return df
 
 
 def get_game_shot_maps(game_id_hawks: int, player_id: int | None = None) -> dict[int, dict[str, object]]:
@@ -226,6 +229,8 @@ def get_games_shot_maps_batch(
             ;
             """
     df = db.get_df(query).rename(columns=str.lower)
+    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    df["goalline_y_model"] = -df["goalline_y_model"]
 
     shot_maps: dict[int, dict[str, object]] = {}
     for event_id_hawks in df["event_id_hawks"].unique():
@@ -233,9 +238,7 @@ def get_games_shot_maps_batch(
 
         shot_data: dict[str, object] = {}
         shot_data["df"] = shot_df
-        shot_data["value_map"] = np.flip(
-            shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T, axis=1
-        )
+        shot_data["value_map"] = shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T
         shot_data["net_cov"] = _extract_covariance_matrix(shot_df.iloc[0])
         shot_data["net_coords"] = shot_df.iloc[0][
             ["goalline_y_model", "goalline_z_model"]
@@ -257,7 +260,6 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
     query = f"""
         SELECT
             e.PLAYER_ID_HAWKS        AS player_id,
-            /* e.PLAYER_NAME            AS player_name, */
             e.GAME_ID_HAWKS          AS game_id,
             e.EVENT_ID_HAWKS         AS event_id,
             e.SHOT_IS_BLOCKED,
@@ -289,7 +291,11 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
           AND e.GAME_ID_HAWKS IN ({game_ids_str})
           AND e.EVENT_NAME = 'shot';
     """
-    return db.get_df(query, query_params={"player_id": player_id})
+    df = db.get_df(query, query_params={"player_id": player_id})
+    df = df.rename(columns=str.lower)
+    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    df["location_y"] = -df["location_y"]
+    return df
 
 
 def get_top_shooters_in_games(game_ids: list[int], min_shots: int = 3) -> pd.DataFrame:

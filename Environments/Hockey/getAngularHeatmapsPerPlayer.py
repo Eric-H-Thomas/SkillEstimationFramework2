@@ -100,17 +100,24 @@ def getAngle(point1, point2):
     return angle
 
 
-def getAngularHeatmap(heatmap, playerLocation, executedAction):
+def getAngularHeatmap(heatmap, playerLocation, executedAction,
+                      grid_y=None, grid_z=None):
     """Convert a Cartesian heatmap for one shot into angular space.
 
     Parameters
     ----------
     heatmap : np.ndarray
-        2-D utility/value map with shape ``(len(Z), len(Y))``.
+        2-D utility/value map with shape ``(len(grid_z), len(grid_y))``.
     playerLocation : array-like
         ``[x, y]`` rink coordinates of the shooter.
     executedAction : array-like
         ``[y, z]`` goal-face coordinates where the shot ended up.
+    grid_y : array-like or None
+        Y-axis coordinates of the heatmap columns.  Defaults to the
+        module-level SpacesHockey grid (Y ∈ [-3, 3], 60 pts).
+    grid_z : array-like or None
+        Z-axis coordinates of the heatmap rows.  Defaults to the
+        module-level SpacesHockey grid (Z ∈ [0, 4], 40 pts).
     """
 
     rng = np.random.default_rng(1000)
@@ -118,6 +125,13 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
     # Flatten utilities for interpolation convenience.
     shape = heatmap.shape
     listedUtilities = heatmap.reshape((shape[0] * shape[1], 1))
+
+    # Use caller grid or module default
+    _gy = Y if grid_y is None else np.asarray(grid_y)
+    _gz = Z if grid_z is None else np.asarray(grid_z)
+    _gridY, _gridZ = np.meshgrid(_gy, _gz)
+    _gridYZ = np.stack((_gridY, _gridZ), axis=-1)
+    listedTargetsUtilityGridYZ = _gridYZ.reshape((_gridYZ.shape[0] * _gridYZ.shape[1], 2))
 
     # Generate angular bounds for direction based on augmented posts.
     dir_left = getAngle(playerLocation, leftAugmented)
@@ -176,7 +190,7 @@ def getAngularHeatmap(heatmap, playerLocation, executedAction):
 
     # Interpolate utilities from Y/Z grid into angular grid.
     listedUtilitiesComputed = griddata(
-        listedTargetsUtilityGridYZ,
+        listedTargetsUtilityGridYZ,  # now uses caller-supplied grid if provided
         listedUtilities,
         listedTargetsAngular2YZ,
         method='cubic',

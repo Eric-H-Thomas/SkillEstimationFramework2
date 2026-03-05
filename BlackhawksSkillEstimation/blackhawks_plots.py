@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap
-from scipy.ndimage import zoom
+from scipy.interpolate import RegularGridInterpolator
 
 
 from BlackhawksSkillEstimation.player_cache import lookup_player
@@ -68,23 +68,22 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
 # ---------------------------------------------------------------------------
 # Rink geometry (feet, NHL standard)
 _GOAL_LINE_X = 89
-_LEFT_POST = np.array([_GOAL_LINE_X, -3])
-_RIGHT_POST = np.array([_GOAL_LINE_X,  3])
 _NET_CENTER = np.array([89.0, 0.0])
 
 # Net proximity filter (shots within 10ft of net are excluded)
 _MIN_DISTANCE_FROM_NET_FT = 10.0
 
+# Net opening bounds (goal-face coordinates: Y, Z)
+_NET_Y_MIN, _NET_Y_MAX = -3.0, 3.0
+_NET_Z_MIN, _NET_Z_MAX = 0.0, 4.0
+
 # Default base directory for player data
 _DEFAULT_DATA_DIR = Path("Data/Hockey")
 
-# Blackhawks value-map native shape (from Snowflake queries.py)
-_BH_VALUE_MAP_Z = 72
-_BH_VALUE_MAP_Y = 120
-
-# SpacesHockey grid dimensions (what getAngularHeatmap expects by default)
-_SPACES_NUM_Y = 60
-_SPACES_NUM_Z = 40
+# Blackhawks xG grid extent and resolution (from Snowflake queries.py)
+# The grid covers a wider area than the net face so misses are captured.
+_BH_Y = np.linspace(-5.0, 5.0, 120)   # Y in [-5, 5]
+_BH_Z = np.linspace(0.0,  6.0,  72)   # Z in [0, 6]
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +96,18 @@ def _ensure_dir(path: Path) -> Path:
     return path
 
 
+def _is_trajectory_miss(exec_act: list | np.ndarray) -> bool:
+    """Check if shot landed outside the net based on trajectory.
+    
+    Compares goal-face coordinates [Y, Z] to net opening bounds.
+    Returns True if shot landed outside the net, False if inside.
+    """
+    y, z = float(exec_act[0]), float(exec_act[1])
+    outside_y = y < _NET_Y_MIN or y > _NET_Y_MAX
+    outside_z = z < _NET_Z_MIN or z > _NET_Z_MAX
+    return outside_y or outside_z
+
+
 def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
     """Build a brighter custom colormap for heatmap scatter plots."""
     n = plt.cm.jet.N
@@ -105,17 +116,25 @@ def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
 
 
 def _resize_value_map(value_map: np.ndarray) -> np.ndarray:
-    """Downsample a Blackhawks value map to SpacesHockey grid dimensions.
+    """Remap a Blackhawks xG map onto the SpacesHockey coordinate grid.
 
-    The raw maps from Snowflake are (72, 120) = (Z, Y).  The angular
-    transform in ``getAngularHeatmap`` expects (40, 60) matching the
-    SpacesHockey grid.
+    The raw maps cover Y ∈ [-5, 5] × Z ∈ [0, 6] (72×120).  SpacesHockey
+    defaults to Y ∈ [-3, 3] × Z ∈ [0, 4] (40×60), but ``getAngularHeatmap``
+    now accepts ``grid_y``/``grid_z`` to use native BH extents directly.
+    This helper is kept for debug comparisons; the main plot path no longer
+    calls it.
     """
-    return zoom(
-        value_map,
-        (_SPACES_NUM_Z / value_map.shape[0], _SPACES_NUM_Y / value_map.shape[1]),
-        order=1,
+    # SpacesHockey target grid (used only for debug remap function)
+    sh_y = np.linspace(-3.0, 3.0, 60)
+    sh_z = np.linspace(0.0, 4.0, 40)
+    sh_zz, sh_yy = np.meshgrid(sh_z, sh_y, indexing='ij')
+    sh_query_pts = np.stack([sh_zz.ravel(), sh_yy.ravel()], axis=-1)
+    
+    interp = RegularGridInterpolator(
+        (_BH_Z, _BH_Y), value_map, method='linear',
+        bounds_error=False, fill_value=0.0,
     )
+    return interp(sh_query_pts).reshape(40, 60)
 
 
 def _format_rink_title(
@@ -270,8 +289,10 @@ def plot_shot_angular_heatmap(
     Path | None
         Path of the saved figure, or None if only ``show=True``.
     """
-    # Downsample to the 40×60 grid expected by getAngularHeatmap.
-    heatmap = _resize_value_map(value_map)
+    # Pass native BH heatmap directly; supply BH coordinate axes so
+    # getAngularHeatmap interpolates over Y∈[-5,5] Z∈[0,6] instead of
+    # the narrower SpacesHockey defaults.
+    heatmap = np.asarray(value_map)
 
     (
         dirs, elevations,
@@ -286,16 +307,15 @@ def plot_shot_angular_heatmap(
         _,
     ) = getAngularHeatmap(
         heatmap, np.asarray(player_location), np.asarray(executed_action),
+        grid_y=_BH_Y, grid_z=_BH_Z,
     )
 
     if skip:
         print("Warning: angular heatmap skipped (player location too close to goal line).")
         return None
 
-    # Build Cartesian target grid matching the downsampled heatmap.
-    Y = np.linspace(-3.0, 3.0, _SPACES_NUM_Y)
-    Z = np.linspace( 0.0, 4.0, _SPACES_NUM_Z)
-    tY, tZ = np.meshgrid(Y, Z)
+    # Build Cartesian target grid matching the native BH heatmap.
+    tY, tZ = np.meshgrid(_BH_Y, _BH_Z)
     cartesian_targets = np.stack((tY, tZ), axis=-1).reshape(-1, 2)
 
     cmap = _make_custom_cmap()
@@ -578,12 +598,14 @@ def plot_player_shots_from_offline(
     seasons: list[int] | None = None,
     max_shots: int = 10,
     output_dir: Path | str | None = None,
+    goals_only: bool = False,
+    misses_only: bool = False,
 ) -> dict[str, list[plt.Figure]]:
     """Generate rink + angular heatmap plots from offline pickle data.
 
     Loads shot data (via ``load_player_data`` or ``load_player_data_by_games``)
     and generates per-shot angular heatmap comparisons and a combined rink
-    diagram.
+    diagram.  Shots within 10ft of net are always excluded (estimator constraint).
 
     Parameters
     ----------
@@ -601,6 +623,11 @@ def plot_player_shots_from_offline(
     output_dir : Path | str | None
         Where to write figures.  Defaults to
         ``Data/Hockey/player_{id}/plots/``.
+    goals_only : bool
+        If True, only include shots where puck landed inside the net (trajectory-based).
+    misses_only : bool
+        If True, only include shots where puck landed outside the net (trajectory-based).
+        Can combine with ``goals_only`` to find anomalies (e.g., marked goals that missed).
 
     Returns
     -------
@@ -645,10 +672,14 @@ def plot_player_shots_from_offline(
         exec_act = [float(row["location_y"]), float(row["location_z"])]
         is_goal = bool(row.get("shot_is_goal", False))
 
-        # ---- 10-ft net proximity filter ----
-        # Skip shots within 10ft radius of net center (same as estimator filter)
+        # Apply filters: net proximity (always), goal/miss outcome (optional)
         dist_to_net = np.linalg.norm(np.array(player_loc) - _NET_CENTER)
         if dist_to_net < _MIN_DISTANCE_FROM_NET_FT:
+            continue
+        
+        if goals_only and not is_goal:
+            continue
+        if misses_only and not _is_trajectory_miss(exec_act):
             continue
 
         player_locs.append(player_loc)
@@ -671,8 +702,8 @@ def plot_player_shots_from_offline(
             )
             if fig is not None:
                 angular_paths.append(fig)
-
-        shot_count += 1
+                shot_count += 1
+                print(f"Saved: {output_dir / 'angular' / f'shot_{event_id}.png'}")
 
     # Combined rink diagram
     rink_path = None
@@ -684,10 +715,19 @@ def plot_player_shots_from_offline(
             shot_count=len(player_locs),
             seasons=seasons,
         )
+        # Tag rink filename with filter if applied
+        rink_filename = f"player_{player_id}_all_shots.png"
+        if goals_only and misses_only:
+            rink_filename = f"player_{player_id}_outlier_shots.png"
+        elif goals_only:
+            rink_filename = f"player_{player_id}_goal_shots.png"
+        elif misses_only:
+            rink_filename = f"player_{player_id}_trajmiss_shots.png"
+        
         rink_fig = plot_shot_rink(
             player_locs, executed_acts,
             is_goal=is_goals,
-            save_path=output_dir / "rink" / f"player_{player_id}_all_shots.png",
+            save_path=output_dir / "rink" / rink_filename,
             title=title_str,
         )
         rink_path = rink_fig
@@ -863,35 +903,52 @@ if __name__ == "__main__":
     import pandas as pd
 
     parser = argparse.ArgumentParser(
-        description="Generate heatmap(s) and/or rink plot(s) for shot(s).",
+        description="Generate heatmap(s) and/or rink plot(s) for shot(s). Shots within 10ft of net are always excluded.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-  # Angular heatmap for a single event:
-  python blackhawks_plots.py -player_id 950160 -event_id 12345
+  # Rink + angular heatmaps for one season (default: 10 heatmaps):
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025
 
-  # Rink plot for a single event (shows position highlighted on rink):
-  python blackhawks_plots.py -player_id 950160 -rink_event_id 12345
+  # Only goals:
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025 -goals_only
 
-  # Rink + angular heatmaps for all shots in one season:
-  python blackhawks_plots.py -player_id 950160 -seasons 20242025
+  # Only misses:
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025 -misses_only
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950161 -seasons 20232024 20242025 -misses_only -limit 50
 
-  # Rink plot only (no individual angular heatmaps) for one season:
-  python blackhawks_plots.py -player_id 950160 -seasons 20242025 -limit 0
+  # Find anomalies (marked goals with trajectory outside net, or vice versa):
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025 -outliers
+  python -m BlackhawksSkillEstimation.blackhawks_plots -seasons 20232024 20242025 -outliers -pid 950069
 
-  # Multiple seasons at once:
-  python blackhawks_plots.py -player_id 950160 -seasons 20232024 20242025
+  # Or explicitly combine both flags:
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025 -goals_only -misses_only
+
+  # Rink only (no individual heatmaps):
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -seasons 20242025 -limit 0
+
+  # Single shot angular heatmap:
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -event_id 12345
+
+  # Single shot rink plot:
+  python -m BlackhawksSkillEstimation.blackhawks_plots -player_id 950160 -rink_event_id 12345
 """,
     )
-    parser.add_argument("-player_id", type=int, required=True, help="Player ID")
+    parser.add_argument("-player_id", "-pid", "-player", type=int, required=True, help="Player ID")
     parser.add_argument("-event_id", type=int, default=None,
                         help="Single event ID — generates an angular heatmap for that shot")
     parser.add_argument("-rink_event_id", type=int, default=None,
                         help="Single event ID — generates a rink diagram for that shot")
-    parser.add_argument("-seasons", type=int, nargs="+", default=None,
-                        help="One or more seasons (e.g. -seasons 20242025  or  -seasons 20232024 20242025)")
+    parser.add_argument("-seasons", "-season", type=int, nargs="+", default=None,
+                        help="One or more seasons (e.g. -seasons 20242025)")
     parser.add_argument("-limit", type=int, default=10,
-                        help="Max angular heatmaps to generate when running over a full season (default: 10). Use -limit 0 to generate only the rink plot without individual angular heatmaps.")
+                        help="Max angular heatmaps when using -seasons (default: 10; use 0 for rink only)")
+    parser.add_argument("-goals_only", "-goals", action="store_true",
+                        help="Filter to shots inside net (trajectory-based)")
+    parser.add_argument("-misses_only", "-misses", action="store_true",
+                        help="Filter to shots outside net (trajectory-based; combine with -goals_only to find anomalies)")
+    parser.add_argument("-outliers_only", "-outliers", action="store_true",
+                        help="Shorthand for -goals_only -misses_only; finds anomalies (marked goals with trajectory outside, etc.)")
     parser.add_argument("-data_dir", type=str, default="Data/Hockey", help="Data directory")
     parser.add_argument("-output_dir", type=str, default=None, help="Output directory")
 
@@ -899,8 +956,10 @@ Examples:
 
     # Resolve effective seasons list
     _seasons: list[int] | None = args.seasons
-    if _seasons is None and args.season is not None:
-        _seasons = [args.season]
+
+    # Handle -outliers shorthand (sets both goals_only and misses_only)
+    goals_only = args.goals_only or args.outliers_only
+    misses_only = args.misses_only or args.outliers_only
 
     if args.event_id is not None:
         # Angular heatmap for a single shot event
@@ -937,6 +996,8 @@ Examples:
             seasons=_seasons,
             max_shots=args.limit,
             output_dir=args.output_dir,
+            goals_only=goals_only,
+            misses_only=misses_only,
         )
         print(f"Generated {len(result.get('angular', []))} angular heatmaps")
         print(f"Generated {len(result.get('rink', []))} rink diagram(s)")

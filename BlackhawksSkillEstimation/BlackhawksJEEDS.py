@@ -35,7 +35,8 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.ndimage import gaussian_filter, zoom
+from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import gaussian_filter
 
 from BlackhawksAPI import (
     get_game_shot_maps,
@@ -49,6 +50,11 @@ from Estimators.joint import JointMethodQRE
 
 # Net center position used for proximity filtering (NHL standard).
 _NET_CENTER = np.array([89.0, 0.0])
+
+# Blackhawks xG grid: Y: [-5, 5] (120 pts), Z: [0, 6] (72 pts)
+# Passed to getAngularHeatmap as grid_y and grid_z to use full native extents.
+_BH_Y = np.linspace(-5.0, 5.0, 120)
+_BH_Z = np.linspace(0.0, 6.0, 72)
 
 # Minimum distance (in feet) from the net center below which a shot is
 # discarded.  The Blackhawks analytics team cannot accurately model shots
@@ -277,12 +283,7 @@ def transform_shots_for_jeeds(
             continue
 
         shot_map_data = shot_maps[event_id]
-        base_ev = shot_map_data["value_map"]
-
-        # Resize xG map from (72, 120) = (Z, Y) to (40, 60) = (len(Z), len(Y))
-        # queries.py produces axis-0=Z(72), axis-1=Y(120) after .T and flip.
-        # getAngularHeatmap expects shape (len(Z), len(Y)) from meshgrid(Y, Z).
-        base_ev = zoom(base_ev, (40 / base_ev.shape[0], 60 / base_ev.shape[1]), order=1)
+        base_ev = shot_map_data["value_map"]  # native (72×120) over Y∈[-5,5] Z∈[0,6]
 
         # Convert Blackhawks Cartesian reward surface to angular coordinates.
         (
@@ -301,6 +302,8 @@ def transform_shots_for_jeeds(
             base_ev,
             player_location,
             executed_action,
+            grid_y=_BH_Y,
+            grid_z=_BH_Z,
         )
 
         if skip:
