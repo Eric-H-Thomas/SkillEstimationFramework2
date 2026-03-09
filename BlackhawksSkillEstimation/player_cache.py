@@ -48,10 +48,16 @@ def lookup_player(player_id: int | None = None, player_name: str | None = None) 
     if player_id is not None:
         player_name = get_player_name(player_id)
         if player_name:
-            # Update the cache
-            with open(CACHE_FILE, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([player_id, player_name])
+            # Re-read the cache right before writing to catch concurrent updates
+            with open(CACHE_FILE, "r") as f:
+                updated_cache = {int(row["player_id"]): row["player_name"]
+                                for row in csv.DictReader(f)}
+            if player_id not in updated_cache:
+                # safe to append...
+                # Update the cache
+                with open(CACHE_FILE, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([player_id, player_name])
             return player_name
     elif player_name is not None:
         # TODO: Add logic to query the database for player_id if needed
