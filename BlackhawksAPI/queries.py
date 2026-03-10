@@ -157,6 +157,11 @@ def query_player_season_shots(
     """
     df = db.get_df(query, query_params={"player_id": player_id})
     df = df.rename(columns=str.lower)
+    
+    # No data for this player/season
+    if df.empty:
+        return df
+    
     # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
     df["location_y"] = -df["location_y"]
     return df
@@ -229,6 +234,11 @@ def get_games_shot_maps_batch(
             ;
             """
     df = db.get_df(query).rename(columns=str.lower)
+    
+    # No data for these games/player
+    if df.empty:
+        return {}
+    
     # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
     df["goalline_y_model"] = -df["goalline_y_model"]
 
@@ -293,6 +303,11 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
     """
     df = db.get_df(query, query_params={"player_id": player_id})
     df = df.rename(columns=str.lower)
+    
+    # No data for these games/player
+    if df.empty:
+        return {}
+    
     # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
     df["location_y"] = -df["location_y"]
     return df
