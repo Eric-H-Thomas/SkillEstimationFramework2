@@ -74,12 +74,28 @@ DEFAULT_NUM_EXECUTION_SKILLS = 50
 # These are currently between the range of 0-3.5 in logspace.
 DEFAULT_NUM_PLANNING_SKILLS = 100
 
+# ---------------------------------------------------------------------------
+# Shot-type grouping definitions
+# ---------------------------------------------------------------------------
+# Each entry maps a short tag -> (display_name, allowed_shot_types, include_null).
+# ``include_null`` controls whether shots with NULL/missing shot_type are included.
+SHOT_TYPE_GROUPS: dict[str, tuple[str, set[str], bool]] = {
+    "ws": ("Wristshot/Snapshot", {"wristshot", "snapshot"}, True),
+    "bh": ("Backhand", {"backhand"}, False),
+    "ss": ("Slapshot", {"slapshot"}, False),
+    "dk": ("Deke", {"forehandbackhand", "backhandforehand"}, False),
+}
+
+# Convenience tuple of all defined group tags, in canonical order.
+DEFAULT_SHOT_GROUPS: tuple[str, ...] = ("ws", "bh", "ss", "dk")
+
 
 def save_intermediate_estimates_csv(
     skill_log: list[dict[str, object]],
     player_id: int,
     output_dir: Path | str,
     tag: str = "",
+    shot_group: str = "",
 ) -> Path:
     """Save intermediate estimates to a CSV file.
     
@@ -94,6 +110,9 @@ def save_intermediate_estimates_csv(
         Base directory (e.g., "Data/Hockey/player_950160").
     tag : str
         Optional tag for filename (e.g., "20242025" for season or "2games_test").
+    shot_group : str
+        Shot-type group tag (e.g., "ws", "bh").  When non-empty the CSV is
+        written into a subdirectory ``logs/<shot_group>/`` instead of ``logs/``.
     
     Returns
     -------
@@ -102,6 +121,8 @@ def save_intermediate_estimates_csv(
     """
     output_dir = Path(output_dir)
     logs_dir = output_dir / "logs"
+    if shot_group:
+        logs_dir = logs_dir / shot_group
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     tag_str = f"_{tag}" if tag else ""
@@ -673,16 +694,24 @@ def _run_jeeds_estimation(
     preloaded_shot_maps: dict[int, dict[str, object]] | None = None,
     save_intermediate_csv: bool = False,
     csv_tag: str = "",
+    shot_group: str = "",
 ) -> dict[str, object]:
     """Internal helper to run JEEDS on a DataFrame of shots.
     
     Returns a result dict with execution_skill, rationality, num_shots, and optionally skill_log.
     
     Timing logs are written to ``player_dir/times/estimators/``.
-    Intermediate CSVs are written to ``player_dir/logs/``.
+    Intermediate CSVs are written to ``player_dir/logs/`` (or ``logs/<shot_group>/`` when set).
     
     If preloaded_shot_maps is provided, uses those instead of fetching from DB.
     If save_intermediate_csv is True, saves the skill_log to a CSV file.
+    
+    Parameters
+    ----------
+    shot_group : str
+        Shot-type group tag (e.g., ``"ws"``, ``"bh"``).  When non-empty, the
+        shot-type filter is driven by :data:`SHOT_TYPE_GROUPS` and output CSVs
+        are written into a ``logs/<shot_group>/`` subdirectory.
     """
     if df.empty:
         return {
@@ -707,10 +736,18 @@ def _run_jeeds_estimation(
                 print(f"Warning: Could not fetch shot maps for game {game_id}: {e}")
 
     # ----------------- Shot-type filtering (estimator-only) -----------------
-    # Only include shots whose `shot_type` is NULL/missing or one of the
-    # allowed types. This keeps on-disk pickles unchanged while ensuring the
-    # estimator only sees the targeted shot grouping.
-    allowed_types = {"wristshot", "snapshot"}
+    # Determine the allowed shot types and whether NULLs are included.
+    # When *shot_group* is provided, look up SHOT_TYPE_GROUPS; otherwise fall
+    # back to the legacy default (wristshot + snapshot + NULL).
+    if shot_group:
+        if shot_group not in SHOT_TYPE_GROUPS:
+            raise ValueError(
+                f"Unknown shot_group '{shot_group}'. "
+                f"Valid groups: {', '.join(SHOT_TYPE_GROUPS)}"
+            )
+        group_display, allowed_types, include_null = SHOT_TYPE_GROUPS[shot_group]
+    else:
+        group_display, allowed_types, include_null = "Wristshot/Snapshot", {"wristshot", "snapshot"}, True
 
     # Work with lower-cased column names for robustness
     df_lc = df.rename(columns=str.lower)
@@ -719,12 +756,17 @@ def _run_jeeds_estimation(
         # Normalize to lowercase strings (preserve NaNs)
         shot_series = df_lc["shot_type"].where(pd.notna(df_lc["shot_type"]))
         shot_lower = shot_series.astype(str).str.lower()
-        mask = shot_series.isna() | shot_lower.isin(allowed_types)
+        if include_null:
+            mask = shot_series.isna() | shot_lower.isin(allowed_types)
+        else:
+            mask = shot_lower.isin(allowed_types)
         filtered_df = df_lc[mask]
         num_before = len(df_lc)
         num_after = len(filtered_df)
+        allowed_str = ",".join(sorted(allowed_types))
+        null_str = ",NULL" if include_null else ""
         if num_after != num_before:
-            print(f"  Shot-type filter: kept {num_after}/{num_before} shots (allowed: wristshot,snapshot,NULL)")
+            print(f"  Shot-type filter [{group_display}]: kept {num_after}/{num_before} shots (allowed: {allowed_str}{null_str})")
     else:
         # `shot_type` not present in the shots DataFrame
         print(
@@ -841,8 +883,12 @@ def _run_jeeds_estimation(
             player_id=player_id,
             output_dir=player_dir,
             tag=csv_tag,
+            shot_group=shot_group,
         )
         result["csv_path"] = str(csv_path)
+
+    if shot_group:
+        result["shot_group"] = shot_group
 
     return result
 
@@ -861,6 +907,8 @@ def estimate_player_skill(
     data_dir: Path | str = Path("Data/Hockey"),
     confirm: bool = True,
     offline_data: tuple[pd.DataFrame, dict[int, dict[str, object]]] | None = None,
+    shot_group: str = "",
+    shot_groups: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Return JEEDS MAP and EES estimates of execution skill and rationality for a player.
 
@@ -902,6 +950,15 @@ def estimate_player_skill(
     offline_data : tuple[pd.DataFrame, dict] | None
         Pre-loaded data from :func:`load_player_data`. When provided, skips all
         DB queries and uses the loaded data directly. Format: (shots_df, shot_maps).
+    shot_group : str
+        Single shot-type group tag (e.g., ``"ws"``, ``"bh"``).  Drives the
+        shot-type filter and routes CSVs into ``logs/<shot_group>/``.
+        When empty (default), uses the legacy wristshot/snapshot/NULL filter.
+    shot_groups : Sequence[str] | None
+        Convenience parameter to run estimation for *multiple* shot-type groups
+        in a single call.  When provided, ``shot_group`` is ignored and the
+        function loops over each group, returning results keyed by group tag
+        under ``'per_group_results'``.
 
     Returns
     -------
@@ -918,7 +975,40 @@ def estimate_player_skill(
         When ``per_season=True`` and using ``seasons``:
             - 'per_season_results': Dict mapping season -> result dict.
             - Each season result contains all skill estimates plus num_shots.
+
+        When ``shot_groups`` is provided:
+            - 'per_group_results': Dict mapping group tag -> single-group result.
+            - Each single-group result has the structure described above.
     """
+    # ------------------------------------------------------------------
+    # Multi-group convenience: loop over groups, collect results
+    # ------------------------------------------------------------------
+    if shot_groups is not None:
+        per_group_results: dict[str, dict[str, object]] = {}
+        for grp in shot_groups:
+            display_name = SHOT_TYPE_GROUPS[grp][0] if grp in SHOT_TYPE_GROUPS else grp
+            print(f"\n--- Shot group: {display_name} ({grp}) ---")
+            per_group_results[grp] = estimate_player_skill(
+                player_id=player_id,
+                game_ids=game_ids,
+                seasons=seasons,
+                per_season=per_season,
+                candidate_skills=candidate_skills,
+                num_planning_skills=num_planning_skills,
+                rng_seed=rng_seed,
+                return_intermediate_estimates=return_intermediate_estimates,
+                save_intermediate_csv=save_intermediate_csv,
+                data_dir=data_dir,
+                confirm=False,  # already confirmed or batch
+                offline_data=offline_data,
+                shot_group=grp,
+            )
+        return {
+            "player_id": player_id,
+            "shot_groups": list(shot_groups),
+            "per_group_results": per_group_results,
+        }
+
     # Validate inputs
     if game_ids is None and seasons is None and offline_data is None:
         raise ValueError("Must provide 'game_ids', 'seasons', or 'offline_data'.")
@@ -966,6 +1056,7 @@ def estimate_player_skill(
                     preloaded_shot_maps=preloaded_shot_maps,
                     save_intermediate_csv=save_intermediate_csv,
                     csv_tag=str(season),
+                    shot_group=shot_group,
                 )
                 season_result["season"] = int(season)
                 per_season_results[int(season)] = season_result
@@ -990,6 +1081,7 @@ def estimate_player_skill(
                 preloaded_shot_maps=preloaded_shot_maps,
                 save_intermediate_csv=save_intermediate_csv,
                 csv_tag="aggregate",
+                shot_group=shot_group,
             )
 
     # Mode 1: Explicit game_ids (original behavior)
@@ -1017,6 +1109,7 @@ def estimate_player_skill(
             return_intermediate_estimates=return_intermediate_estimates,
             save_intermediate_csv=save_intermediate_csv,
             csv_tag="games",
+            shot_group=shot_group,
         )
 
     # Mode 2: Season-based discovery
@@ -1054,6 +1147,7 @@ def estimate_player_skill(
             return_intermediate_estimates=return_intermediate_estimates,
             save_intermediate_csv=save_intermediate_csv,
             csv_tag="aggregate",
+            shot_group=shot_group,
         )
 
     # Per-season mode: separate estimate for each season
@@ -1075,6 +1169,7 @@ def estimate_player_skill(
             tag_suffix=f"_S{season}",
             save_intermediate_csv=save_intermediate_csv,
             csv_tag=str(season),
+            shot_group=shot_group,
         )
         season_result["season"] = int(season)
         per_season_results[int(season)] = season_result
@@ -1096,6 +1191,8 @@ def estimate_multiple_players(
     rng_seed: int | None = 0,
     capture_skill_logs: bool = False,
     data_dir: Path | str = Path("Data/Hockey"),
+    shot_group: str = "",
+    shot_groups: Sequence[str] | None = None,
 ) -> list[dict[str, object]]:
     """Estimate execution skill and rationality for multiple players.
 
@@ -1136,6 +1233,8 @@ def estimate_multiple_players(
                 return_intermediate_estimates=capture_skill_logs,
                 data_dir=data_dir,
                 confirm=False,  # Disable confirmation for batch runs
+                shot_group=shot_group,
+                shot_groups=shot_groups,
             )
             player_result["player_id"] = player_id
             player_result["status"] = "success"
@@ -1164,8 +1263,6 @@ def _parse_args() -> argparse.Namespace:
         nargs="+",
         help="One or more game identifiers to include in the estimation run.",
     )
-    # TODO: last exited recursive code check here
-
     parser.add_argument(
         "--candidate-skills",
         type=float,

@@ -79,7 +79,24 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
 def _auto_title(csv_path: Path) -> str:
     """Derive a human-readable title from the CSV path."""
     parts = csv_path.stem.replace("intermediate_estimates", "").strip("_")
-    player_id = csv_path.parent.parent.name.replace("player_", "")
+
+    # Detect group subdir: player_{id}/logs/{group}/file.csv vs flat logs/file.csv
+    if csv_path.parent.name == "logs":
+        # Flat structure: player_{id}/logs/file.csv
+        player_dir_name = csv_path.parent.parent.name
+        group_label = None
+    elif csv_path.parent.parent.name == "logs":
+        # Group subdir: player_{id}/logs/{group}/file.csv
+        player_dir_name = csv_path.parent.parent.parent.name
+        group_tag = csv_path.parent.name
+        from BlackhawksSkillEstimation.BlackhawksJEEDS import SHOT_TYPE_GROUPS
+        group_info = SHOT_TYPE_GROUPS.get(group_tag)
+        group_label = group_info[0] if group_info else group_tag
+    else:
+        player_dir_name = csv_path.parent.parent.name
+        group_label = None
+
+    player_id = player_dir_name.replace("player_", "")
 
     if parts.isdigit() and len(parts) == 8:
         tag = f"{parts[:4]}-{parts[4:]}"
@@ -90,9 +107,11 @@ def _auto_title(csv_path: Path) -> str:
     
     player_name = lookup_player(player_id=int(player_id))
 
-    base = f"JEEDS Convergence – Player {player_id}"
+    base = f"JEEDS Convergence \u2013 Player {player_id}"
     if player_name:
         base += f" ({player_name})"
+    if group_label:
+        base += f" \u2013 {group_label}"
     return f"{base} - {tag}" if tag else base
 
 
@@ -217,14 +236,19 @@ def plot_all_intermediate_for_player(
 ) -> list[plt.Figure]:
     """Generate convergence plots for every intermediate CSV of *player_id*.
 
-    Looks in ``<data_dir>/player_<id>/logs/intermediate_estimates*.csv``.
+    Looks in ``<data_dir>/player_<id>/logs/intermediate_estimates*.csv`` and
+    also in group subdirectories ``logs/*/intermediate_estimates*.csv``.
     """
     logs_dir = Path(data_dir) / f"player_{player_id}" / "logs"
     if not logs_dir.exists():
         print(f"No logs directory: {logs_dir}")
         return []
 
-    csvs = sorted(logs_dir.glob("intermediate_estimates*.csv"))
+    # Collect CSVs from flat logs/ and from group subdirs logs/*/
+    csvs = sorted(
+        set(logs_dir.glob("intermediate_estimates*.csv"))
+        | set(logs_dir.glob("*/intermediate_estimates*.csv"))
+    )
     if not csvs:
         print(f"No CSVs in {logs_dir}")
         return []

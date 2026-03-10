@@ -5,6 +5,8 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import (
     load_player_data,
     save_player_data_by_games,
     load_player_data_by_games,
+    SHOT_TYPE_GROUPS,
+    DEFAULT_SHOT_GROUPS,
 )
 from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     plot_intermediate_estimates,
@@ -17,6 +19,7 @@ from BlackhawksSkillEstimation.blackhawks_plots import (
 from BlackhawksSkillEstimation.player_cache import lookup_player
 
 import sys
+from typing import Sequence
 
 # NOTE: At the bottom, set TEST_TO_RUN
 
@@ -26,8 +29,10 @@ def _fmt_log10(val):
 
 def _print_all_estimates(result: dict, prefix: str = "  ") -> None:
     """Helper to print all 4 estimates from a result dict."""
-    print(f"{prefix}MAP Execution Skill: {result['execution_skill']:.4f} rad (lower is better)")
-    print(f"{prefix}EES:                 {result['ees']:.4f} rad")
+    es = result.get('execution_skill')
+    ees = result.get('ees')
+    print(f"{prefix}MAP Execution Skill: {f'{es:.4f} rad' if es is not None else 'N/A'} (lower is better)")
+    print(f"{prefix}EES:                 {f'{ees:.4f} rad' if ees is not None else 'N/A'}")
     print(f"{prefix}MAP Rationality:     {_fmt_log10(result.get('log10_rationality'))}")
     print(f"{prefix}EPS:                 {_fmt_log10(result.get('log10_eps'))}")
     print(f"{prefix}Shots Used:          {result['num_shots']}")
@@ -208,17 +213,18 @@ def generate_all_logs_plots():
     print("=" * 60)
 
 
-def per_season_multi_player_test(pids: list[int] | None = None):
-    """Download (if needed), estimate, and plot for each player x season independently."""
+def per_season_multi_player_test(pids: list[int] | None = None, groups: Sequence[str] | None = None):
+    """Download (if needed), estimate, and plot for each player x season x shot group."""
     from pathlib import Path
 
     players = pids or SEASON_TEST_PLAYERS
     seasons = SEASON_TEST_SEASONS
+    shot_groups = list(groups) if groups is not None else list(DEFAULT_SHOT_GROUPS)
     data_dir = Path("Data/Hockey")
 
     print("=" * 60)
     print("PER-SEASON MULTI-PLAYER TEST")
-    print(f"Players: {len(players)}  |  Seasons: {seasons}")
+    print(f"Players: {len(players)}  |  Seasons: {seasons}  |  Groups: {shot_groups}")
     print("=" * 60)
 
     summary = []
@@ -247,7 +253,8 @@ def per_season_multi_player_test(pids: list[int] | None = None):
         except FileNotFoundError as e:
             print(f"  SKIP (no data): {e}")
             for s in seasons:
-                summary.append({"name": name, "season": s, "status": "no_data"})
+                for grp in shot_groups:
+                    summary.append({"name": name, "season": s, "group": grp, "status": "no_data"})
             continue
 
         name = lookup_player(pid)
@@ -255,66 +262,75 @@ def per_season_multi_player_test(pids: list[int] | None = None):
         if df.empty:
             print("  SKIP (0 shots)")
             for s in seasons:
-                summary.append({"name": name, "season": s, "status": "no_shots"})
+                for grp in shot_groups:
+                    summary.append({"name": name, "season": s, "group": grp, "status": "no_shots"})
             continue
 
         print(f"  {len(df)} total shots loaded across {len(seasons)} season(s)")
 
-        # per_season=True splits by the "season" column and estimates each independently
-        result = estimate_player_skill(
-            player_id=pid,
-            offline_data=(df, shot_maps),
-            per_season=True,
-            confirm=False,
-            save_intermediate_csv=True,
-        )
+        for grp in shot_groups:
+            grp_display = SHOT_TYPE_GROUPS[grp][0] if grp in SHOT_TYPE_GROUPS else grp
+            print(f"\n  --- Shot group: {grp_display} ({grp}) ---")
 
-        per_season_results = result.get("per_season_results", {})
+            result = estimate_player_skill(
+                player_id=pid,
+                offline_data=(df, shot_maps),
+                per_season=True,
+                confirm=False,
+                save_intermediate_csv=True,
+                shot_group=grp,
+            )
 
-        for season in seasons:
-            data = per_season_results.get(season)
-            if data is None:
-                print(f"\n  Season {season}: no data returned")
-                summary.append({"name": name, "season": season, "status": "no_data"})
-                continue
+            per_season_results = result.get("per_season_results", {})
 
-            if data.get("status") != "success" and "execution_skill" not in data:
-                print(f"\n  Season {season}: {data.get('status', 'unknown')}")
-                summary.append({"name": name, "season": season, "status": "failed"})
-                continue
+            for season in seasons:
+                data = per_season_results.get(season)
+                if data is None:
+                    print(f"\n    Season {season}: no data returned")
+                    summary.append({"name": name, "season": season, "group": grp, "status": "no_data"})
+                    continue
 
-            print(f"\n  Season {season}:")
-            _print_all_estimates(data, prefix="    ")
+                if data.get("status") not in ("success",) and data.get("execution_skill") is None:
+                    print(f"\n    Season {season}: {data.get('status', 'unknown')} ({data.get('num_shots', 0)} shots)")
+                    summary.append({"name": name, "season": season, "group": grp, "status": data.get("status", "failed")})
+                    continue
 
-            if "csv_path" in data:
-                plot_path = plot_intermediate_estimates(data["csv_path"])
-                print(f"    CSV:  {data['csv_path']}")
-                print(f"    Plot: {plot_path}")
+                print(f"\n    Season {season}:")
+                _print_all_estimates(data, prefix="      ")
 
-            summary.append({
-                "name": name,
-                "season": season,
-                "status": "success",
-                "execution_skill": data["execution_skill"],
-                "ees": data["ees"],
-                "rationality": data["rationality"],
-                "eps": data["eps"],
-                "log10_rationality": data.get("log10_rationality"),
-                "log10_eps": data.get("log10_eps"),
-                "num_shots": data["num_shots"],
-            })
+                if "csv_path" in data:
+                    plot_path = plot_intermediate_estimates(data["csv_path"])
+                    print(f"      CSV:  {data['csv_path']}")
+                    print(f"      Plot: {plot_path}")
+
+                summary.append({
+                    "name": name,
+                    "season": season,
+                    "group": grp,
+                    "status": "success",
+                    "execution_skill": data["execution_skill"],
+                    "ees": data["ees"],
+                    "rationality": data["rationality"],
+                    "eps": data["eps"],
+                    "log10_rationality": data.get("log10_rationality"),
+                    "log10_eps": data.get("log10_eps"),
+                    "num_shots": data["num_shots"],
+                })
 
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
     for s in summary:
+        grp_label = s.get("group", "")
         if s["status"] == "success":
-            print(f"  {s['name']:20s}  {s['season']}  "
-                  f"MAP={s['execution_skill']:.4f}  EES={s['ees']:.4f}  "
+            _map = f"{s['execution_skill']:.4f}" if s['execution_skill'] is not None else "N/A"
+            _ees = f"{s['ees']:.4f}" if s['ees'] is not None else "N/A"
+            print(f"  {s['name']:20s}  {s['season']}  [{grp_label:2s}]  "
+                  f"MAP={_map}  EES={_ees}  "
                   f"rat={_fmt_log10(s.get('log10_rationality'))}  EPS={_fmt_log10(s.get('log10_eps'))}  "
                   f"({s['num_shots']} shots)")
         else:
-            print(f"  {s['name']:20s}  {s['season']}  {s['status']}")
+            print(f"  {s['name']:20s}  {s['season']}  [{grp_label:2s}]  {s['status']}")
 
 
 # =============================================================================
@@ -391,35 +407,44 @@ def generate_all_viz():
 
 
 def plot_info_players_comparison():
-    """Generate a convergence comparison plot for all INFO_PLAYERS"""
+    """Generate a convergence comparison plot for all INFO_PLAYERS.
+    
+    Checks both flat logs/ and group subdirs logs/{group}/ for CSVs.
+    """
     from BlackhawksSkillEstimation.plot_intermediate_estimates import plot_comparison
     from pathlib import Path
 
     for metric in ["execution_skill", "rationality"]:
         for season in SEASON_TEST_SEASONS:
-
-            csvs: list[Path] = []
-            labels: list[Path] = []
-            for pid in INFO_PLAYERS:
-                logs = Path(f"Data/Hockey/player_{pid}/logs")
-                path = logs / f"intermediate_estimates_{season}.csv"
-                if not path.exists():
-                    print(f"warning: no file for player {pid} ({season})")
+            # Try group subdirs first, fall back to flat logs/
+            for group_tag in list(DEFAULT_SHOT_GROUPS) + [""]:
+                csvs: list[Path] = []
+                labels: list[str] = []
+                for pid in INFO_PLAYERS:
+                    logs = Path(f"Data/Hockey/player_{pid}/logs")
+                    if group_tag:
+                        path = logs / group_tag / f"intermediate_estimates_{season}.csv"
+                    else:
+                        path = logs / f"intermediate_estimates_{season}.csv"
+                    if not path.exists():
+                        continue
+                    csvs.append(path)
+                    labels.append(lookup_player(pid) or str(pid))
+                if not csvs:
                     continue
-                csvs.append(path)
-                labels.append(lookup_player(pid) or str(pid))
-            if not csvs:
-                raise FileNotFoundError("no intermediate-estimate CSVs found")
-            
-            plot_comparison(
-                csv_paths=csvs,
-                labels=labels,
-                output_path=f"Data/Hockey/general_plots/all_players_{season}_{metric}.png",
-                title=f"{metric.capitalize().replace('_', ' ')} Convergence - All Players ({season})",
-                metric=metric,
-                estimate_type="expected",
-                figsize=(12, 10),
-            )
+                
+                group_suffix = f"_{group_tag}" if group_tag else ""
+                group_display = SHOT_TYPE_GROUPS[group_tag][0] if group_tag in SHOT_TYPE_GROUPS else ""
+                title_group = f" – {group_display}" if group_display else ""
+                plot_comparison(
+                    csv_paths=csvs,
+                    labels=labels,
+                    output_path=f"Data/Hockey/general_plots/all_players_{season}_{metric}{group_suffix}.png",
+                    title=f"{metric.capitalize().replace('_', ' ')} Convergence - All Players ({season}){title_group}",
+                    metric=metric,
+                    estimate_type="expected",
+                    figsize=(12, 10),
+                )
 
 
 def rank_info_players():
@@ -487,12 +512,21 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 
 TEST_TO_RUN = generate_all_viz
 if __name__ == "__main__":
-    # TEST_TO_RUN([sys.argv[1]])
+    # CLI usage:
+    #   python BlackhawksJEEDSTest.py <player_id> [shot_group]
+    #   - 1 arg:  run all 4 shot groups for that player  (20-job mode)
+    #   - 2 args: run one shot group for that player      (80-job mode)
+    #             *The groups are "ws", "bh", "ss", "dk"
+    # Examples:
+    #   python -m BlackhawksSkillEstimation.BlackhawksJEEDSTest 950182
+    #   python -m BlackhawksSkillEstimation.BlackhawksJEEDSTest 950182 bh
 
-    # pids = INFO_PLAYERS[1:]
-    # for pid in pids:
-    #     save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS)
-    #     print("\nThat was for " + lookup_player(pid))
+    if len(sys.argv) >= 2:
+        pid = int(sys.argv[1])
+        grps = [sys.argv[2]] if len(sys.argv) >= 3 else None  # None → all 4
+        per_season_multi_player_test(pids=[pid], groups=grps)
+    else:
+        TEST_TO_RUN()
 
     '''
     save_player_data(player_id=950182, seasons=[20242025],)# overwrite=True)
@@ -503,5 +537,3 @@ if __name__ == "__main__":
         max_shots=15,
     )
     '''
-
-    TEST_TO_RUN()
