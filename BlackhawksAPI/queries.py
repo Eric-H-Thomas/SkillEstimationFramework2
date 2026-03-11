@@ -162,7 +162,8 @@ def query_player_season_shots(
     if df.empty:
         return df
     
-    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    # Fix reversed Y-coordinate: shot_trajectories uses positive-y-left (Blackhawks convention);
+    # negate so our codebase's positive-y-right convention is used consistently everywhere.
     df["location_y"] = -df["location_y"]
     return df
 
@@ -230,7 +231,7 @@ def get_games_shot_maps_batch(
             JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
             WHERE e.game_id_hawks IN ({game_ids_str})
             {player_filter}
-            ORDER BY p.event_id_hawks ASC, location_y DESC, location_z ASC
+            ORDER BY p.event_id_hawks ASC, location_y ASC, location_z ASC
             ;
             """
     df = db.get_df(query).rename(columns=str.lower)
@@ -239,7 +240,10 @@ def get_games_shot_maps_batch(
     if df.empty:
         return {}
     
-    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation.
+    # Both shot_trajectories and post_shot_xg_value_maps use positive-y-left (Blackhawks analytics
+    # convention), while our codebase uses positive-y-right.  We flip both here so all downstream
+    # code works in one consistent convention.
     df["goalline_y_model"] = -df["goalline_y_model"]
 
     shot_maps: dict[int, dict[str, object]] = {}
@@ -248,7 +252,12 @@ def get_games_shot_maps_batch(
 
         shot_data: dict[str, object] = {}
         shot_data["df"] = shot_df
-        shot_data["value_map"] = shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T
+        # Reshape to (Z, Y) then flip the Y axis so that, like goalline_y_model above,
+        # positive-Y is to the right when facing the net (our convention).
+        # The query reads location_y ASC, so column 0 = BH y=-5 (right) and column 119 = BH y=+5
+        # (left); [:, ::-1] reverses that so column 0 = our y=-5 (left) and column 119 = our y=+5
+        # (right), matching _BH_Y = linspace(-5, 5).
+        shot_data["value_map"] = shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1]
         shot_data["net_cov"] = _extract_covariance_matrix(shot_df.iloc[0])
         shot_data["net_coords"] = shot_df.iloc[0][
             ["goalline_y_model", "goalline_z_model"]
@@ -308,7 +317,8 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
     if df.empty:
         return {}
     
-    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation
+    # Fix reversed Y-coordinate: shot_trajectories uses positive-y-left (Blackhawks convention);
+    # negate so our codebase's positive-y-right convention is used consistently everywhere.
     df["location_y"] = -df["location_y"]
     return df
 

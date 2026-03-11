@@ -526,7 +526,8 @@ if __name__ == "__main__":
         grps = [sys.argv[2]] if len(sys.argv) >= 3 else None  # None → all 4
         per_season_multi_player_test(pids=[pid], groups=grps)
     else:
-        TEST_TO_RUN()
+    #    TEST_TO_RUN()
+        pass
 
     '''
     save_player_data(player_id=950182, seasons=[20242025],)# overwrite=True)
@@ -536,4 +537,9 @@ if __name__ == "__main__":
         seasons=[20242025],
         max_shots=15,
     )
+    '''
+    '''
+    # For redownloading data (do 5 at a time to avoid crash)
+    for pid in INFO_PLAYERS[15:]:
+        save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS, overwrite=True)
     '''
