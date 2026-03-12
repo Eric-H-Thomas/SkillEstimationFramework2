@@ -402,6 +402,7 @@ def plot_shot_rink(
     save_path: Path | str | None = None,
     show: bool = False,
     title: str = "Shot locations",
+    player_xy_list: list | None = None,
 ) -> plt.Figure | None:
     """Plot one or more shots on a rink diagram.
 
@@ -429,6 +430,9 @@ def plot_shot_rink(
         Whether to ``plt.show()`` instead of saving.
     title : str
         Plot title.
+    player_xy_list : list | None
+        Optional list of ``[x, y]`` coordinates to display as text
+        annotations near each shot. Must match the length of *player_locations*.
 
     Returns
     -------
@@ -462,6 +466,16 @@ def plot_shot_rink(
             player_locations[:, 0], player_locations[:, 1],
             c="steelblue", s=30, zorder=5, label="Shot location",
         )
+
+    # Add player xy annotations if provided
+    if player_xy_list is not None:
+        for i, (loc, xy) in enumerate(zip(player_locations, player_xy_list)):
+            if xy is not None:
+                xy_text = f"({xy[0]:.1f}, {xy[1]:.1f})"
+                # Position text slightly to the right and above the shot location
+                ax.text(loc[0] + 1.5, loc[1] + 2, xy_text, fontsize=8,
+                        bbox=dict(boxstyle="round,pad=0.2", facecolor="lightyellow", 
+                                  alpha=0.6, edgecolor="gray"), zorder=7)
 
     ax.set_title(title)
     plt.tight_layout()
@@ -890,6 +904,7 @@ def plot_single_shot_rink(
         save_path=save_path,
         show=show,
         title=title,
+        player_xy_list=[player_loc],
     )
 
     if save_path is not None:
@@ -935,10 +950,10 @@ Examples:
 """,
     )
     parser.add_argument("-player_id", "-pid", "-player", type=int, required=True, help="Player ID")
-    parser.add_argument("-event_id", type=int, default=None,
-                        help="Single event ID — generates an angular heatmap for that shot")
-    parser.add_argument("-rink_event_id", type=int, default=None,
-                        help="Single event ID — generates a rink diagram for that shot")
+    parser.add_argument("-event_id", type=int, nargs="+", default=None,
+                        help="Event ID(s) — generates angular heatmap(s) (e.g. -event_id 12345 12346)")
+    parser.add_argument("-rink_event_id", type=int, nargs="+", default=None,
+                        help="Event ID(s) — generates rink diagram(s) (e.g. -rink_event_id 12345 12346)")
     parser.add_argument("-seasons", "-season", type=int, nargs="+", default=None,
                         help="One or more seasons (e.g. -seasons 20242025)")
     parser.add_argument("-limit", type=int, default=10,
@@ -962,31 +977,31 @@ Examples:
     misses_only = args.misses_only or args.outliers_only
 
     if args.event_id is not None:
-        # Angular heatmap for a single shot event
-        result = plot_single_shot_cli(
-            player_id=args.player_id,
-            event_id=args.event_id,
-            data_dir=args.data_dir,
-            output_dir=args.output_dir,
-        )
-        if result:
-            print(f"Saved: {result}")
-        else:
-            print("Failed to generate heatmap")
-            sys.exit(1)
+        # Angular heatmap for one or more shot events
+        for event_id in args.event_id:
+            result = plot_single_shot_cli(
+                player_id=args.player_id,
+                event_id=event_id,
+                data_dir=args.data_dir,
+                output_dir=args.output_dir,
+            )
+            if result:
+                print(f"Saved: {result}")
+            else:
+                print(f"Failed to generate heatmap for event {event_id}")
 
     elif args.rink_event_id is not None:
-        # Rink dot-plot for a single shot event
-        result_path = plot_single_shot_rink(
-            player_id=args.player_id,
-            event_id=args.rink_event_id,
-            data_dir=args.data_dir,
-            output_dir=args.output_dir,
-            seasons=_seasons,
-        )
-        if result_path is None:
-            print("Failed to generate rink plot")
-            sys.exit(1)
+        # Rink dot-plot for one or more shot events
+        for event_id in args.rink_event_id:
+            result_path = plot_single_shot_rink(
+                player_id=args.player_id,
+                event_id=event_id,
+                data_dir=args.data_dir,
+                output_dir=args.output_dir,
+                seasons=_seasons,
+            )
+            if result_path is None:
+                print(f"Failed to generate rink plot for event {event_id}")
 
     elif _seasons is not None:
         # Full-season batch: angular heatmaps + combined rink
