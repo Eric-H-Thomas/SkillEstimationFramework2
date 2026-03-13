@@ -72,7 +72,7 @@ The command prints the MAP execution-skill estimate. All per-player outputs
 
 ```
 player_{id}/
-  data/    # .pkl files (shots + shot_maps)
+  data/    # parquet + npz files (shots DataFrames + shot_maps dicts)
   logs/    # intermediate estimate CSVs + convergence PNGs
   plots/   # angular heatmap and rink visualization PNGs
   times/   # JT-QRE-Times-* estimator timing logs

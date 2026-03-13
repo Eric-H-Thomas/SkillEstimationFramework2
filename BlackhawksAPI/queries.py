@@ -206,7 +206,6 @@ def get_games_shot_maps_batch(
     -------
     dict[int, dict[str, object]]
         Mapping of event_id_hawks -> shot data dict containing:
-        - 'df': DataFrame slice for this shot
         - 'value_map': 2D numpy array of post-shot xG values
         - 'net_cov': 2x2 covariance matrix
         - 'net_coords': [y, z] goal line coordinates
@@ -249,21 +248,16 @@ def get_games_shot_maps_batch(
     shot_maps: dict[int, dict[str, object]] = {}
     for event_id_hawks in df["event_id_hawks"].unique():
         shot_df = df[df["event_id_hawks"] == event_id_hawks]
-
-        shot_data: dict[str, object] = {}
-        shot_data["df"] = shot_df
         # Reshape to (Z, Y) then flip the Y axis so that, like goalline_y_model above,
         # positive-Y is to the right when facing the net (our convention).
         # The query reads location_y ASC, so column 0 = BH y=-5 (right) and column 119 = BH y=+5
         # (left); [:, ::-1] reverses that so column 0 = our y=-5 (left) and column 119 = our y=+5
         # (right), matching _BH_Y = linspace(-5, 5).
-        shot_data["value_map"] = shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1]
-        shot_data["net_cov"] = _extract_covariance_matrix(shot_df.iloc[0])
-        shot_data["net_coords"] = shot_df.iloc[0][
-            ["goalline_y_model", "goalline_z_model"]
-        ].values
-
-        shot_maps[event_id_hawks] = shot_data
+        shot_maps[event_id_hawks] = {
+            "value_map": shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1],
+            "net_cov": _extract_covariance_matrix(shot_df.iloc[0]),
+            "net_coords": shot_df.iloc[0][["goalline_y_model", "goalline_z_model"]].values,
+        }
     return shot_maps
 
 

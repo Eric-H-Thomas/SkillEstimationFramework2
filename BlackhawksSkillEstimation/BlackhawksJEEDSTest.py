@@ -105,7 +105,7 @@ def download_lightweight_test_data():
 def run_offline_lightweight_estimation():
     """Run estimation using previously downloaded lightweight test data.
     
-    This requires no database/internet access - uses only local pickle files.
+    This requires no database/internet access - uses only local data files.
     Suitable for running on a compute cluster without network access.
     """
     print("=" * 60)
@@ -528,6 +528,11 @@ if __name__ == "__main__":
     else:
     #    TEST_TO_RUN()
         pass
+        '''
+        # For redownloading data (do 5-10 at a time to avoid crash)
+        for pid in INFO_PLAYERS:
+            save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS, overwrite=True)
+        '''
 
     '''
     save_player_data(player_id=950182, seasons=[20242025],)# overwrite=True)
@@ -537,9 +542,4 @@ if __name__ == "__main__":
         seasons=[20242025],
         max_shots=15,
     )
-    '''
-    '''
-    # For redownloading data (do 5 at a time to avoid crash)
-    for pid in INFO_PLAYERS[15:]:
-        save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS, overwrite=True)
     '''

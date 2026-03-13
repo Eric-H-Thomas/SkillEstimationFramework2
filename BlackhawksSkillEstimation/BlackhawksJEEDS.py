@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import pickle
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -403,6 +402,90 @@ def clear_shot_maps_cache() -> None:
 
 
 # =============================================================================
+# OFFLINE DATA PERSISTENCE: SHOT MAPS SERIALIZATION
+# =============================================================================
+
+
+def _save_shot_maps_npz(
+    shot_maps: dict[int, dict[str, object]], 
+    path: Path | str,
+) -> None:
+    """Serialize shot_maps dict to compressed NPZ format.
+    
+    Stacks multiple shot_map dicts (each with value_map, net_cov, net_coords)
+    into 3D numpy arrays, converts value_map to float32 for space efficiency,
+    and saves using savez_compressed (zlib).
+    
+    Parameters
+    ----------
+    shot_maps : dict[int, dict[str, object]]
+        Mapping of event_id_hawks -> shot data containing 
+        'value_map' (72x120 array), 'net_cov' (2x2), 'net_coords' (2,).
+    path : Path | str
+        Output .npz file path.
+    """
+    if not shot_maps:
+        np.savez_compressed(str(path), event_ids=np.array([], dtype=np.int64))
+        return
+    
+    event_ids = sorted(shot_maps.keys())
+    value_maps = np.array(
+        [shot_maps[eid]["value_map"].astype(np.float32) for eid in event_ids],
+        dtype=np.float32
+    )
+    net_covs = np.array(
+        [shot_maps[eid]["net_cov"] for eid in event_ids],
+        dtype=np.float64
+    )
+    net_coords = np.array(
+        [shot_maps[eid]["net_coords"] for eid in event_ids],
+        dtype=np.float64
+    )
+    
+    np.savez_compressed(
+        str(path),
+        event_ids=np.array(event_ids, dtype=np.int64),
+        value_maps=value_maps,
+        net_covs=net_covs,
+        net_coords=net_coords,
+    )
+
+
+def _load_shot_maps_npz(
+    path: Path | str,
+) -> dict[int, dict[str, object]]:
+    """Deserialize shot_maps dict from NPZ file.
+    
+    Reconstructs the nested dict structure from stacked numpy arrays,
+    converting event_ids to int and value_maps back to float64.
+    
+    Parameters
+    ----------
+    path : Path | str
+        Input .npz file path.
+    
+    Returns
+    -------
+    dict[int, dict[str, object]]
+        Mapping of event_id_hawks -> {value_map, net_cov, net_coords}.
+    """
+    data = np.load(str(path))
+    event_ids = data["event_ids"]
+    
+    if len(event_ids) == 0:
+        return {}
+    
+    shot_maps = {}
+    for i, eid in enumerate(event_ids):
+        shot_maps[int(eid)] = {
+            "value_map": data["value_maps"][i].astype(np.float64),
+            "net_cov": data["net_covs"][i],
+            "net_coords": data["net_coords"][i],
+        }
+    return shot_maps
+
+
+# =============================================================================
 # OFFLINE DATA PERSISTENCE
 # =============================================================================
 
@@ -416,10 +499,11 @@ def save_player_data_by_games(
 ) -> dict[str, Path]:
     """Fetch and save player shot data + shot maps for specific games.
 
-    Creates pickle files in ``output_dir/player_{player_id}/`` with:
-    - ``shots_{tag}.pkl``: DataFrame of shots for the specified games
-    - ``shot_maps_{tag}.pkl``: Dict mapping event_id -> shot_map_data
+    Creates files in ``output_dir/player_{player_id}/data/`` with:
+    - ``shots_{tag}.parquet``: DataFrame of shots (Apache Parquet format)
+    - ``shot_maps_{tag}.npz``: Compressed shot maps (Numpy savez format)
 
+    Shot maps are stored space-efficiently with value_map arrays cast to float32.
     This is a lighter-weight alternative to save_player_data() when you only
     need a few games (e.g., for testing the pipeline on limited hardware).
 
@@ -448,8 +532,8 @@ def save_player_data_by_games(
     data_dir_path = player_dir / "data"
     data_dir_path.mkdir(parents=True, exist_ok=True)
 
-    shots_path = data_dir_path / f"shots_{tag}.pkl"
-    maps_path = data_dir_path / f"shot_maps_{tag}.pkl"
+    shots_path = data_dir_path / f"shots_{tag}.parquet"
+    maps_path = data_dir_path / f"shot_maps_{tag}.npz"
 
     # Check for existing files
     if not overwrite and shots_path.exists() and maps_path.exists():
@@ -473,11 +557,9 @@ def save_player_data_by_games(
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
 
-    # Save to pickle
-    with open(shots_path, "wb") as f:
-        pickle.dump(df, f)
-    with open(maps_path, "wb") as f:
-        pickle.dump(shot_maps, f)
+    # Save to parquet and npz
+    df.to_parquet(shots_path, engine="pyarrow", compression="snappy")
+    _save_shot_maps_npz(shot_maps, maps_path)
 
     print(f"  Saved: {shots_path.name}, {maps_path.name}")
     return {"shots": shots_path, "shot_maps": maps_path}
@@ -489,6 +571,8 @@ def load_player_data_by_games(
     data_dir: Path | str = Path("Data/Hockey"),
 ) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
     """Load previously saved player data from disk (saved by game IDs).
+
+    Loads data from parquet and npz files created by save_player_data_by_games().
 
     Parameters
     ----------
@@ -507,33 +591,22 @@ def load_player_data_by_games(
     Raises
     ------
     FileNotFoundError
-        If pickle files are missing.
+        If parquet/npz files are missing.
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / f"player_{player_id}"
     data_subdir = player_dir / "data"
 
-    shots_path = data_subdir / f"shots_{tag}.pkl"
-    maps_path = data_subdir / f"shot_maps_{tag}.pkl"
+    shots_path = data_subdir / f"shots_{tag}.parquet"
+    maps_path = data_subdir / f"shot_maps_{tag}.npz"
 
-    # Fall back to legacy layout (files directly in player_dir)
     if not shots_path.exists():
-        legacy_shots = player_dir / f"shots_{tag}.pkl"
-        if legacy_shots.exists():
-            shots_path = legacy_shots
-        else:
-            raise FileNotFoundError(f"Missing shots file: {shots_path}")
+        raise FileNotFoundError(f"Missing shots file: {shots_path}")
     if not maps_path.exists():
-        legacy_maps = player_dir / f"shot_maps_{tag}.pkl"
-        if legacy_maps.exists():
-            maps_path = legacy_maps
-        else:
-            raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+        raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
 
-    with open(shots_path, "rb") as f:
-        df = pickle.load(f)
-    with open(maps_path, "rb") as f:
-        shot_maps = pickle.load(f)
+    df = pd.read_parquet(shots_path)
+    shot_maps = _load_shot_maps_npz(maps_path)
 
     return df, shot_maps
 
@@ -546,9 +619,11 @@ def save_player_data(
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
 
-    Creates pickle files in ``output_dir/player_{player_id}/data/`` with:
-    - ``shots_{season}.pkl``: DataFrame of shots for that season
-    - ``shot_maps_{season}.pkl``: Dict mapping event_id -> shot_map_data
+    Creates files in ``output_dir/player_{player_id}/data/`` with:
+    - ``shots_{season}.parquet``: DataFrame of shots (Apache Parquet format)
+    - ``shot_maps_{season}.npz``: Compressed shot maps (Numpy savez format)
+
+    Shot maps are stored space-efficiently with value_map arrays cast to float32.
 
     Parameters
     ----------
@@ -575,8 +650,8 @@ def save_player_data(
     saved_files: dict[int, dict[str, Path]] = {}
 
     for season in seasons:
-        shots_path = data_dir_path / f"shots_{season}.pkl"
-        maps_path = data_dir_path / f"shot_maps_{season}.pkl"
+        shots_path = data_dir_path / f"shots_{season}.parquet"
+        maps_path = data_dir_path / f"shot_maps_{season}.npz"
 
         # Check for existing files
         if not overwrite and shots_path.exists() and maps_path.exists():
@@ -604,11 +679,9 @@ def save_player_data(
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}
 
-        # Save to pickle
-        with open(shots_path, "wb") as f:
-            pickle.dump(df, f)
-        with open(maps_path, "wb") as f:
-            pickle.dump(shot_maps, f)
+        # Save to parquet and npz
+        df.to_parquet(shots_path, engine="pyarrow", compression="snappy")
+        _save_shot_maps_npz(shot_maps, maps_path)
 
         print(f"  Saved: {shots_path.name}, {maps_path.name}")
         saved_files[season] = {"shots": shots_path, "shot_maps": maps_path}
@@ -622,6 +695,8 @@ def load_player_data(
     data_dir: Path | str = Path("Data/Hockey"),
 ) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
     """Load previously saved player data from disk.
+
+    Loads data from parquet and npz files created by save_player_data().
 
     Parameters
     ----------
@@ -642,7 +717,7 @@ def load_player_data(
     Raises
     ------
     FileNotFoundError
-        If pickle files for any requested season are missing.
+        If parquet/npz files for any requested season are missing.
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / f"player_{player_id}"
@@ -652,27 +727,16 @@ def load_player_data(
     all_shot_maps: dict[int, dict[str, object]] = {}
 
     for season in seasons:
-        shots_path = data_subdir / f"shots_{season}.pkl"
-        maps_path = data_subdir / f"shot_maps_{season}.pkl"
+        shots_path = data_subdir / f"shots_{season}.parquet"
+        maps_path = data_subdir / f"shot_maps_{season}.npz"
 
-        # Fall back to legacy layout (files directly in player_dir)
         if not shots_path.exists():
-            legacy_shots = player_dir / f"shots_{season}.pkl"
-            if legacy_shots.exists():
-                shots_path = legacy_shots
-            else:
-                raise FileNotFoundError(f"Missing shots file: {shots_path}")
+            raise FileNotFoundError(f"Missing shots file: {shots_path}")
         if not maps_path.exists():
-            legacy_maps = player_dir / f"shot_maps_{season}.pkl"
-            if legacy_maps.exists():
-                maps_path = legacy_maps
-            else:
-                raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
+            raise FileNotFoundError(f"Missing shot maps file: {maps_path}")
 
-        with open(shots_path, "rb") as f:
-            df = pickle.load(f)
-        with open(maps_path, "rb") as f:
-            shot_maps = pickle.load(f)
+        df = pd.read_parquet(shots_path)
+        shot_maps = _load_shot_maps_npz(maps_path)
 
         all_dfs.append(df)
         all_shot_maps.update(shot_maps)

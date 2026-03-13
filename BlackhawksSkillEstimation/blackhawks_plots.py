@@ -1,6 +1,6 @@
 """Blackhawks-specific plotting adapter.
 
-Bridges Blackhawks offline data (pickled shot maps, JEEDS CSVs) with the
+Bridges Blackhawks offline data (shot maps in parquet/npz, JEEDS CSVs) with the
 framework's existing hockey visualization functions so that angular heatmaps,
 rink diagrams, and convergence plots can be generated without a live
 experiment folder.
@@ -556,14 +556,14 @@ def plot_all_player_convergence(
 
 
 # ---------------------------------------------------------------------------
-# Helper: load player pickle data
+# Helper: load player data
 # ---------------------------------------------------------------------------
 
 def _load_player_pickles(
     player_id: int,
     data_dir: Path | str = Path("Data/Hockey"),
 ) -> tuple[pd.DataFrame | None, dict]:
-    """Load shots DataFrame and shot_maps dict from player's pickle files.
+    """Load shots DataFrame and shot_maps dict from player's parquet/npz files.
 
     Parameters
     ----------
@@ -575,10 +575,10 @@ def _load_player_pickles(
     Returns
     -------
     (shots_df, shot_maps)
-        shots_df is None if no pickle files found.
+        shots_df is None if no parquet files found.
     """
-    import pickle
     import glob
+    import numpy as np
 
     data_dir = Path(data_dir)
     player_dir = data_dir / f"player_{player_id}"
@@ -587,15 +587,20 @@ def _load_player_pickles(
     shots_df = None
     shot_maps = {}
 
-    for pkl_file in sorted(glob.glob(str(data_subdir / "shots_*.pkl"))):
-        with open(pkl_file, "rb") as f:
-            df = pickle.load(f)
-            shots_df = df if shots_df is None else pd.concat([shots_df, df], ignore_index=True)
+    for parquet_file in sorted(glob.glob(str(data_subdir / "shots_*.parquet"))):
+        df = pd.read_parquet(parquet_file)
+        shots_df = df if shots_df is None else pd.concat([shots_df, df], ignore_index=True)
 
-    for pkl_file in sorted(glob.glob(str(data_subdir / "shot_maps_*.pkl"))):
-        with open(pkl_file, "rb") as f:
-            maps = pickle.load(f)
-            shot_maps.update(maps)
+    for npz_file in sorted(glob.glob(str(data_subdir / "shot_maps_*.npz"))):
+        data = np.load(npz_file)
+        event_ids = data["event_ids"]
+        if len(event_ids) > 0:
+            for i, eid in enumerate(event_ids):
+                shot_maps[int(eid)] = {
+                    "value_map": data["value_maps"][i].astype(np.float64),
+                    "net_cov": data["net_covs"][i],
+                    "net_coords": data["net_coords"][i],
+                }
 
     return shots_df, shot_maps
 
@@ -615,7 +620,7 @@ def plot_player_shots_from_offline(
     goals_only: bool = False,
     misses_only: bool = False,
 ) -> dict[str, list[plt.Figure]]:
-    """Generate rink + angular heatmap plots from offline pickle data.
+    """Generate rink + angular heatmap plots from offline data.
 
     Loads shot data (via ``load_player_data`` or ``load_player_data_by_games``)
     and generates per-shot angular heatmap comparisons and a combined rink
@@ -763,7 +768,7 @@ def plot_single_shot_cli(
 ) -> Path | None:
     """Generate heatmap for a single shot event given player_id and event_id.
 
-    Searches all pickle files in player's data directory for the event_id,
+    Searches all parquet/npz data files in player's data directory for the event_id,
     extracts shot data, and saves angular heatmap to output_dir.
 
     Parameters
@@ -838,7 +843,7 @@ def plot_single_shot_rink(
 ) -> Path | None:
     """Plot a single shot by event ID on a rink diagram.
 
-    Loads the shot's rink-space origin from offline pickle data, looks
+    Loads the shot's rink-space origin from offline data, looks
     up the player name from the player cache, and saves a rink diagram
     with that shot highlighted.  Goals appear as red stars; shots as
     blue circles.
@@ -846,11 +851,11 @@ def plot_single_shot_rink(
     Parameters
     ----------
     player_id : int
-        Blackhawks player ID.  The player's pickle files must exist
+        Blackhawks player ID.  The player's data files must exist
         under ``data_dir/player_{player_id}/data/``.
     event_id : int
         Shot event ID to plot.  Must be present in one of the
-        ``shots_*.pkl`` files for the player.
+        parquet/npz data files for the player.
     data_dir : Path | str
         Root data directory (default: ``"Data/Hockey"``).
     output_dir : Path | str | None
