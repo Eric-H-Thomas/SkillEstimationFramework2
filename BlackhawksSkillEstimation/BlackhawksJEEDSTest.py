@@ -11,6 +11,7 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import (
 from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     plot_intermediate_estimates,
     plot_all_intermediate_for_player,
+    compare_execution_rankings_two_seasons_by_shot_type,
 )
 from BlackhawksSkillEstimation.blackhawks_plots import (
     plot_player_shots_from_offline,
@@ -458,9 +459,15 @@ def rank_info_players():
             )
 
 
-def table_info_players():
-    from BlackhawksSkillEstimation.plot_intermediate_estimates import compare_execution_rankings_two_seasons
-    compare_execution_rankings_two_seasons(players=INFO_PLAYERS)
+def table_info_players_by_shot_type():
+    outputs = compare_execution_rankings_two_seasons_by_shot_type(
+        players=INFO_PLAYERS,
+        shot_types=("ws", "ss"),
+        output_dir="Data/Hockey/_bhawks_reports",
+    )
+    print(f"Saved CSV: {outputs['csv']}")
+    for p in outputs["pngs"]:
+        print(f"Saved PNG: {p}")
 
 
 # =============================================================================
@@ -508,7 +515,8 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - generate_all_viz: Full visualization suite (angular, rink, convergence)
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 #   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
-#   - rank_info_players | table_info_players: Generate a bar chart (or table) ranking for all INFO_PLAYERS
+#   - rank_info_players: Generate a bar chart ranking for all INFO_PLAYERS
+#   - table_info_players_by_shot_type: ws/ss two-season tables + BYU-style CSV export
 
 TEST_TO_RUN = generate_all_viz
 if __name__ == "__main__":
