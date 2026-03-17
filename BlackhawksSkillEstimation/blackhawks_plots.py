@@ -674,6 +674,38 @@ def plot_player_shots_from_offline(
     else:
         raise ValueError("Provide either 'tag' or 'seasons' to load data.")
 
+    return plot_player_shots_from_loaded_data(
+        player_id=player_id,
+        df=df,
+        shot_maps=shot_maps,
+        seasons=seasons,
+        max_shots=max_shots,
+        output_dir=output_dir,
+        goals_only=goals_only,
+        misses_only=misses_only,
+    )
+
+
+def plot_player_shots_from_loaded_data(
+    player_id: int,
+    df: pd.DataFrame,
+    shot_maps: dict[int, dict[str, object]],
+    *,
+    seasons: list[int] | None = None,
+    max_shots: int = 10,
+    output_dir: Path | str | None = None,
+    goals_only: bool = False,
+    misses_only: bool = False,
+) -> dict[str, list[plt.Figure]]:
+    """Generate rink + angular heatmaps from already loaded shot data.
+
+    This avoids repeated parquet/npz loading and is intended for UI caches
+    where ``df`` and ``shot_maps`` are already in memory.
+    """
+    if output_dir is None:
+        output_dir = _DEFAULT_DATA_DIR / f"player_{player_id}" / "plots"
+    output_dir = Path(output_dir)
+
     player_name = lookup_player(player_id)
 
     angular_paths: list[plt.Figure] = []
