@@ -22,6 +22,18 @@ from BlackhawksSkillEstimation.player_cache import lookup_player
 import sys
 from typing import Sequence
 
+# CLI aliases for convenience (maps short names to verbose names)
+_SHOT_GROUP_ALIASES = {
+    "ws": "wristshot_snapshot",
+    "bh": "backhand",
+    "ss": "slapshot",
+    "dk": "deke",
+}
+
+def _resolve_shot_group_alias(shot_group: str) -> str:
+    """Convert CLI alias to verbose name, or return as-is if already verbose."""
+    return _SHOT_GROUP_ALIASES.get(shot_group, shot_group)
+
 # NOTE: At the bottom, set TEST_TO_RUN
 
 
@@ -220,7 +232,7 @@ def per_season_multi_player_test(pids: list[int] | None = None, groups: Sequence
 
     players = pids or SEASON_TEST_PLAYERS
     seasons = SEASON_TEST_SEASONS
-    shot_groups = list(groups) if groups is not None else list(DEFAULT_SHOT_GROUPS)
+    shot_groups = [_resolve_shot_group_alias(g) for g in (groups or DEFAULT_SHOT_GROUPS)]
     data_dir = Path("Data/Hockey")
 
     print("=" * 60)
@@ -462,7 +474,7 @@ def rank_info_players():
 def table_info_players_by_shot_type():
     outputs = compare_execution_rankings_two_seasons_by_shot_type(
         players=INFO_PLAYERS,
-        shot_types=("ws", "ss"),
+        shot_types=("wristshot_snapshot", "slapshot"),
         output_dir="Data/Hockey/_bhawks_reports",
     )
     print(f"Saved CSV: {outputs['csv']}")
@@ -524,7 +536,7 @@ if __name__ == "__main__":
     #   python BlackhawksJEEDSTest.py <player_id> [shot_group]
     #   - 1 arg:  run all 4 shot groups for that player  (20-job mode)
     #   - 2 args: run one shot group for that player      (80-job mode)
-    #             *The groups are "ws", "bh", "ss", "dk"
+    #             *The groups are "wristshot_snapshot", "backhand", "slapshot", "deke" (or CLI aliases: "ws", "bh", "ss", "dk")
     # Examples:
     #   python -m BlackhawksSkillEstimation.BlackhawksJEEDSTest 950182
     #   python -m BlackhawksSkillEstimation.BlackhawksJEEDSTest 950182 bh

@@ -76,17 +76,17 @@ DEFAULT_NUM_PLANNING_SKILLS = 100
 # ---------------------------------------------------------------------------
 # Shot-type grouping definitions
 # ---------------------------------------------------------------------------
-# Each entry maps a short tag -> (display_name, allowed_shot_types, include_null).
+# Each entry maps tag -> (display_name, allowed_shot_types, include_null).
 # ``include_null`` controls whether shots with NULL/missing shot_type are included.
 SHOT_TYPE_GROUPS: dict[str, tuple[str, set[str], bool]] = {
-    "ws": ("Wristshot/Snapshot", {"wristshot", "snapshot"}, True),
-    "bh": ("Backhand", {"backhand"}, False),
-    "ss": ("Slapshot", {"slapshot"}, False),
-    "dk": ("Deke", {"forehandbackhand", "backhandforehand"}, False),
+    "wristshot_snapshot": ("Wristshot/Snapshot", {"wristshot", "snapshot"}, True),
+    "backhand": ("Backhand", {"backhand"}, False),
+    "slapshot": ("Slapshot", {"slapshot"}, False),
+    "deke": ("Deke", {"forehandbackhand", "backhandforehand"}, False),
 }
 
 # Convenience tuple of all defined group tags, in canonical order.
-DEFAULT_SHOT_GROUPS: tuple[str, ...] = ("ws", "bh", "ss", "dk")
+DEFAULT_SHOT_GROUPS: tuple[str, ...] = ("wristshot_snapshot", "backhand", "slapshot", "deke")
 
 
 def save_intermediate_estimates_csv(
@@ -110,8 +110,9 @@ def save_intermediate_estimates_csv(
     tag : str
         Optional tag for filename (e.g., "20242025" for season or "2games_test").
     shot_group : str
-        Shot-type group tag (e.g., "ws", "bh").  When non-empty the CSV is
-        written into a subdirectory ``logs/<shot_group>/`` instead of ``logs/``.
+        Shot-type group tag (e.g., ``"wristshot_snapshot"``, ``"backhand"``).  When
+        non-empty the CSV is written into a subdirectory ``logs/<shot_group>/`` instead
+        of ``logs/``.
     
     Returns
     -------
@@ -773,9 +774,9 @@ def _run_jeeds_estimation(
     Parameters
     ----------
     shot_group : str
-        Shot-type group tag (e.g., ``"ws"``, ``"bh"``).  When non-empty, the
-        shot-type filter is driven by :data:`SHOT_TYPE_GROUPS` and output CSVs
-        are written into a ``logs/<shot_group>/`` subdirectory.
+        Shot-type group tag (e.g., ``"wristshot_snapshot"``, ``"backhand"``).  When
+        non-empty, the shot-type filter is driven by :data:`SHOT_TYPE_GROUPS` and output
+        CSVs are written into a ``logs/<shot_group>/`` subdirectory.
     """
     if df.empty:
         return {
@@ -807,7 +808,7 @@ def _run_jeeds_estimation(
         if shot_group not in SHOT_TYPE_GROUPS:
             raise ValueError(
                 f"Unknown shot_group '{shot_group}'. "
-                f"Valid groups: {', '.join(SHOT_TYPE_GROUPS)}"
+                f"Valid groups: {', '.join(DEFAULT_SHOT_GROUPS)}"
             )
         group_display, allowed_types, include_null = SHOT_TYPE_GROUPS[shot_group]
     else:
@@ -1015,7 +1016,7 @@ def estimate_player_skill(
         Pre-loaded data from :func:`load_player_data`. When provided, skips all
         DB queries and uses the loaded data directly. Format: (shots_df, shot_maps).
     shot_group : str
-        Single shot-type group tag (e.g., ``"ws"``, ``"bh"``).  Drives the
+        Single shot-type group tag (e.g., ``"wristshot_snapshot"``, ``"backhand"``).  Drives the
         shot-type filter and routes CSVs into ``logs/<shot_group>/``.
         When empty (default), uses the legacy wristshot/snapshot/NULL filter.
     shot_groups : Sequence[str] | None

@@ -461,7 +461,7 @@ def rank_final_estimates(
 
 def compare_execution_rankings_two_seasons_by_shot_type(
     players: list[int] | None,
-    shot_types: Sequence[str] = ("ws", "ss"),
+    shot_types: Sequence[str] = ("wristshot_snapshot", "slapshot"),
     season_a: str | int = "20232024",
     season_b: str | int = "20242025",
     data_dir: str | Path = "Data/Hockey",
