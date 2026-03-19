@@ -487,7 +487,7 @@ def compare_execution_rankings_two_seasons_by_shot_type(
 
     from BlackhawksSkillEstimation.BlackhawksJEEDS import SHOT_TYPE_GROUPS
 
-    def _load_exec(pid: int, season: str | int, shot_type: str) -> float:
+    def _load_exec(pid: int, season: str | int, shot_type: str) -> tuple[float, int]:
         csvp = (
             data_dir
             / f"player_{pid}"
@@ -496,34 +496,61 @@ def compare_execution_rankings_two_seasons_by_shot_type(
             / f"intermediate_estimates_{season}.csv"
         )
         if not csvp.exists():
-            return float("nan")
+            return float("nan"), 0
         d = load_intermediate_estimates(csvp)
-        return d["expected_execution_skill"][-1] if d["shot_count"] else float("nan")
+        if not d["shot_count"]:
+            return float("nan"), 0
+        return d["expected_execution_skill"][-1], int(d["shot_count"][-1])
 
     def _fmt(v: float) -> str:
         return "-" if np.isnan(v) else f"{v:.3f}"
 
-    def _sort_key_a(row: tuple[str, int, float, float]):
+    def _sort_key_a(row: tuple[str, int, float, float, int, int]):
         v = row[2]
         return (np.isnan(v), v if not np.isnan(v) else float("inf"))
 
-    def _sort_key_b(row: tuple[str, int, float, float]):
+    def _sort_key_b(row: tuple[str, int, float, float, int, int]):
         v = row[3]
         return (np.isnan(v), v if not np.isnan(v) else float("inf"))
+
+    def _add_inline_count_overlays(
+        ax: plt.Axes,
+        tbl: plt.Table,
+        per_row_counts: list[tuple[int, int]],
+    ) -> None:
+        for row_idx, (count_a, count_b) in enumerate(per_row_counts, start=1):
+            for col_idx, count in ((1, count_a), (2, count_b)):
+                if count <= 0:
+                    continue
+                cell = tbl[row_idx, col_idx]
+                x = cell.get_x() + cell.get_width() * 0.98
+                y = cell.get_y() + cell.get_height() * 0.5
+                ax.text(
+                    x,
+                    y,
+                    f"n={count}",
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="center",
+                    fontsize=7,
+                    color="#8A8A8A",
+                    clip_on=False,
+                    zorder=10,
+                )
 
     csv_rows: list[tuple[int, str, str, float]] = []
     png_paths: list[Path] = []
 
     for shot_type in shot_types:
-        rows: list[tuple[str, int, float, float]] = []
+        rows: list[tuple[str, int, float, float, int, int]] = []
         for pid in players:
             name = lookup_player(pid) or str(pid)
-            va = _load_exec(pid, season_a, shot_type)
-            vb = _load_exec(pid, season_b, shot_type)
+            va, count_a = _load_exec(pid, season_a, shot_type)
+            vb, count_b = _load_exec(pid, season_b, shot_type)
             if np.isnan(va) and np.isnan(vb):
                 continue
 
-            rows.append((name, pid, va, vb))
+            rows.append((name, pid, va, vb, count_a, count_b))
 
             if not np.isnan(va):
                 csv_rows.append((pid, str(season_a), shot_type, float(va)))
@@ -548,6 +575,8 @@ def compare_execution_rankings_two_seasons_by_shot_type(
 
         left_cell = [[r[0], _fmt(r[2]), _fmt(r[3])] for r in left_rows]
         right_cell = [[r[0], _fmt(r[2]), _fmt(r[3])] for r in right_rows]
+        left_counts = [(r[4], r[5]) for r in left_rows]
+        right_counts = [(r[4], r[5]) for r in right_rows]
         col_labels = ["Player", str(season_a), str(season_b)]
 
         tbl_l = axl.table(cellText=left_cell, colLabels=col_labels, cellLoc="left", loc="center")
@@ -557,12 +586,32 @@ def compare_execution_rankings_two_seasons_by_shot_type(
         tbl_l.auto_set_column_width(col=cols)
         tbl_r.auto_set_column_width(col=cols)
 
+        max_digits = 1
+        all_counts = [c for pair in (left_counts + right_counts) for c in pair if c > 0]
+        if all_counts:
+            max_digits = max(len(str(c)) for c in all_counts)
+        season_width_multiplier = 1.25 + 0.03 * max(0, max_digits - 2)
+
+        for tbl in (tbl_l, tbl_r):
+            for row_idx in range(len(left_cell) + 1):
+                for col_idx in (1, 2):
+                    cell = tbl[row_idx, col_idx]
+                    cell.set_width(cell.get_width() * season_width_multiplier)
+            for row_idx in range(1, len(left_cell) + 1):
+                for col_idx in (1, 2):
+                    tbl[row_idx, col_idx].get_text().set_ha("left")
+                    tbl[row_idx, col_idx].PAD = 0.035
+
         tbl_l.auto_set_font_size(False)
         tbl_r.auto_set_font_size(False)
         tbl_l.set_fontsize(9)
         tbl_r.set_fontsize(9)
         tbl_l.scale(1, 1.2)
         tbl_r.scale(1, 1.2)
+
+        fig.canvas.draw()
+        _add_inline_count_overlays(axl, tbl_l, left_counts)
+        _add_inline_count_overlays(axr, tbl_r, right_counts)
 
         axl.set_title(f"Ranked by {season_a}")
         axr.set_title(f"Ranked by {season_b}")

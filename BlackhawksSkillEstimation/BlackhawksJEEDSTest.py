@@ -338,12 +338,12 @@ def per_season_multi_player_test(pids: list[int] | None = None, groups: Sequence
         if s["status"] == "success":
             _map = f"{s['execution_skill']:.4f}" if s['execution_skill'] is not None else "N/A"
             _ees = f"{s['ees']:.4f}" if s['ees'] is not None else "N/A"
-            print(f"  {s['name']:20s}  {s['season']}  [{grp_label:2s}]  "
+            print(f"  {s['name']:20s}  {s['season']}  [{grp_label}]  "
                   f"MAP={_map}  EES={_ees}  "
                   f"rat={_fmt_log10(s.get('log10_rationality'))}  EPS={_fmt_log10(s.get('log10_eps'))}  "
                   f"({s['num_shots']} shots)")
         else:
-            print(f"  {s['name']:20s}  {s['season']}  [{grp_label:2s}]  {s['status']}")
+            print(f"  {s['name']:20s}  {s['season']}  [{grp_label}]  {s['status']}")
 
 
 # =============================================================================
@@ -528,9 +528,9 @@ SEASON_TEST_SEASONS = [20232024, 20242025]
 #   - per_season_multi_player_test: Download (if needed), estimate, and plot per-season
 #   - plot_info_players_comparison: Generate a convergence comparison plot for all INFO_PLAYERS
 #   - rank_info_players: Generate a bar chart ranking for all INFO_PLAYERS
-#   - table_info_players_by_shot_type: ws/ss two-season tables + BYU-style CSV export
+#   - table_info_players_by_shot_type: wristshot_snapshot/slapshot two-season tables + BYU-style CSV export
 
-TEST_TO_RUN = generate_all_viz
+TEST_TO_RUN = table_info_players_by_shot_type
 if __name__ == "__main__":
     # CLI usage:
     #   python BlackhawksJEEDSTest.py <player_id> [shot_group]
@@ -546,7 +546,7 @@ if __name__ == "__main__":
         grps = [sys.argv[2]] if len(sys.argv) >= 3 else None  # None → all 4
         per_season_multi_player_test(pids=[pid], groups=grps)
     else:
-    #    TEST_TO_RUN()
+        TEST_TO_RUN()
         pass
         '''
         # For redownloading data (do 5-10 at a time to avoid crash)
