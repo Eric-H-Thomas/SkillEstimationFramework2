@@ -115,6 +115,40 @@ def _auto_title(csv_path: Path) -> str:
     return f"{base} - {tag}" if tag else base
 
 
+def get_estimate_value_at_shot(
+    estimates: dict[str, list[float]],
+    shot_index: int,
+    metric: str = "expected_execution_skill",
+) -> float | None:
+    """Return metric value at 1-based shot index, or None if unavailable."""
+    values = estimates.get(metric)
+    if not values:
+        return None
+    idx = int(shot_index) - 1
+    if idx < 0 or idx >= len(values):
+        return None
+    return float(values[idx])
+
+
+def get_estimate_before_after_delta(
+    estimates: dict[str, list[float]],
+    shot_index: int,
+    metric: str = "expected_execution_skill",
+) -> tuple[float | None, float | None, float | None]:
+    """Return (before, after, delta) for a 1-based shot index.
+
+    ``before`` is the metric at ``shot_index - 1`` and is None when the shot
+    has no predecessor. ``delta`` is computed as ``after - before``.
+    """
+    after = get_estimate_value_at_shot(estimates, shot_index, metric)
+    if after is None:
+        return None, None, None
+    before = get_estimate_value_at_shot(estimates, int(shot_index) - 1, metric)
+    if before is None:
+        return None, after, None
+    return before, after, float(after - before)
+
+
 # ---------------------------------------------------------------------------
 # Single-CSV convergence plot
 # ---------------------------------------------------------------------------
