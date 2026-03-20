@@ -402,6 +402,108 @@ def clear_shot_maps_cache() -> None:
     _get_game_shot_maps_cached.cache_clear()
 
 
+def _prune_shot_maps_to_event_ids(
+    shot_maps: dict[int, dict[str, object]],
+    event_ids: Sequence[object],
+) -> tuple[dict[int, dict[str, object]], int]:
+    """Keep only shot-map entries whose event_id appears in ``event_ids``."""
+    if not shot_maps:
+        return {}, 0
+
+    keep_ids = {int(eid) for eid in event_ids}
+    pruned = {int(eid): payload for eid, payload in shot_maps.items() if int(eid) in keep_ids}
+    removed = len(shot_maps) - len(pruned)
+    return pruned, removed
+
+
+def _filter_estimable_shots_for_persistence(
+    df: pd.DataFrame,
+    shot_maps: dict[int, dict[str, object]],
+) -> tuple[pd.DataFrame, dict[int, dict[str, object]], dict[str, int]]:
+    """Keep only shots that would be usable by JEEDS in practice.
+
+    Rejection rules mirror estimator-time exclusions:
+    - missing shot map for event_id
+    - within 10ft net radius
+    - angular transform skip
+    """
+    df_lc = df.rename(columns=str.lower)
+    stats = {
+        "total": len(df_lc),
+        "kept": 0,
+        "rejected_missing_map": 0,
+        "rejected_proximity": 0,
+        "rejected_angular_skip": 0,
+        "maps_pruned": 0,
+    }
+
+    if df_lc.empty:
+        return df_lc, {}, stats
+
+    keep_mask: list[bool] = []
+    for _, row in df_lc.iterrows():
+        event_id = int(row["event_id"])
+        if event_id not in shot_maps:
+            stats["rejected_missing_map"] += 1
+            keep_mask.append(False)
+            continue
+
+        player_location = np.array([float(row["start_x"]), float(row["start_y"])])
+        executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
+
+        dist_to_net = np.linalg.norm(player_location - _NET_CENTER)
+        if dist_to_net < MIN_DISTANCE_FROM_NET_FT:
+            stats["rejected_proximity"] += 1
+            keep_mask.append(False)
+            continue
+
+        base_ev = shot_maps[event_id]["value_map"]
+        try:
+            angular_out = angular_heatmaps.getAngularHeatmap(
+                base_ev,
+                player_location,
+                executed_action,
+                grid_y=_BH_Y,
+                grid_z=_BH_Z,
+            )
+            skip = bool(angular_out[9])
+        except Exception:
+            skip = True
+
+        if skip:
+            stats["rejected_angular_skip"] += 1
+            keep_mask.append(False)
+            continue
+
+        keep_mask.append(True)
+
+    filtered_df = df_lc.loc[keep_mask].reset_index(drop=True)
+    filtered_maps, maps_pruned = _prune_shot_maps_to_event_ids(shot_maps, filtered_df["event_id"].tolist())
+    stats["maps_pruned"] = maps_pruned
+    stats["kept"] = len(filtered_df)
+    return filtered_df, filtered_maps, stats
+
+
+def _log_persistence_filter_stats(stats: dict[str, int]) -> None:
+    """Print a compact summary of save-time usable-shot filtering."""
+    rejected_total = (
+        stats["rejected_missing_map"]
+        + stats["rejected_proximity"]
+        + stats["rejected_angular_skip"]
+    )
+    print(
+        "  Pre-save usable-shot filter: "
+        f"kept {stats['kept']}/{stats['total']} shots; "
+        f"rejected missing_map={stats['rejected_missing_map']}, "
+        f"proximity<{MIN_DISTANCE_FROM_NET_FT}ft={stats['rejected_proximity']}, "
+        f"angular_skip={stats['rejected_angular_skip']}"
+    )
+    if stats["maps_pruned"]:
+        print(f"  Pruned {stats['maps_pruned']} shot-map entries not present in persisted shots.")
+    if rejected_total == 0:
+        print("  No additional save-time rejections beyond queried shots.")
+
+
 # =============================================================================
 # OFFLINE DATA PERSISTENCE: SHOT MAPS SERIALIZATION
 # =============================================================================
@@ -551,12 +653,23 @@ def save_player_data_by_games(
         print(f"  No shots found for games {game_ids}.")
         return {}
 
-    print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
+    filtered_game_ids = df["game_id"].dropna().astype(int).unique().tolist()
+    print(
+        f"  Found {len(df)} queried shots across {len(filtered_game_ids)} games. "
+        "Fetching shot maps..."
+    )
     try:
-        shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
+        shot_maps = get_games_shot_maps_batch(filtered_game_ids, player_id=player_id)
     except Exception as e:
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
+
+    df, shot_maps, stats = _filter_estimable_shots_for_persistence(df, shot_maps)
+    _log_persistence_filter_stats(stats)
+    if df.empty:
+        print("  All shots were rejected by pre-save usable-shot filtering.")
+        return {}
+    print(f"  Persisting {len(df)} shots and {len(shot_maps)} shot maps.")
 
     # Save to parquet and npz
     df.to_parquet(shots_path, engine="pyarrow", compression="snappy")
@@ -671,7 +784,7 @@ def save_player_data(
             continue
 
         # Fetch shot maps for all games in this season (single batched query)
-        game_ids = df["game_id"].unique().tolist()
+        game_ids = df["game_id"].dropna().astype(int).unique().tolist()
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
         try:
@@ -679,6 +792,13 @@ def save_player_data(
         except Exception as e:
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}
+
+        df, shot_maps, stats = _filter_estimable_shots_for_persistence(df, shot_maps)
+        _log_persistence_filter_stats(stats)
+        if df.empty:
+            print(f"  All shots were rejected by pre-save usable-shot filtering for season {season}.")
+            continue
+        print(f"  Persisting {len(df)} shots and {len(shot_maps)} shot maps.")
 
         # Save to parquet and npz
         df.to_parquet(shots_path, engine="pyarrow", compression="snappy")
