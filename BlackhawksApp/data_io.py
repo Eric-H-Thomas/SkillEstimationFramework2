@@ -32,11 +32,12 @@ def _resolve_data_dir(data_dir: Path | str | None = None) -> Path:
 def get_players(data_dir: Path | str | None = None) -> list[int]:
     """Return available player IDs from the local data directory."""
     root = _resolve_data_dir(data_dir)
-    if not root.exists():
+    players_dir = root / "players"
+    if not players_dir.exists():
         return []
 
     player_ids: list[int] = []
-    for child in sorted(root.iterdir()):
+    for child in sorted(players_dir.iterdir()):
         if not child.is_dir():
             continue
         m = _PLAYER_DIR_RE.match(child.name)
@@ -48,7 +49,7 @@ def get_players(data_dir: Path | str | None = None) -> list[int]:
 def get_seasons(player_id: int, data_dir: Path | str | None = None) -> list[int]:
     """Return available season tags for a player based on shots parquet files."""
     root = _resolve_data_dir(data_dir)
-    data_subdir = root / f"player_{player_id}" / "data"
+    data_subdir = root / "players" / f"player_{player_id}" / "data"
     if not data_subdir.exists():
         return []
 
@@ -63,7 +64,7 @@ def get_seasons(player_id: int, data_dir: Path | str | None = None) -> list[int]
 def get_intermediate_csvs(player_id: int, data_dir: Path | str | None = None) -> list[Path]:
     """Return intermediate-estimate CSVs for a player."""
     root = _resolve_data_dir(data_dir)
-    logs_dir = root / f"player_{player_id}" / "logs"
+    logs_dir = root / "players" / f"player_{player_id}" / "logs"
     if not logs_dir.exists():
         return []
     return sorted(logs_dir.glob("intermediate_estimates*.csv"))
@@ -112,7 +113,7 @@ def load_shots_metadata(
 ) -> pd.DataFrame:
     """Load one season's shot metadata parquet for a player."""
     root = _resolve_data_dir(data_dir)
-    parquet_path = root / f"player_{player_id}" / "data" / f"shots_{season}.parquet"
+    parquet_path = root / "players" / f"player_{player_id}" / "data" / f"shots_{season}.parquet"
     if not parquet_path.exists():
         raise FileNotFoundError(f"Missing shots parquet: {parquet_path}")
     return pd.read_parquet(parquet_path)
@@ -125,7 +126,7 @@ def load_shot_maps_for_season(
 ) -> dict[int, dict[str, object]]:
     """Load one season's shot-map npz into event_id-keyed payloads."""
     root = _resolve_data_dir(data_dir)
-    npz_path = root / f"player_{player_id}" / "data" / f"shot_maps_{season}.npz"
+    npz_path = root / "players" / f"player_{player_id}" / "data" / f"shot_maps_{season}.npz"
     if not npz_path.exists():
         raise FileNotFoundError(f"Missing shot-map npz: {npz_path}")
 
@@ -245,7 +246,7 @@ def get_convergence_artifact(
     2) Flat logs path
     """
     root = _resolve_data_dir(data_dir)
-    logs_dir = root / f"player_{player_id}" / "logs"
+    logs_dir = root / "players" / f"player_{player_id}" / "logs"
     if not logs_dir.exists():
         return None
 

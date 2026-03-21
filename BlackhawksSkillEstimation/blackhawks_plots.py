@@ -26,14 +26,14 @@ Typical usage
 
     # One shot's angular heatmap (needs its value_map and player location)
     plot_shot_angular_heatmap(value_map, player_location, executed_action,
-                              save_path="Data/Hockey/player_950160/plots/angular/shot_42.png")
+                              save_path="Data/Hockey/players/player_950160/plots/angular/shot_42.png")
 
     # Rink diagram with scattered shots
     plot_shot_rink(player_locations, executed_actions,
-                    save_path="Data/Hockey/player_950160/plots/rink/all_shots.png")
+                    save_path="Data/Hockey/players/player_950160/plots/rink/all_shots.png")
 
     # Convergence (wraps plot_intermediate_estimates)
-    plot_player_convergence(csv_path="Data/Hockey/player_950160/logs/intermediate_estimates_20242025.csv")
+    plot_player_convergence(csv_path="Data/Hockey/players/player_950160/logs/intermediate_estimates_20242025.csv")
 """
 from __future__ import annotations
 
@@ -581,7 +581,7 @@ def _load_player_pickles(
     import numpy as np
 
     data_dir = Path(data_dir)
-    player_dir = data_dir / f"player_{player_id}"
+    player_dir = data_dir / "players" / f"player_{player_id}"
     data_subdir = player_dir / "data"
 
     shots_df = None
@@ -631,7 +631,7 @@ def plot_player_shots_from_offline(
     player_id : int
         Blackhawks player ID.
     data_dir : Path | str
-        Root directory containing ``player_{id}/`` folders.
+        Root directory containing ``players/player_{id}/`` folders.
     tag : str | None
         If provided, load game-tagged data via ``load_player_data_by_games``.
     seasons : list[int] | None
@@ -641,7 +641,7 @@ def plot_player_shots_from_offline(
         Maximum number of shots to render angular heatmaps for.
     output_dir : Path | str | None
         Where to write figures.  Defaults to
-        ``Data/Hockey/player_{id}/plots/``.
+        ``Data/Hockey/players/player_{id}/plots/``.
     goals_only : bool
         If True, only include shots where puck landed inside the net (trajectory-based).
     misses_only : bool
@@ -659,7 +659,7 @@ def plot_player_shots_from_offline(
 
     data_dir = Path(data_dir)
     if output_dir is None:
-        output_dir = data_dir / f"player_{player_id}" / "plots"
+        output_dir = data_dir / "players" / f"player_{player_id}" / "plots"
     output_dir = Path(output_dir)
 
     # Load data
@@ -703,7 +703,7 @@ def plot_player_shots_from_loaded_data(
     where ``df`` and ``shot_maps`` are already in memory.
     """
     if output_dir is None:
-        output_dir = _DEFAULT_DATA_DIR / f"player_{player_id}" / "plots"
+        output_dir = _DEFAULT_DATA_DIR / "players" / f"player_{player_id}" / "plots"
     output_dir = Path(output_dir)
 
     player_name = lookup_player(player_id)
@@ -812,7 +812,7 @@ def plot_single_shot_cli(
     data_dir : Path | str
         Root data directory (default: "Data/Hockey").
     output_dir : Path | str | None
-        Output directory (default: Data/Hockey/player_{id}/plots/).
+        Output directory (default: Data/Hockey/players/player_{id}/plots/).
 
     Returns
     -------
@@ -820,7 +820,7 @@ def plot_single_shot_cli(
         Path to saved figure, or None if event not found.
     """
     data_dir = Path(data_dir)
-    player_dir = data_dir / f"player_{player_id}"
+    player_dir = data_dir / "players" / f"player_{player_id}"
 
     if output_dir is None:
         output_dir = player_dir / "plots"
@@ -884,7 +884,7 @@ def plot_single_shot_rink(
     ----------
     player_id : int
         Blackhawks player ID.  The player's data files must exist
-        under ``data_dir/player_{player_id}/data/``.
+        under ``data_dir/players/player_{player_id}/data/``.
     event_id : int
         Shot event ID to plot.  Must be present in one of the
         parquet/npz data files for the player.
@@ -892,7 +892,7 @@ def plot_single_shot_rink(
         Root data directory (default: ``"Data/Hockey"``).
     output_dir : Path | str | None
         Where to save the figure.  Defaults to
-        ``data_dir/player_{player_id}/plots/``.
+        ``data_dir/players/player_{player_id}/plots/``.
     seasons : list[int] | None
         Season(s) to annotate on the rink (e.g. ``[20242025]``).
     show : bool
@@ -905,7 +905,7 @@ def plot_single_shot_rink(
         ``show=True``.
     """
     data_dir = Path(data_dir)
-    player_dir = data_dir / f"player_{player_id}"
+    player_dir = data_dir / "players" / f"player_{player_id}"
 
     if output_dir is None:
         output_dir = player_dir / "plots"

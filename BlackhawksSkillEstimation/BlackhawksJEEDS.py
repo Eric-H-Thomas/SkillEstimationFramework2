@@ -106,7 +106,7 @@ def save_intermediate_estimates_csv(
     player_id : int
         Player ID for filename.
     output_dir : Path | str
-        Base directory (e.g., "Data/Hockey/player_950160").
+        Base directory (e.g., "Data/Hockey/players/player_950160").
     tag : str
         Optional tag for filename (e.g., "20242025" for season or "2games_test").
     shot_group : str
@@ -602,7 +602,7 @@ def save_player_data_by_games(
 ) -> dict[str, Path]:
     """Fetch and save player shot data + shot maps for specific games.
 
-    Creates files in ``output_dir/player_{player_id}/data/`` with:
+    Creates files in ``output_dir/players/player_{player_id}/data/`` with:
     - ``shots_{tag}.parquet``: DataFrame of shots (Apache Parquet format)
     - ``shot_maps_{tag}.npz``: Compressed shot maps (Numpy savez format)
 
@@ -631,7 +631,7 @@ def save_player_data_by_games(
         {"shots": path, "shot_maps": path} for saved files.
     """
     output_dir = Path(output_dir)
-    player_dir = output_dir / f"player_{player_id}"
+    player_dir = output_dir / "players" / f"player_{player_id}"
     data_dir_path = player_dir / "data"
     data_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -708,7 +708,7 @@ def load_player_data_by_games(
         If parquet/npz files are missing.
     """
     data_dir = Path(data_dir)
-    player_dir = data_dir / f"player_{player_id}"
+    player_dir = data_dir / "players" / f"player_{player_id}"
     data_subdir = player_dir / "data"
 
     shots_path = data_subdir / f"shots_{tag}.parquet"
@@ -733,7 +733,7 @@ def save_player_data(
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
 
-    Creates files in ``output_dir/player_{player_id}/data/`` with:
+    Creates files in ``output_dir/players/player_{player_id}/data/`` with:
     - ``shots_{season}.parquet``: DataFrame of shots (Apache Parquet format)
     - ``shot_maps_{season}.npz``: Compressed shot maps (Numpy savez format)
 
@@ -757,7 +757,7 @@ def save_player_data(
         Mapping of season -> {"shots": path, "shot_maps": path} for saved files.
     """
     output_dir = Path(output_dir)
-    player_dir = output_dir / f"player_{player_id}"
+    player_dir = output_dir / "players" / f"player_{player_id}"
     data_dir_path = player_dir / "data"
     data_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -841,7 +841,7 @@ def load_player_data(
         If parquet/npz files for any requested season are missing.
     """
     data_dir = Path(data_dir)
-    player_dir = data_dir / f"player_{player_id}"
+    player_dir = data_dir / "players" / f"player_{player_id}"
     data_subdir = player_dir / "data"
 
     all_dfs: list[pd.DataFrame] = []
@@ -1124,11 +1124,11 @@ def estimate_player_skill(
     return_intermediate_estimates : bool
         If True, return a 'skill_log' key with all 4 estimates after each shot.
     save_intermediate_csv : bool
-        If True, save intermediate estimates to a CSV file under data_dir/player_{id}/logs/.
+        If True, save intermediate estimates to a CSV file under data_dir/players/player_{id}/logs/.
     data_dir : Path | str
         Base directory for player data. Default is "Data/Hockey".
         Each player's outputs (timing logs, CSVs, plots) live under
-        ``data_dir/player_{id}/{data,logs,plots,times}/``.
+        ``data_dir/players/player_{id}/{data,logs,plots,times}/``.
     confirm : bool
         If True (default), prompt for confirmation before running estimation.
         Set to False for batch/automated runs.
@@ -1202,7 +1202,7 @@ def estimate_player_skill(
         candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
     )
     data_dir = Path(data_dir)
-    player_data_dir = data_dir / f"player_{player_id}"
+    player_data_dir = data_dir / "players" / f"player_{player_id}"
 
     # Mode 0: Offline data (pre-loaded from disk)
     if offline_data is not None:

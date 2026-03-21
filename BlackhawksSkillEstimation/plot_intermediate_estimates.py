@@ -270,10 +270,10 @@ def plot_all_intermediate_for_player(
 ) -> list[plt.Figure]:
     """Generate convergence plots for every intermediate CSV of *player_id*.
 
-    Looks in ``<data_dir>/player_<id>/logs/intermediate_estimates*.csv`` and
+    Looks in ``<data_dir>/players/player_<id>/logs/intermediate_estimates*.csv`` and
     also in group subdirectories ``logs/*/intermediate_estimates*.csv``.
     """
-    logs_dir = Path(data_dir) / f"player_{player_id}" / "logs"
+    logs_dir = Path(data_dir) / "players" / f"player_{player_id}" / "logs"
     if not logs_dir.exists():
         print(f"No logs directory: {logs_dir}")
         return []
@@ -431,7 +431,7 @@ def rank_final_estimates(
     values: list[float] = []
 
     for pid in players:
-        logs = data_dir / f"player_{pid}" / "logs"
+        logs = data_dir / "players" / f"player_{pid}" / "logs"
         csv = logs / f"intermediate_estimates_{season}.csv"
         if not csv.exists():
             print(f"warning: {pid} has no CSV for {season}")
@@ -524,6 +524,7 @@ def compare_execution_rankings_two_seasons_by_shot_type(
     def _load_exec(pid: int, season: str | int, shot_type: str) -> tuple[float, int]:
         csvp = (
             data_dir
+            / "players"
             / f"player_{pid}"
             / "logs"
             / shot_type

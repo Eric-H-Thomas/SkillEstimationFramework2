@@ -109,7 +109,7 @@ def download_lightweight_test_data():
     print("\n" + "=" * 60)
     print("DOWNLOAD COMPLETE")
     print("=" * 60)
-    print("\nSaved files can be found in Data/Hockey/player_*/")
+    print("\nSaved files can be found in Data/Hockey/players/player_*/")
     print("Transfer this folder to the compute cluster for offline experiments.")
     
     return all_saved
@@ -434,7 +434,7 @@ def plot_info_players_comparison():
                 csvs: list[Path] = []
                 labels: list[str] = []
                 for pid in INFO_PLAYERS:
-                    logs = Path(f"Data/Hockey/player_{pid}/logs")
+                    logs = Path(f"Data/Hockey/players/player_{pid}/logs")
                     if group_tag:
                         path = logs / group_tag / f"intermediate_estimates_{season}.csv"
                     else:
@@ -511,8 +511,8 @@ INFO_PLAYERS = [
 ]
 
 SEASON_TEST_PLAYERS = [
-    #950160,  # Nathan MacKinnon
-    #950184,  # Cale Makar
+    950160,  # Nathan MacKinnon
+    950184,  # Cale Makar
     949352,   # Kris Letang
 ]
 
@@ -546,13 +546,13 @@ if __name__ == "__main__":
         grps = [sys.argv[2]] if len(sys.argv) >= 3 else None  # None → all 4
         per_season_multi_player_test(pids=[pid], groups=grps)
     else:
-        TEST_TO_RUN()
+        #TEST_TO_RUN()
         pass
-        '''
+        # '''
         # For redownloading data (do 5-10 at a time to avoid crash)
-        for pid in INFO_PLAYERS:
+        for pid in INFO_PLAYERS[0:5]:
             save_player_data(player_id=pid, seasons=SEASON_TEST_SEASONS, overwrite=True)
-        '''
+        # '''
 
     '''
     save_player_data(player_id=950182, seasons=[20242025],)# overwrite=True)
