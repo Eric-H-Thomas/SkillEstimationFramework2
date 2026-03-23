@@ -8,12 +8,11 @@ on a cluster.
 from __future__ import annotations
 
 import argparse
-import json
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import save_player_data
+from BlackhawksSkillEstimation.player_cache import lookup_player
 
 
 def _parse_pid_file(path: Path) -> list[int]:
@@ -31,10 +30,6 @@ def _parse_pid_file(path: Path) -> list[int]:
         except ValueError as exc:
             raise ValueError(f"Invalid PID on line {idx} in {path}: {line}") from exc
     return pids
-
-
-def _timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -83,12 +78,6 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite season artifacts if they already exist.",
     )
-    parser.add_argument(
-        "--manifest-file",
-        type=Path,
-        default=Path("Data/Hockey/download_manifest_forwards23-25.json"),
-        help="Where to write JSON run summary and failures.",
-    )
     return parser
 
 
@@ -111,7 +100,6 @@ def main() -> None:
         selected = selected[: args.max_players]
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    args.manifest_file.parent.mkdir(parents=True, exist_ok=True)
 
     print("=" * 80)
     print("Bulk Blackhawks Data Download")
@@ -123,15 +111,17 @@ def main() -> None:
     print(f"Seasons:        {args.seasons}")
     print(f"Output dir:     {args.output_dir}")
     print(f"Overwrite:      {args.overwrite}")
-    print(f"Manifest file:  {args.manifest_file}")
     print("=" * 80)
 
-    successes: list[dict[str, object]] = []
-    failures: list[dict[str, object]] = []
+    success_count = 0
+    no_data_count = 0
+    error_count = 0
 
     total = len(selected)
     for i, pid in enumerate(selected, start=1):
-        print(f"\n[{i}/{total}] Player {pid}")
+        player_name = lookup_player(player_id=pid)
+        display_name = player_name if isinstance(player_name, str) and player_name else "Unknown"
+        print(f"\n[{i}/{total}] Player {pid} ({display_name})")
         try:
             saved = save_player_data(
                 player_id=pid,
@@ -141,62 +131,24 @@ def main() -> None:
             )
             seasons_saved = sorted(int(s) for s in saved.keys())
             if not seasons_saved:
-                failures.append(
-                    {
-                        "pid": pid,
-                        "status": "no_data",
-                        "error": "No season files were saved.",
-                        "timestamp": _timestamp(),
-                    }
-                )
+                no_data_count += 1
                 print("  -> no season files saved")
             else:
-                successes.append(
-                    {
-                        "pid": pid,
-                        "status": "ok",
-                        "seasons_saved": seasons_saved,
-                        "timestamp": _timestamp(),
-                    }
-                )
+                success_count += 1
                 print(f"  -> saved seasons: {seasons_saved}")
         except Exception as exc:  # continue batch on per-player failures
-            failures.append(
-                {
-                    "pid": pid,
-                    "status": "error",
-                    "error": str(exc),
-                    "timestamp": _timestamp(),
-                }
-            )
+            error_count += 1
             print(f"  -> ERROR: {exc}")
 
         if args.sleep_seconds > 0 and i < total:
             time.sleep(args.sleep_seconds)
 
-    manifest = {
-        "run_started_utc": _timestamp(),
-        "pids_file": str(args.pids_file),
-        "total_ids_in_file": len(all_pids),
-        "start_index": args.start_index,
-        "selected_ids": len(selected),
-        "seasons": args.seasons,
-        "output_dir": str(args.output_dir),
-        "overwrite": args.overwrite,
-        "success_count": len(successes),
-        "failure_count": len(failures),
-        "successes": successes,
-        "failures": failures,
-        "run_finished_utc": _timestamp(),
-    }
-    args.manifest_file.write_text(json.dumps(manifest, indent=2))
-
     print("\n" + "=" * 80)
     print("Download complete")
     print("=" * 80)
-    print(f"Successes: {len(successes)}")
-    print(f"Failures:  {len(failures)}")
-    print(f"Manifest:  {args.manifest_file}")
+    print(f"Successes: {success_count}")
+    print(f"No data:   {no_data_count}")
+    print(f"Errors:    {error_count}")
 
 
 if __name__ == "__main__":
