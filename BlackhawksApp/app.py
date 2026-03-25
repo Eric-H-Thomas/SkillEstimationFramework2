@@ -56,6 +56,12 @@ def _safe_float(value: object, default: float = 0.08) -> float:
     return out
 
 
+def _format_pow10(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"10^{value:.3f}"
+
+
 def _sync_shot_index(value: int) -> None:
     st.session_state["selected_shot_index"] = int(value)
     st.session_state["shot_index_slider"] = int(value)
@@ -192,12 +198,18 @@ selected_row = data_io.get_shot_row_by_index(filtered_df, selected_idx)
 selected_event_id = int(selected_row["event_id"]) if selected_row is not None else None
 
 before, after, delta = None, None, None
+before_rat_log10, after_rat_log10, delta_rat_log10 = None, None, None
 if estimates is not None:
     try:
         before, after, delta = get_estimate_before_after_delta(
             estimates,
             shot_index=selected_idx,
             metric="expected_execution_skill",
+        )
+        before_rat_log10, after_rat_log10, delta_rat_log10 = get_estimate_before_after_delta(
+            estimates,
+            shot_index=selected_idx,
+            metric="log10_expected_rationality",
         )
     except Exception as exc:
         nav_col.warning(f"Could not load estimate deltas: {exc}")
@@ -222,21 +234,35 @@ if after is not None:
     )
     nav_col.write(f"delta xskill expected (after-before): {delta_str}")
 
+if after_rat_log10 is not None:
+    before_rat_str = _format_pow10(before_rat_log10)
+    after_rat_str = _format_pow10(after_rat_log10)
+    delta_rat_str = f"{delta_rat_log10:.5f}" if delta_rat_log10 is not None else "N/A"
+    nav_col.write(
+        f"rationality expected before/after: {before_rat_str} -> {after_rat_str}"
+    )
+    nav_col.write(f"delta rationality expected log10 (after-before): {delta_rat_str}")
+
 table_col.subheader("Filtered shot table")
 table_df = filtered_df.copy()
 if estimates is not None:
     deltas: list[float | None] = []
-    after_vals: list[float | None] = []
+    rationality_deltas: list[float | None] = []
     for idx in range(1, len(table_df) + 1):
-        _before_i, after_i, delta_i = get_estimate_before_after_delta(
+        _before_i, _after_i, delta_i = get_estimate_before_after_delta(
             estimates,
             shot_index=idx,
             metric="expected_execution_skill",
         )
-        after_vals.append(after_i)
+        _before_rat_i, _after_rat_i, delta_rat_i = get_estimate_before_after_delta(
+            estimates,
+            shot_index=idx,
+            metric="log10_expected_rationality",
+        )
         deltas.append(delta_i)
-    table_df["expected_execution_skill_after"] = after_vals
+        rationality_deltas.append(delta_rat_i)
     table_df["delta_expected_execution_skill"] = deltas
+    table_df["delta_expected_rationality"] = rationality_deltas
 
 table_columns = [
     col
@@ -247,8 +273,8 @@ table_columns = [
         "period",
         "shot_type",
         "shot_is_goal",
-        "expected_execution_skill_after",
         "delta_expected_execution_skill",
+        "delta_expected_rationality",
         "start_x",
         "start_y",
         "location_y",
