@@ -575,18 +575,24 @@ with config_cols[1]:
     )
     per_season_estimation = estimation_mode == "per_season"
 
-    st.markdown("**SBATCH recommendations**")
+    st.markdown("**SBATCH settings used for array submission**")
     sbatch_time = st.text_input(
-        "SBATCH time",
+        "SBATCH time limit",
         value="24:00:00",
         key="cfg_sbatch_time",
-        help="Recommended walltime for generated job arrays.",
+        help=(
+            "Walltime passed to sbatch --time. Format: HH:MM:SS. "
+            "Example/default: 24:00:00 (24 hours)."
+        ),
     )
     sbatch_mem = st.text_input(
         "SBATCH memory",
         value="16G",
         key="cfg_sbatch_mem",
-        help="Recommended memory request per task.",
+        help=(
+            "Memory passed to sbatch --mem per task. "
+            "Use units like G or M (for example, 16G)."
+        ),
     )
     sbatch_max_concurrent = st.number_input(
         "Max concurrent array jobs",
@@ -595,7 +601,10 @@ with config_cols[1]:
         value=100,
         step=1,
         key="cfg_sbatch_max_concurrent",
-        help="Used as recommended cap for --array concurrency (e.g., %%100).",
+        help=(
+            "Concurrency cap used in sbatch --array as %%N. "
+            "Example/default: 100 means --array=1-<jobs>%100."
+        ),
     )
 
     st.markdown("**Run outputs**")
