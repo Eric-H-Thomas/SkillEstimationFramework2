@@ -3,6 +3,11 @@
 Usage:
     pip install -r requirements.txt
     streamlit run BlackhawksApp/app.py
+
+Config workflow:
+    1) Build/export JSON under Data/Hockey/jobs from the Cluster Config Builder.
+    2) On cluster submit with:
+       sbatch run_blackhawks_config.sbatch Data/Hockey/jobs/<config>.json
 """
 from __future__ import annotations
 

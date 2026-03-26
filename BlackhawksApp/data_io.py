@@ -2,6 +2,9 @@
 
 This module is the app-facing boundary for data storage layout. If storage
 paths or file formats change later, update this file and keep UI code intact.
+
+This module also supports config export helpers used by the cluster workflow:
+    sbatch run_blackhawks_config.sbatch Data/Hockey/jobs/<config>.json
 """
 from __future__ import annotations
 

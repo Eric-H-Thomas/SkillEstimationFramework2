@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Config workflow entrypoint on cluster:
+#   sbatch run_blackhawks_config.sbatch Data/Hockey/jobs/<config>.json
+#
+# This script reads job array sizing + resource recommendations from the config,
+# submits the worker array, and each worker runs run_blackhawks_config.py.
+
 #SBATCH --job-name=bh-config-bootstrap
 #SBATCH --time=00:05:00
 #SBATCH --mem=1G
@@ -91,7 +97,7 @@ module load miniforge3
 eval "$(conda shell.bash hook)"
 conda activate skill-estimation
 
-export PYTHONPATH="$PWD:$PYTHONPATH"
+export PYTHONPATH="$PWD:${PYTHONPATH:-}"
 
 python BlackhawksSkillEstimation/run_blackhawks_config.py \
   --config "$CONFIG_PATH" \

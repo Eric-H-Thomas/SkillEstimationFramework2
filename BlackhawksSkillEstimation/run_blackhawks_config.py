@@ -3,6 +3,11 @@
 This runner is intended for local dry-runs and cluster job-array execution.
 It consumes config files exported by the Streamlit Config Builder.
 
+Cluster usage
+-------------
+Submit via the sbatch wrapper script:
+    sbatch run_blackhawks_config.sbatch Data/Hockey/jobs/<config>.json
+
 Examples
 --------
 Dry-run all jobs:
