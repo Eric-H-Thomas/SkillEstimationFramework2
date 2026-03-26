@@ -5,7 +5,9 @@ paths or file formats change later, update this file and keep UI code intact.
 """
 from __future__ import annotations
 
+import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +31,37 @@ def _resolve_data_dir(data_dir: Path | str | None = None) -> Path:
     return Path(data_dir) if data_dir is not None else _DEFAULT_DATA_DIR
 
 
+def get_player_id_text_files(data_dir: Path | str | None = None) -> list[Path]:
+    """Return root-level text files that may contain player ID lists."""
+    root = _resolve_data_dir(data_dir)
+    if not root.exists():
+        return []
+    return sorted(root.glob("*.txt"))
+
+
+def parse_player_ids_text(raw_text: str) -> list[int]:
+    """Parse player IDs from loose text (comma/newline/space separated)."""
+    if not raw_text or not raw_text.strip():
+        return []
+    matches = re.findall(r"\d+", raw_text)
+    seen: set[int] = set()
+    pids: list[int] = []
+    for match in matches:
+        pid = int(match)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        pids.append(pid)
+    return pids
+
+
+def load_player_ids_from_text_file(path: Path | str) -> list[int]:
+    """Load player IDs from a text file."""
+    file_path = Path(path)
+    text = file_path.read_text(encoding="utf-8")
+    return parse_player_ids_text(text)
+
+
 def get_players(data_dir: Path | str | None = None) -> list[int]:
     """Return available player IDs from the local data directory."""
     root = _resolve_data_dir(data_dir)
@@ -46,6 +79,39 @@ def get_players(data_dir: Path | str | None = None) -> list[int]:
     return player_ids
 
 
+def resolve_player_ids(
+    *,
+    selected_players: list[int] | None = None,
+    player_file: Path | str | None = None,
+    pasted_player_ids: str = "",
+) -> list[int]:
+    """Resolve a merged, deduplicated list of player IDs from multiple sources."""
+    merged: list[int] = []
+    seen: set[int] = set()
+
+    def _add_many(values: list[int]) -> None:
+        for value in values:
+            pid = int(value)
+            if pid in seen:
+                continue
+            seen.add(pid)
+            merged.append(pid)
+
+    if selected_players:
+        _add_many([int(pid) for pid in selected_players])
+
+    if player_file:
+        try:
+            _add_many(load_player_ids_from_text_file(player_file))
+        except FileNotFoundError:
+            pass
+
+    if pasted_player_ids:
+        _add_many(parse_player_ids_text(pasted_player_ids))
+
+    return merged
+
+
 def get_seasons(player_id: int, data_dir: Path | str | None = None) -> list[int]:
     """Return available season tags for a player based on shots parquet files."""
     root = _resolve_data_dir(data_dir)
@@ -59,6 +125,17 @@ def get_seasons(player_id: int, data_dir: Path | str | None = None) -> list[int]
         if m:
             seasons.append(int(m.group(1)))
     return seasons
+
+
+def get_all_available_seasons(
+    player_ids: list[int],
+    data_dir: Path | str | None = None,
+) -> list[int]:
+    """Return union of all known seasons across player IDs."""
+    season_set: set[int] = set()
+    for player_id in player_ids:
+        season_set.update(get_seasons(player_id=player_id, data_dir=data_dir))
+    return sorted(season_set)
 
 
 def get_intermediate_csvs(player_id: int, data_dir: Path | str | None = None) -> list[Path]:
@@ -201,6 +278,164 @@ def filter_by_shot_group(df: pd.DataFrame, shot_group: str) -> pd.DataFrame:
     if include_null:
         mask = mask | (stype == "")
     return df[mask].copy()
+
+
+def filter_by_partition(
+    df: pd.DataFrame,
+    *,
+    partition_column: str | None = None,
+    partition_values: list[str] | None = None,
+) -> pd.DataFrame:
+    """Filter a dataframe by partition column and selected values."""
+    if partition_column is None or partition_column == "":
+        return df.copy()
+    if partition_column not in df.columns:
+        return df.iloc[0:0].copy()
+    if not partition_values:
+        return df.copy()
+
+    needle = set(str(v) for v in partition_values)
+    series = df[partition_column].fillna("").astype(str)
+    return df[series.isin(needle)].copy()
+
+
+def discover_partition_values(
+    player_ids: list[int],
+    seasons: list[int],
+    *,
+    data_dir: Path | str | None = None,
+) -> dict[str, list[str]]:
+    """Discover categorical partition candidates from local season files.
+
+    This avoids hard-coding partition names while still supporting columns
+    like side/partition buckets when present in local metadata.
+    """
+    candidates = {
+        "partition",
+        "partition_tag",
+        "lane_partition",
+        "shallow_partition",
+        "shot_partition",
+        "start_side",
+        "side",
+    }
+    collected: dict[str, set[str]] = {}
+
+    for player_id in player_ids:
+        for season in seasons:
+            try:
+                df = load_shots_metadata(player_id=player_id, season=season, data_dir=data_dir)
+            except FileNotFoundError:
+                continue
+
+            matching_cols = [c for c in df.columns if c.lower() in candidates]
+            for col in matching_cols:
+                values = (
+                    df[col]
+                    .dropna()
+                    .astype(str)
+                    .str.strip()
+                )
+                values = values[values != ""]
+                if values.empty:
+                    continue
+                collected.setdefault(col, set()).update(values.unique().tolist())
+
+    return {col: sorted(vals) for col, vals in sorted(collected.items())}
+
+
+def build_observation_summary(
+    player_ids: list[int],
+    seasons: list[int],
+    shot_groups: list[str],
+    *,
+    data_dir: Path | str | None = None,
+    partition_column: str | None = None,
+    partition_values: list[str] | None = None,
+) -> pd.DataFrame:
+    """Build counts of observations matching filter combinations."""
+    rows: list[dict[str, object]] = []
+    for player_id in player_ids:
+        for season in seasons:
+            try:
+                season_df = load_shots_metadata(player_id=player_id, season=season, data_dir=data_dir)
+            except FileNotFoundError:
+                for shot_group in shot_groups:
+                    rows.append(
+                        {
+                            "player_id": player_id,
+                            "season": season,
+                            "shot_group": shot_group,
+                            "count": 0,
+                            "missing_local_data": True,
+                        }
+                    )
+                continue
+
+            for shot_group in shot_groups:
+                filtered = filter_by_shot_group(season_df, shot_group=shot_group)
+                filtered = filter_by_partition(
+                    filtered,
+                    partition_column=partition_column,
+                    partition_values=partition_values,
+                )
+                rows.append(
+                    {
+                        "player_id": player_id,
+                        "season": season,
+                        "shot_group": shot_group,
+                        "count": int(len(filtered)),
+                        "missing_local_data": False,
+                    }
+                )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["player_id", "season", "shot_group", "count", "missing_local_data"]
+        )
+    return pd.DataFrame(rows)
+
+
+def build_job_rows(
+    summary_df: pd.DataFrame,
+    *,
+    min_shots_per_job: int,
+) -> list[dict[str, object]]:
+    """Build flattened per-job rows for cluster arrays."""
+    jobs: list[dict[str, object]] = []
+    if summary_df.empty:
+        return jobs
+
+    for _, row in summary_df.iterrows():
+        count = int(row["count"])
+        jobs.append(
+            {
+                "player_id": int(row["player_id"]),
+                "season": int(row["season"]),
+                "shot_group": str(row["shot_group"]),
+                "count": count,
+                "missing_local_data": bool(row.get("missing_local_data", False)),
+                "eligible": bool(count >= min_shots_per_job and not bool(row.get("missing_local_data", False))),
+            }
+        )
+    return jobs
+
+
+def save_job_config(
+    config: dict[str, object],
+    *,
+    data_dir: Path | str | None = None,
+    output_subdir: str = "jobs",
+) -> Path:
+    """Persist a JSON run config under Data/Hockey/jobs by default."""
+    root = _resolve_data_dir(data_dir)
+    out_dir = root / output_subdir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = out_dir / f"bhjeeds_job_config_{timestamp}.json"
+    path.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+    return path
 
 
 def with_shot_index(df: pd.DataFrame) -> pd.DataFrame:

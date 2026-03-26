@@ -1,0 +1,2006 @@
+{
+  "cluster_plan": {
+    "eligible_jobs": 7,
+    "jobs": [
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 231265,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 898539,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 898605,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 907469,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 918330,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 931234,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 931895,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 29,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932254,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 5,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932303,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932362,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 28,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932433,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932543,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932558,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 25,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932575,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932589,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932591,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932597,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 4,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932629,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932659,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932664,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932668,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932695,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932701,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932704,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932705,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932713,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932716,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 27,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932723,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932724,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932725,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932727,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932731,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932736,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 946405,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 946959,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 40,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 947199,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 947593,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 947611,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948036,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948317,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 24,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948320,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 25,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948327,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 22,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948446,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948456,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948457,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948501,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 35,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948549,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948559,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948686,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948705,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948796,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948838,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948843,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948855,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948872,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948879,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948889,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948896,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948897,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 22,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948963,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 35,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948972,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948983,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948984,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949049,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 27,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949055,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949060,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949085,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949104,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949133,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 28,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949165,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 25,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949167,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 3,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949243,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949248,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949258,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949266,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949280,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 43,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949309,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 34,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949312,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949316,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 25,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949317,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949388,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949402,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949433,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949444,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949511,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949513,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949526,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949540,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949543,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949553,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949556,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949557,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949567,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949572,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949582,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949585,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949602,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949624,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949646,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949649,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949650,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949662,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949671,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 11,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949672,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949680,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 24,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949698,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949703,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949707,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 1,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949722,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949723,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949725,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949733,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 48,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949738,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949742,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949759,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949782,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949840,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949876,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949892,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949903,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 27,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949905,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949910,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949913,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 24,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949915,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949919,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949921,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949929,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949932,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949938,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949944,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949946,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949947,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949952,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949961,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 37,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949962,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949968,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949974,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949982,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949986,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949990,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 61,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949992,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949993,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949996,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949997,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949999,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 28,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950000,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950001,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950005,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950012,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950013,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950014,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950016,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950020,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950021,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950024,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950025,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950029,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950033,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950036,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950039,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950040,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 5,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950042,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 24,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950045,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950048,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950052,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950053,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950054,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950061,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 28,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950064,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950069,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950070,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950094,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950103,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 33,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950115,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950119,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950121,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950122,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950126,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950130,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950133,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950135,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950138,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 39,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950141,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950144,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 31,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950145,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950148,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950149,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950154,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950157,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950158,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950159,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 47,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950160,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 26,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950161,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 38,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950162,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 28,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950163,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 30,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950164,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950169,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950170,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 49,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950171,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 25,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950173,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950177,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 13,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950178,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 30,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950180,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950181,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 43,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950182,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950183,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 32,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950185,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 19,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950191,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950193,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 14,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950194,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 22,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950195,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950197,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 12,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950200,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950201,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950202,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 29,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950203,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950205,
+        "season": -1,
+        "shot_group": "backhand"
+      },
+      {
+        "count": 15,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950206,
+        "season": -1,
+        "shot_group": "backhand"
+      }
+    ],
+    "sbatch_recommendation": {
+      "max_concurrent": 7,
+      "mem": "8G",
+      "time": "01:00:00"
+    },
+    "split_mode": "all_selected_seasons_together",
+    "total_jobs": 218
+  },
+  "config_version": 1,
+  "created_at": "2026-03-26T02:45:33Z",
+  "data_filters": {
+    "player_ids": [
+      949165,
+      949944,
+      949540,
+      949602,
+      949104,
+      950171,
+      949060,
+      932303,
+      932659,
+      950159,
+      950177,
+      949968,
+      950064,
+      949624,
+      949167,
+      949572,
+      950158,
+      948501,
+      950206,
+      948705,
+      950191,
+      932701,
+      932591,
+      950202,
+      948446,
+      931234,
+      931895,
+      950203,
+      948889,
+      932629,
+      932731,
+      950183,
+      932713,
+      932705,
+      950122,
+      918330,
+      949947,
+      948327,
+      950036,
+      949649,
+      950181,
+      950054,
+      949526,
+      948549,
+      947199,
+      950161,
+      949646,
+      948686,
+      949876,
+      932597,
+      949932,
+      949557,
+      950070,
+      950000,
+      950020,
+      950001,
+      948983,
+      949266,
+      950149,
+      949671,
+      949742,
+      949919,
+      932727,
+      950201,
+      932716,
+      949388,
+      950180,
+      950157,
+      950170,
+      950016,
+      932723,
+      950145,
+      949511,
+      950163,
+      932362,
+      948456,
+      949317,
+      950164,
+      950160,
+      948320,
+      950200,
+      949759,
+      950040,
+      949402,
+      949982,
+      949996,
+      948896,
+      932664,
+      950045,
+      950185,
+      949921,
+      949049,
+      949707,
+      950039,
+      950135,
+      946405,
+      932668,
+      950205,
+      949733,
+      950119,
+      949952,
+      950053,
+      932725,
+      907469,
+      949903,
+      932254,
+      948872,
+      950014,
+      950162,
+      949782,
+      947611,
+      949085,
+      949725,
+      932704,
+      948457,
+      948963,
+      950126,
+      949703,
+      949248,
+      948879,
+      950141,
+      950103,
+      949662,
+      949910,
+      949553,
+      950178,
+      932558,
+      950024,
+      950013,
+      949997,
+      948559,
+      950048,
+      949133,
+      948843,
+      950195,
+      949444,
+      950021,
+      949722,
+      949543,
+      949738,
+      932736,
+      949999,
+      949672,
+      949243,
+      948984,
+      932433,
+      950061,
+      948897,
+      950005,
+      949962,
+      950033,
+      950182,
+      949055,
+      898605,
+      949946,
+      949993,
+      950012,
+      949992,
+      950025,
+      949723,
+      949567,
+      948838,
+      949650,
+      949309,
+      949913,
+      949680,
+      950193,
+      949280,
+      950148,
+      947593,
+      948972,
+      950115,
+      950069,
+      932724,
+      949905,
+      950138,
+      231265,
+      932575,
+      949312,
+      949840,
+      949986,
+      946959,
+      949990,
+      949961,
+      949974,
+      950052,
+      948036,
+      932589,
+      949938,
+      948855,
+      950197,
+      950042,
+      950130,
+      950154,
+      949915,
+      949585,
+      898539,
+      949556,
+      950169,
+      950094,
+      950173,
+      949433,
+      949316,
+      950133,
+      950194,
+      949929,
+      949698,
+      949258,
+      932695,
+      950144,
+      950029,
+      949892,
+      949582,
+      948317,
+      949513,
+      950121,
+      948796,
+      932543
+    ],
+    "seasons": [
+      20232024,
+      20242025
+    ],
+    "shot_groups": [
+      "backhand"
+    ]
+  },
+  "data_root": "Data/Hockey",
+  "estimator": {
+    "convergence_png_include_map": false,
+    "generate_convergence_png": true,
+    "num_execution_skills": 100,
+    "num_planning_skills": 100,
+    "per_season": false,
+    "rng_seed": 0,
+    "save_intermediate_csv": true
+  },
+  "output": {
+    "write_run_summary": false
+  },
+  "validation": {
+    "fail_policy": "skip",
+    "min_shots_per_job": 40
+  }
+}

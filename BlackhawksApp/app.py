@@ -6,6 +6,8 @@ Usage:
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 import numpy as np
 import streamlit as st
 
@@ -44,6 +46,42 @@ def _cached_shot_maps(player_id: int, season: int, data_root: str):
 @st.cache_data(show_spinner=False)
 def _cached_estimates(csv_path: str):
     return data_io.load_estimates(csv_path)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_player_id_text_files(data_root: str) -> list[str]:
+    return [str(p) for p in data_io.get_player_id_text_files(data_root)]
+
+
+@st.cache_data(show_spinner=False)
+def _cached_union_seasons(player_ids: tuple[int, ...], data_root: str) -> list[int]:
+    return data_io.get_all_available_seasons(list(player_ids), data_root)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_partition_values(player_ids: tuple[int, ...], seasons: tuple[int, ...], data_root: str):
+    return data_io.discover_partition_values(list(player_ids), list(seasons), data_dir=data_root)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_observation_summary(
+    player_ids: tuple[int, ...],
+    seasons: tuple[int, ...],
+    shot_groups: tuple[str, ...],
+    data_root: str,
+    partition_column: str,
+    partition_values: tuple[str, ...],
+):
+    partition_col = partition_column if partition_column else None
+    part_vals = list(partition_values) if partition_values else None
+    return data_io.build_observation_summary(
+        list(player_ids),
+        list(seasons),
+        list(shot_groups),
+        data_dir=data_root,
+        partition_column=partition_col,
+        partition_values=part_vals,
+    )
 
 
 def _safe_float(value: object, default: float = 0.08) -> float:
@@ -340,12 +378,324 @@ if st.session_state.get("confirmed_context") == (player_id, season, shot_group, 
                 player_xy_list=[player_loc],
             )
             if fig_rink is not None:
-                visuals_cols = st.columns([1, 1])
-                visuals_cols[0].pyplot(fig_rink)
-                # TODO: Replace this placeholder with our custom covariance/error plot
-                # driven by our own execution-error stdev model (not BH net_cov fields).
-                visuals_cols[1].caption("TODO: custom covariance/error visualization (our model)")
+                st.pyplot(fig_rink)
         except Exception as exc:
             st.error(f"Failed to render selected-shot visuals: {exc}")
 else:
     st.caption("Press 'Load visuals for selected shot' to render heatmaps and rink.")
+
+st.divider()
+st.header("Cluster Config Builder")
+st.caption("Build a JSON config from local filters, preview sample counts, and save under Data/Hockey/jobs.")
+
+_CONFIG_DEFAULTS = {
+    "cfg_player_file": "",
+    "cfg_players": [],
+    "cfg_pasted_players": "",
+    "cfg_seasons": [],
+    "cfg_shot_groups": data_io.get_shot_group_tags(),
+    "cfg_enable_partition": False,
+    "cfg_partition_column": "",
+    "cfg_partition_values": [],
+    "cfg_estimation_mode": "per_season",
+    "cfg_min_shots": 50,
+    "cfg_num_execution_skills": 50,
+    "cfg_num_planning_skills": 100,
+    "cfg_rng_seed": 0,
+    "cfg_save_csv": True,
+    "cfg_generate_png": True,
+    "cfg_png_include_map": True,
+    "cfg_sbatch_time": "24:00:00",
+    "cfg_sbatch_mem": "16G",
+    "cfg_sbatch_max_concurrent": 100,
+    "cfg_write_run_summary": False,
+}
+
+if st.button("Reset config builder", help="Reset all config-builder fields to defaults."):
+    for _key in _CONFIG_DEFAULTS:
+        if _key in st.session_state:
+            del st.session_state[_key]
+    st.rerun()
+
+config_cols = st.columns([1, 1])
+
+with config_cols[0]:
+    st.subheader("Player + Filter Selection")
+    player_file_options = [""] + _cached_player_id_text_files(data_root)
+    selected_player_file = st.selectbox(
+        "Optional player ID text file",
+        options=player_file_options,
+        index=0,
+        key="cfg_player_file",
+        help="Reads IDs from files like Data/Hockey/forwards23-25.txt.",
+    )
+    selected_players_for_config = st.multiselect(
+        "Add players from local cache",
+        options=players,
+        default=[],
+        key="cfg_players",
+    )
+    pasted_players = st.text_area(
+        "Optional pasted player IDs",
+        value="",
+        height=90,
+        key="cfg_pasted_players",
+        placeholder="Example: 950182, 950169, 950181",
+    )
+
+    resolved_players = data_io.resolve_player_ids(
+        selected_players=selected_players_for_config,
+        player_file=selected_player_file if selected_player_file else None,
+        pasted_player_ids=pasted_players,
+    )
+
+    if resolved_players:
+        st.caption(f"Resolved {len(resolved_players)} unique players.")
+    else:
+        st.warning("Select at least one player source to build a config.")
+
+    available_seasons = _cached_union_seasons(tuple(resolved_players), data_root) if resolved_players else []
+    selected_seasons_for_config = st.multiselect(
+        "Seasons",
+        options=available_seasons,
+        default=available_seasons,
+        key="cfg_seasons",
+    )
+
+    all_shot_groups = data_io.get_shot_group_tags()
+    selected_shot_groups = st.multiselect(
+        "Shot groups",
+        options=all_shot_groups,
+        default=all_shot_groups,
+        key="cfg_shot_groups",
+        format_func=lambda g: f"{g} ({data_io.get_shot_group_display(g)})",
+    )
+
+    enable_partition_filter = st.checkbox(
+        "Enable partition filter",
+        value=False,
+        key="cfg_enable_partition",
+        help="Leave off unless you explicitly want a partition-based subset.",
+    )
+    partition_column = ""
+    partition_values: list[str] = []
+    if enable_partition_filter:
+        partition_catalog = (
+            _cached_partition_values(tuple(resolved_players), tuple(selected_seasons_for_config), data_root)
+            if resolved_players and selected_seasons_for_config
+            else {}
+        )
+        partition_column_options = [""] + sorted(partition_catalog.keys())
+        partition_column = st.selectbox(
+            "Partition column",
+            options=partition_column_options,
+            index=0,
+            key="cfg_partition_column",
+            help="Example values may include labels like Lshallow/Rshallow when present in data.",
+        )
+        if partition_column:
+            partition_values = st.multiselect(
+                "Partition values",
+                options=partition_catalog.get(partition_column, []),
+                default=partition_catalog.get(partition_column, []),
+                key="cfg_partition_values",
+            )
+
+with config_cols[1]:
+    st.subheader("Estimator + Job Settings")
+    estimation_mode = st.selectbox(
+        "Estimation mode",
+        options=["per_season", "all_selected_seasons_together"],
+        index=0,
+        key="cfg_estimation_mode",
+        format_func=lambda mode: (
+            "Per-season"
+            if mode == "per_season"
+            else "Combined seasons"
+        ),
+        help=(
+            "Determines whether to give each season its own job or to pool them all into"
+            "one continuous estimate per player over the course of all selected seasons."
+        ),
+    )
+
+    min_shots_per_job = st.number_input(
+        "Minimum observations per job",
+        min_value=1,
+        max_value=10000,
+        value=50,
+        step=1,
+        key="cfg_min_shots",
+    )
+    num_execution_skills = st.slider(
+        "Execution skill hypotheses",
+        min_value=10,
+        max_value=250,
+        value=50,
+        step=5,
+        key="cfg_num_execution_skills",
+    )
+    num_planning_skills = st.slider(
+        "Planning skill hypotheses",
+        min_value=10,
+        max_value=250,
+        value=100,
+        step=10,
+        key="cfg_num_planning_skills",
+    )
+    rng_seed = st.number_input(
+        "Random seed",
+        min_value=0,
+        max_value=1_000_000,
+        value=0,
+        step=1,
+        key="cfg_rng_seed",
+    )
+    save_intermediate_csv = st.checkbox(
+        "Save intermediate estimates CSV",
+        value=True,
+        key="cfg_save_csv",
+    )
+    generate_convergence_png = st.checkbox(
+        "Generate convergence PNG from intermediate CSV",
+        value=True,
+        key="cfg_generate_png",
+        help="When enabled, writes convergence PNGs next to intermediate CSVs.",
+    )
+    png_include_map = st.checkbox(
+        "Include MAP estimates in convergence PNG",
+        value=True,
+        key="cfg_png_include_map",
+        help="Turn off to render expected estimates only (no MAP lines).",
+    )
+    per_season_estimation = estimation_mode == "per_season"
+
+    st.markdown("**SBATCH recommendations**")
+    sbatch_time = st.text_input(
+        "SBATCH time",
+        value="24:00:00",
+        key="cfg_sbatch_time",
+        help="Recommended walltime for generated job arrays.",
+    )
+    sbatch_mem = st.text_input(
+        "SBATCH memory",
+        value="16G",
+        key="cfg_sbatch_mem",
+        help="Recommended memory request per task.",
+    )
+    sbatch_max_concurrent = st.number_input(
+        "Max concurrent array jobs",
+        min_value=1,
+        max_value=1000,
+        value=100,
+        step=1,
+        key="cfg_sbatch_max_concurrent",
+        help="Used as recommended cap for --array concurrency (e.g., %%100).",
+    )
+
+    st.markdown("**Run outputs**")
+    write_run_summary = st.checkbox(
+        "Generate run_summary JSON",
+        value=False,
+        key="cfg_write_run_summary",
+        help="When enabled, writes a run_summary JSON after execution.",
+    )
+
+can_build_summary = bool(resolved_players and selected_seasons_for_config and selected_shot_groups)
+summary_df = None
+jobs_preview: list[dict[str, object]] = []
+
+if can_build_summary:
+    summary_df = _cached_observation_summary(
+        tuple(resolved_players),
+        tuple(selected_seasons_for_config),
+        tuple(selected_shot_groups),
+        data_root,
+        partition_column,
+        tuple(partition_values),
+    )
+
+    if estimation_mode == "all_selected_seasons_together" and not summary_df.empty:
+        grouped = (
+            summary_df
+            .groupby(["player_id", "shot_group"], as_index=False)
+            .agg(
+                count=("count", "sum"),
+                missing_local_data=("missing_local_data", "max"),
+            )
+        )
+        grouped["season"] = -1
+        summary_df = grouped[["player_id", "season", "shot_group", "count", "missing_local_data"]]
+
+    jobs_preview = data_io.build_job_rows(summary_df, min_shots_per_job=int(min_shots_per_job))
+
+    total_obs = int(summary_df["count"].sum()) if not summary_df.empty else 0
+    eligible_jobs = [j for j in jobs_preview if j["eligible"]]
+    skipped_jobs = [j for j in jobs_preview if not j["eligible"]]
+
+    metric_cols = st.columns([1, 1, 1, 1])
+    metric_cols[0].metric("Total matching observations", total_obs)
+    metric_cols[1].metric("Total jobs", len(jobs_preview))
+    metric_cols[2].metric("Eligible jobs", len(eligible_jobs))
+    metric_cols[3].metric("Below threshold / missing", len(skipped_jobs))
+
+    preview_df = summary_df.copy()
+    if estimation_mode == "all_selected_seasons_together":
+        preview_df["season"] = "ALL_SELECTED"
+    st.dataframe(
+        preview_df.sort_values(["player_id", "season", "shot_group"]),
+        width="stretch",
+        height=260,
+    )
+else:
+    st.info("Select players, seasons, and shot groups to compute observation counts.")
+
+export_disabled = not can_build_summary or summary_df is None
+if st.button("Export JSON Config", disabled=export_disabled):
+    exported_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    data_filters = {
+        "player_ids": resolved_players,
+        "seasons": selected_seasons_for_config,
+        "shot_groups": selected_shot_groups,
+    }
+    if enable_partition_filter and partition_column:
+        data_filters["partition_column"] = partition_column
+        data_filters["partition_values"] = partition_values
+
+    config = {
+        "config_version": 1,
+        "created_at": exported_at,
+        "data_root": data_root,
+        "data_filters": data_filters,
+        "estimator": {
+            "per_season": bool(per_season_estimation),
+            "num_execution_skills": int(num_execution_skills),
+            "num_planning_skills": int(num_planning_skills),
+            "rng_seed": int(rng_seed),
+            "save_intermediate_csv": bool(save_intermediate_csv),
+            "generate_convergence_png": bool(generate_convergence_png),
+            "convergence_png_include_map": bool(png_include_map),
+        },
+        "output": {
+            "write_run_summary": bool(write_run_summary),
+        },
+        "validation": {
+            "min_shots_per_job": int(min_shots_per_job),
+            "fail_policy": "skip",
+        },
+        "cluster_plan": {
+            "split_mode": estimation_mode,
+            "total_jobs": len(jobs_preview),
+            "eligible_jobs": sum(1 for j in jobs_preview if j["eligible"]),
+            "sbatch_recommendation": {
+                "time": sbatch_time,
+                "mem": sbatch_mem,
+                "max_concurrent": int(sbatch_max_concurrent),
+            },
+            "jobs": jobs_preview,
+        },
+    }
+    out_path = data_io.save_job_config(config, data_dir=data_root, output_subdir="jobs")
+    st.success(f"Saved config: {out_path}")
+    with st.expander("View exported config JSON", expanded=False):
+        st.json(config)

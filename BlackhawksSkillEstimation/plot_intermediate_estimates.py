@@ -160,6 +160,7 @@ def plot_intermediate_estimates(
     show: bool = False,
     figsize: tuple[float, float] = (12, 6),
     burnin: int = 5,
+    include_map_estimates: bool = True,
 ) -> plt.Figure:
     """Dual-axis convergence plot of execution skill and rationality.
 
@@ -209,14 +210,20 @@ def plot_intermediate_estimates(
     # Execution skill – warm colours, left axis
     l1 = ax_skill.plot(shots, ees_data,
                        color="#FF7F50", lw=2, label="EES (skill)")
-    l2 = ax_skill.plot(shots, map_skill_data,
-                       color="#DC143C", lw=2, ls="--", label="MAP (skill)")
+    if include_map_estimates:
+        l2 = ax_skill.plot(shots, map_skill_data,
+                           color="#DC143C", lw=2, ls="--", label="MAP (skill)")
+    else:
+        l2 = []
 
     # Rationality – cool colours, right axis, LOG scale
     l3 = ax_rat.plot(shots, eps_data,
                      color="#40E0D0", lw=2, label="EPS (rationality)")
-    l4 = ax_rat.plot(shots, map_rat_data,
-                     color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
+    if include_map_estimates:
+        l4 = ax_rat.plot(shots, map_rat_data,
+                         color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
+    else:
+        l4 = []
     ax_rat.set_yscale("log")
     ax_rat.set_ylim(10 ** 0.95, 10 ** 3.65)
 

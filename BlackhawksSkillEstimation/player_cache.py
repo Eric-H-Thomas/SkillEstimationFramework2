@@ -1,8 +1,25 @@
 import csv
 from pathlib import Path
-from BlackhawksAPI.queries import get_player_name
 
 CACHE_FILE = Path("Data/Hockey/player_cache.csv")
+
+
+def _safe_get_player_name(player_id: int) -> str | None:
+    """Best-effort DB lookup, safe for offline/cluster environments.
+
+    Importing Blackhawks API modules can fail on clusters without local
+    credentials/config (e.g., missing hawks.ini). Keep this lazy and guarded
+    so importing this module never requires DB connectivity.
+    """
+    try:
+        from BlackhawksAPI.queries import get_player_name
+    except Exception:
+        return None
+
+    try:
+        return get_player_name(player_id)
+    except Exception:
+        return None
 
 def lookup_player(player_id: int | None = None, player_name: str | None = None) -> str | int | None:
     """
@@ -24,6 +41,7 @@ def lookup_player(player_id: int | None = None, player_name: str | None = None) 
     """
     if not CACHE_FILE.exists():
         # Create the cache file if it doesn't exist
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CACHE_FILE, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["player_id", "player_name"])
@@ -46,22 +64,19 @@ def lookup_player(player_id: int | None = None, player_name: str | None = None) 
 
     # If not found in cache, query the database
     if player_id is not None:
-        try:
-            player_name = get_player_name(player_id)
-            if player_name:
-                # Re-read the cache right before writing to catch concurrent updates
-                with open(CACHE_FILE, "r") as f:
-                    updated_cache = {int(row["player_id"]): row["player_name"]
-                                    for row in csv.DictReader(f)}
-                if player_id not in updated_cache:
-                    # safe to append...
-                    # Update the cache
-                    with open(CACHE_FILE, "a", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow([player_id, player_name])
-                return player_name
-        except Exception:
-            pass # If offline or DB unavailable, return None
+        player_name = _safe_get_player_name(player_id)
+        if player_name:
+            # Re-read the cache right before writing to catch concurrent updates
+            with open(CACHE_FILE, "r") as f:
+                updated_cache = {int(row["player_id"]): row["player_name"]
+                                for row in csv.DictReader(f)}
+            if player_id not in updated_cache:
+                # safe to append...
+                # Update the cache
+                with open(CACHE_FILE, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([player_id, player_name])
+            return player_name
     elif player_name is not None:
         # TODO: Add logic to query the database for player_id if needed
         pass  # Currently, the database query for player_id by name is not implemented
