@@ -507,10 +507,11 @@ def compare_execution_rankings_two_seasons_by_shot_type(
     """Create per-shot-type season-comparison tables and export BYU-style CSV.
 
     CSV columns follow the BYU format with one additional column:
-    ``player_id_hawks,season,shot_type,sigma_value``.
+    ``player_id_hawks,season,shot_type,sigma_value,log10_rationality``.
 
-    For each shot type, a PNG table is generated with two side-by-side rankings:
-    left sorted by season A and right sorted by season B.
+    For each shot type, two PNG tables are generated (``exec_...`` and ``rat_...``),
+    each with side-by-side rankings: left sorted by season A and right sorted by
+    season B.
     """
     if players is None:
         raise ValueError("`players` must be provided (no auto-discovery)")
@@ -521,7 +522,7 @@ def compare_execution_rankings_two_seasons_by_shot_type(
 
     from BlackhawksSkillEstimation.BlackhawksJEEDS import SHOT_TYPE_GROUPS
 
-    def _load_exec(pid: int, season: str | int, shot_type: str) -> tuple[float, int]:
+    def _load_exec(pid: int, season: str | int, shot_type: str) -> tuple[float, float, int]:
         csvp = (
             data_dir
             / "players"
@@ -531,22 +532,23 @@ def compare_execution_rankings_two_seasons_by_shot_type(
             / f"intermediate_estimates_{season}.csv"
         )
         if not csvp.exists():
-            return float("nan"), 0
+            return float("nan"), float("nan"), 0
         d = load_intermediate_estimates(csvp)
         if not d["shot_count"]:
-            return float("nan"), 0
-        return d["expected_execution_skill"][-1], int(d["shot_count"][-1])
+            return float("nan"), float("nan"), 0
+        return (
+            d["expected_execution_skill"][-1],
+            d["log10_expected_rationality"][-1],
+            int(d["shot_count"][-1]),
+        )
 
     def _fmt(v: float) -> str:
         return "-" if np.isnan(v) else f"{v:.3f}"
 
-    def _sort_key_a(row: tuple[str, int, float, float, int, int]):
-        v = row[2]
-        return (np.isnan(v), v if not np.isnan(v) else float("inf"))
-
-    def _sort_key_b(row: tuple[str, int, float, float, int, int]):
-        v = row[3]
-        return (np.isnan(v), v if not np.isnan(v) else float("inf"))
+    def _sort_key(v: float, descending: bool = False) -> tuple[bool, float]:
+        if np.isnan(v):
+            return (True, float("inf"))
+        return (False, -v if descending else v)
 
     def _add_inline_count_overlays(
         ax: plt.Axes,
@@ -573,49 +575,56 @@ def compare_execution_rankings_two_seasons_by_shot_type(
                     zorder=10,
                 )
 
-    csv_rows: list[tuple[int, str, str, float]] = []
-    png_paths: list[Path] = []
+    def _render_rankings_table(
+        rows: list[tuple[str, int, float, float, float, float, int, int]],
+        shot_type: str,
+        shot_label: str,
+        value_idx_a: int,
+        value_idx_b: int,
+        title: str,
+        out_prefix: str,
+        descending: bool = False,
+    ) -> Path:
+        left_rows = sorted(rows, key=lambda r: _sort_key(r[value_idx_a], descending=descending))
+        right_rows = sorted(rows, key=lambda r: _sort_key(r[value_idx_b], descending=descending))
 
-    for shot_type in shot_types:
-        rows: list[tuple[str, int, float, float, int, int]] = []
-        for pid in players:
-            name = lookup_player(pid) or str(pid)
-            va, count_a = _load_exec(pid, season_a, shot_type)
-            vb, count_b = _load_exec(pid, season_b, shot_type)
-            if np.isnan(va) and np.isnan(vb):
-                continue
-
-            rows.append((name, pid, va, vb, count_a, count_b))
-
-            if not np.isnan(va):
-                csv_rows.append((pid, str(season_a), shot_type, float(va)))
-            if not np.isnan(vb):
-                csv_rows.append((pid, str(season_b), shot_type, float(vb)))
-
-        if not rows:
-            print(f"warning: no season results found for shot type '{shot_type}'")
-            continue
-
-        left_rows = sorted(rows, key=_sort_key_a)
-        right_rows = sorted(rows, key=_sort_key_b)
-
-        fig, (axl, axr) = plt.subplots(1, 2, figsize=figsize, gridspec_kw={"wspace": 0.1})
-        shot_label = SHOT_TYPE_GROUPS.get(shot_type, (shot_type, set(), False))[0]
+        # Scale figure height with row count so table titles stay readable.
+        dynamic_height = max(figsize[1], min(0.22 * max(1, len(rows)) + 2.5, 80.0))
+        fig, (axl, axr) = plt.subplots(
+            1,
+            2,
+            figsize=(figsize[0], dynamic_height),
+            gridspec_kw={"wspace": 0.1},
+        )
         fig.suptitle(
-            f"Execution skill estimates (sigma in radians, lower=better) - {shot_label}",
+            f"{title} - {shot_label}",
             fontsize=14,
+            y=0.995,
         )
         for ax in (axl, axr):
             ax.axis("off")
 
-        left_cell = [[r[0], _fmt(r[2]), _fmt(r[3])] for r in left_rows]
-        right_cell = [[r[0], _fmt(r[2]), _fmt(r[3])] for r in right_rows]
-        left_counts = [(r[4], r[5]) for r in left_rows]
-        right_counts = [(r[4], r[5]) for r in right_rows]
+        left_cell = [[r[0], _fmt(r[value_idx_a]), _fmt(r[value_idx_b])] for r in left_rows]
+        right_cell = [[r[0], _fmt(r[value_idx_a]), _fmt(r[value_idx_b])] for r in right_rows]
+        left_counts = [(r[6], r[7]) for r in left_rows]
+        right_counts = [(r[6], r[7]) for r in right_rows]
         col_labels = ["Player", str(season_a), str(season_b)]
 
-        tbl_l = axl.table(cellText=left_cell, colLabels=col_labels, cellLoc="left", loc="center")
-        tbl_r = axr.table(cellText=right_cell, colLabels=col_labels, cellLoc="left", loc="center")
+        # Keep a small top margin inside each axes so the subplot title never overlaps.
+        tbl_l = axl.table(
+            cellText=left_cell,
+            colLabels=col_labels,
+            cellLoc="left",
+            loc="center",
+            bbox=[0.0, 0.0, 1.0, 0.965],
+        )
+        tbl_r = axr.table(
+            cellText=right_cell,
+            colLabels=col_labels,
+            cellLoc="left",
+            loc="center",
+            bbox=[0.0, 0.0, 1.0, 0.965],
+        )
 
         cols = list(range(len(col_labels)))
         tbl_l.auto_set_column_width(col=cols)
@@ -648,17 +657,65 @@ def compare_execution_rankings_two_seasons_by_shot_type(
         _add_inline_count_overlays(axl, tbl_l, left_counts)
         _add_inline_count_overlays(axr, tbl_r, right_counts)
 
-        axl.set_title(f"Ranked by {season_a}")
-        axr.set_title(f"Ranked by {season_b}")
+        axl.set_title(f"Ranked by {season_a}", pad=10)
+        axr.set_title(f"Ranked by {season_b}", pad=10)
 
-        out_png = output_dir / f"exec_rankings_compare_{season_a}_{season_b}_{shot_type}.png"
-        fig.subplots_adjust(top=0.86, wspace=0.1)
+        out_png = output_dir / f"{out_prefix}_rankings_compare_{season_a}_{season_b}_{shot_type}.png"
+        fig.subplots_adjust(top=0.97, wspace=0.1)
         fig.savefig(out_png, dpi=150, bbox_inches="tight")
         if show:
             fig.show()
         else:
             plt.close(fig)
-        png_paths.append(out_png)
+        return out_png
+
+    csv_rows: list[tuple[int, str, str, float, float]] = []
+    png_paths: list[Path] = []
+
+    for shot_type in shot_types:
+        rows: list[tuple[str, int, float, float, float, float, int, int]] = []
+        for pid in players:
+            name = lookup_player(pid) or str(pid)
+            va, ra, count_a = _load_exec(pid, season_a, shot_type)
+            vb, rb, count_b = _load_exec(pid, season_b, shot_type)
+            if np.isnan(va) and np.isnan(vb):
+                continue
+
+            rows.append((name, pid, va, vb, ra, rb, count_a, count_b))
+
+            if not np.isnan(va):
+                csv_rows.append((pid, str(season_a), shot_type, float(va), float(ra)))
+            if not np.isnan(vb):
+                csv_rows.append((pid, str(season_b), shot_type, float(vb), float(rb)))
+
+        if not rows:
+            print(f"warning: no season results found for shot type '{shot_type}'")
+            continue
+
+        shot_label = SHOT_TYPE_GROUPS.get(shot_type, (shot_type, set(), False))[0]
+        png_paths.append(
+            _render_rankings_table(
+                rows=rows,
+                shot_type=shot_type,
+                shot_label=shot_label,
+                value_idx_a=2,
+                value_idx_b=3,
+                title="Execution skill estimates (sigma in radians, lower=better)",
+                out_prefix="exec",
+            )
+        )
+        png_paths.append(
+            _render_rankings_table(
+                rows=rows,
+                shot_type=shot_type,
+                shot_label=shot_label,
+                value_idx_a=4,
+                value_idx_b=5,
+                title="Rationality estimates (log10(lambda), higher=more rational)",
+                out_prefix="rat",
+                descending=True,
+            )
+        )
 
     if not csv_rows:
         raise ValueError("No shot-type season data found; CSV was not written")
@@ -667,9 +724,15 @@ def compare_execution_rankings_two_seasons_by_shot_type(
     csv_out = output_dir / csv_filename
     with open(csv_out, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["player_id_hawks", "season", "shot_type", "sigma_value"])
-        for pid, season, shot_type, sigma in csv_rows:
-            writer.writerow([pid, season, shot_type, f"{sigma:.3f}"])
+        writer.writerow(["player_id_hawks", "season", "shot_type", "sigma_value", "log10_rationality"])
+        for pid, season, shot_type, sigma, log10_rationality in csv_rows:
+            writer.writerow([
+                pid,
+                season,
+                shot_type,
+                f"{sigma:.3f}",
+                "" if np.isnan(log10_rationality) else f"{log10_rationality:.3f}",
+            ])
 
     return {
         "csv": csv_out,

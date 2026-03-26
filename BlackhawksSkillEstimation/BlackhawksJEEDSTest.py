@@ -335,15 +335,16 @@ def per_season_multi_player_test(pids: list[int] | None = None, groups: Sequence
     print("=" * 60)
     for s in summary:
         grp_label = s.get("group", "")
+        _name = s['name'] if s['name'] is not None else "UNKNOWN"
         if s["status"] == "success":
             _map = f"{s['execution_skill']:.4f}" if s['execution_skill'] is not None else "N/A"
             _ees = f"{s['ees']:.4f}" if s['ees'] is not None else "N/A"
-            print(f"  {s['name']:20s}  {s['season']}  [{grp_label}]  "
+            print(f"  {_name:20s}  {s['season']}  [{grp_label}]  "
                   f"MAP={_map}  EES={_ees}  "
                   f"rat={_fmt_log10(s.get('log10_rationality'))}  EPS={_fmt_log10(s.get('log10_eps'))}  "
                   f"({s['num_shots']} shots)")
         else:
-            print(f"  {s['name']:20s}  {s['season']}  [{grp_label}]  {s['status']}")
+            print(f"  {_name:20s}  {s['season']}  [{grp_label}]  {s['status']}")
 
 
 # =============================================================================
