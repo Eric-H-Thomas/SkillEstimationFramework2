@@ -29,6 +29,10 @@ _DEFAULT_DATA_DIR = Path("Data/Hockey")
 _PLAYER_DIR_RE = re.compile(r"player_(\d+)$")
 _SEASON_RE = re.compile(r"^shots_(\d{8})\.parquet$")
 
+# Blackhawks value_map coordinate extents.
+_BH_Y_MIN, _BH_Y_MAX, _BH_Y_LEN = -5.0, 5.0, 120
+_BH_Z_MIN, _BH_Z_MAX, _BH_Z_LEN = 0.0, 6.0, 72
+
 
 def _resolve_data_dir(data_dir: Path | str | None = None) -> Path:
     return Path(data_dir) if data_dir is not None else _DEFAULT_DATA_DIR
@@ -453,6 +457,60 @@ def get_shot_row_by_index(df: pd.DataFrame, shot_index: int) -> pd.Series | None
     if shot_index < 1 or shot_index > len(df):
         return None
     return df.iloc[int(shot_index) - 1]
+
+
+def add_post_shot_xg_column(
+    df: pd.DataFrame,
+    shot_maps: dict[int, dict[str, object]],
+    *,
+    out_column: str = "post_shot_xg",
+) -> pd.DataFrame:
+    """Return copy of df with sampled post-shot xG from value-map grids.
+
+    xG is sampled at each shot's observed goal-line coordinates
+    (location_y, location_z) using nearest-grid-point lookup on the
+    72x120 post-shot xG map.
+    """
+    out = df.copy()
+    out[out_column] = np.nan
+
+    required = {"event_id", "location_y", "location_z"}
+    if shot_maps is None or out.empty or not required.issubset(out.columns):
+        return out
+
+    y_vals = pd.to_numeric(out["location_y"], errors="coerce").to_numpy(dtype=np.float64)
+    z_vals = pd.to_numeric(out["location_z"], errors="coerce").to_numpy(dtype=np.float64)
+    eids = pd.to_numeric(out["event_id"], errors="coerce").to_numpy(dtype=np.float64)
+
+    y_idx = np.rint((y_vals - _BH_Y_MIN) / (_BH_Y_MAX - _BH_Y_MIN) * (_BH_Y_LEN - 1)).astype(np.int64)
+    z_idx = np.rint((z_vals - _BH_Z_MIN) / (_BH_Z_MAX - _BH_Z_MIN) * (_BH_Z_LEN - 1)).astype(np.int64)
+    y_idx = np.clip(y_idx, 0, _BH_Y_LEN - 1)
+    z_idx = np.clip(z_idx, 0, _BH_Z_LEN - 1)
+
+    sampled: list[float] = []
+    for i in range(len(out)):
+        eid = eids[i]
+        if np.isnan(eid):
+            sampled.append(np.nan)
+            continue
+
+        payload = shot_maps.get(int(eid))
+        if not payload:
+            sampled.append(np.nan)
+            continue
+
+        value_map = payload.get("value_map")
+        if value_map is None:
+            sampled.append(np.nan)
+            continue
+
+        try:
+            sampled.append(float(value_map[z_idx[i], y_idx[i]]))
+        except (IndexError, TypeError, ValueError):
+            sampled.append(np.nan)
+
+    out[out_column] = sampled
+    return out
 
 
 def _raw_shot_to_group(raw_shot_type: str | None) -> str | None:

@@ -288,6 +288,19 @@ if after_rat_log10 is not None:
 
 table_col.subheader("Filtered shot table")
 table_df = filtered_df.copy()
+show_post_shot_xg = table_col.checkbox(
+    "Show post-shot xG column",
+    value=False,
+    help="Loads cached shot maps and samples the xG grid at each shot location.",
+)
+
+if show_post_shot_xg:
+    try:
+        shot_maps_for_table = _cached_shot_maps(player_id=player_id, season=season, data_root=data_root)
+        table_df = data_io.add_post_shot_xg_column(table_df, shot_maps_for_table)
+    except Exception as exc:
+        table_col.warning(f"Could not compute post-shot xG column: {exc}")
+
 if estimates is not None:
     deltas: list[float | None] = []
     rationality_deltas: list[float | None] = []
@@ -316,6 +329,7 @@ table_columns = [
         "period",
         "shot_type",
         "shot_is_goal",
+        "post_shot_xg",
         "delta_expected_execution_skill",
         "delta_expected_rationality",
         "start_x",
@@ -325,7 +339,7 @@ table_columns = [
     ]
     if col in table_df.columns
 ]
-table_col.dataframe(table_df[table_columns], width='stretch', height=320)
+table_col.dataframe(table_df[table_columns], width='stretch', height=320, hide_index=True)
 
 if selected_row is not None:
     st.write(
@@ -382,8 +396,12 @@ if st.session_state.get("confirmed_context") == (player_id, season, shot_group, 
                 title=f"Player {player_id} - Event {selected_event_id}",
                 player_xy_list=[player_loc],
             )
+            rink_col, cov_col = st.columns([1, 1])
             if fig_rink is not None:
-                st.pyplot(fig_rink)
+                with rink_col:
+                    st.pyplot(fig_rink)
+            with cov_col:
+                st.caption("Net-face covariance plot placeholder (coming soon).")
         except Exception as exc:
             st.error(f"Failed to render selected-shot visuals: {exc}")
 else:
