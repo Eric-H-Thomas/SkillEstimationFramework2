@@ -11,6 +11,8 @@ Config workflow:
 """
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -24,6 +26,7 @@ from BlackhawksSkillEstimation.blackhawks_plots import (
 from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     get_estimate_before_after_delta,
 )
+from BlackhawksSkillEstimation.BlackhawksJEEDS import save_player_data
 
 st.set_page_config(layout="wide")
 st.title("Blackhawks JEEDS Shot Inspector")
@@ -481,8 +484,40 @@ with config_cols[0]:
     selected_seasons_for_config = st.multiselect(
         "Seasons",
         options=available_seasons,
-        default=available_seasons,
+        default=[],
         key="cfg_seasons",
+    )
+
+    with st.expander("Add seasons not in local cache", expanded=False):
+        extra_seasons_raw = st.text_input(
+            "Additional seasons (8-digit, comma/space separated)",
+            value="",
+            key="cfg_extra_seasons",
+            placeholder="Example: 20222023 20212022",
+        )
+
+        season_tokens = [tok for tok in re.split(r"[\s,]+", extra_seasons_raw.strip()) if tok]
+        extra_seasons: set[int] = set()
+        invalid_tokens = 0
+        for tok in season_tokens:
+            if re.fullmatch(r"\d{8}", tok):
+                extra_seasons.add(int(tok))
+            else:
+                invalid_tokens += 1
+
+        if invalid_tokens > 0:
+            st.warning(
+                f"Ignored {invalid_tokens} invalid season token(s). Use 8-digit format like 20222023.",
+            )
+
+    if extra_seasons:
+        selected_seasons_for_config = sorted(set(selected_seasons_for_config) | extra_seasons)
+
+    local_season_set = set(available_seasons)
+    selected_local_count = sum(1 for season_i in selected_seasons_for_config if season_i in local_season_set)
+    selected_missing_count = max(0, len(selected_seasons_for_config) - selected_local_count)
+    st.caption(
+        f"Selected seasons: {selected_local_count} local, {selected_missing_count} to download"
     )
 
     all_shot_groups = data_io.get_shot_group_tags()
@@ -537,7 +572,7 @@ with config_cols[1]:
             else "Combined seasons"
         ),
         help=(
-            "Determines whether to give each season its own job or to pool them all into"
+            "Determines whether to give each season its own job or to pool them all into "
             "one continuous estimate per player over the course of all selected seasons."
         ),
     )
@@ -635,6 +670,7 @@ with config_cols[1]:
 
 can_build_summary = bool(resolved_players and selected_seasons_for_config and selected_shot_groups)
 summary_df = None
+download_target_df = None
 jobs_preview: list[dict[str, object]] = []
 
 if can_build_summary:
@@ -646,6 +682,7 @@ if can_build_summary:
         partition_column,
         tuple(partition_values),
     )
+    download_target_df = summary_df.copy()
 
     if estimation_mode == "all_selected_seasons_together" and not summary_df.empty:
         grouped = (
@@ -670,6 +707,105 @@ if can_build_summary:
     metric_cols[1].metric("Total jobs", len(jobs_preview))
     metric_cols[2].metric("Eligible jobs", len(eligible_jobs))
     metric_cols[3].metric("Below threshold / missing", len(skipped_jobs))
+
+    missing_pairs: list[dict[str, int]] = []
+    missing_count = 0
+    if download_target_df is not None and not download_target_df.empty:
+        missing_df = (
+            download_target_df.loc[
+                download_target_df["missing_local_data"].astype(bool),
+                ["player_id", "season"],
+            ]
+            .drop_duplicates()
+            .sort_values(["player_id", "season"])
+        )
+        missing_count = int(len(missing_df))
+        if missing_count > 0:
+            missing_pairs = missing_df.to_dict("records")
+
+    with st.container(border=True):
+        st.markdown("**On-demand local data backfill**")
+        download_flash = st.session_state.pop("cfg_download_flash", None)
+        if download_flash:
+            level = download_flash.get("level", "info")
+            message = str(download_flash.get("message", ""))
+            if level == "success":
+                st.success(message)
+            elif level == "warning":
+                st.warning(message)
+            elif level == "error":
+                st.error(message)
+            else:
+                st.info(message)
+
+        if missing_count == 0:
+            st.caption("No missing local player-season data found for the current filters.")
+        else:
+            st.caption(
+                f"Found {missing_count} missing player-season pair(s). Local files stay default; download is only used for missing rows."
+            )
+
+        run_download = st.button(
+            "Download Missing Data",
+            disabled=missing_count == 0,
+            help="Fetch only player-season rows marked as missing_local_data in this summary.",
+        )
+
+        if run_download and missing_pairs:
+            grouped_missing: dict[int, list[int]] = {}
+            for row in missing_pairs:
+                pid = int(row["player_id"])
+                season_i = int(row["season"])
+                grouped_missing.setdefault(pid, []).append(season_i)
+
+            downloaded_seasons = 0
+            players_with_downloads = 0
+            players_no_new = 0
+            failed_players: list[int] = []
+
+            with st.spinner("Downloading missing player-season data..."):
+                for pid, seasons_for_pid in grouped_missing.items():
+                    try:
+                        # Local-first behavior: skip seasons already persisted.
+                        saved = save_player_data(
+                            player_id=pid,
+                            seasons=sorted(set(seasons_for_pid)),
+                            output_dir=Path(data_root),
+                            overwrite=False,
+                        )
+                    except Exception:
+                        failed_players.append(pid)
+                        continue
+
+                    saved_count = len(saved)
+                    if saved_count > 0:
+                        players_with_downloads += 1
+                        downloaded_seasons += saved_count
+                    else:
+                        players_no_new += 1
+
+            if failed_players:
+                st.session_state["cfg_download_flash"] = {
+                    "level": "warning",
+                    "message": (
+                        "Backfill finished with partial failures. "
+                        f"Downloaded {downloaded_seasons} season(s) across {players_with_downloads} player(s); "
+                        f"no-new-data for {players_no_new} player(s); failed players: {failed_players}."
+                    ),
+                }
+            else:
+                st.session_state["cfg_download_flash"] = {
+                    "level": "success",
+                    "message": (
+                        "Backfill finished. "
+                        f"Downloaded {downloaded_seasons} season(s) across {players_with_downloads} player(s); "
+                        f"no-new-data for {players_no_new} player(s)."
+                    ),
+                }
+
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
 
     preview_df = summary_df.copy()
     if estimation_mode == "all_selected_seasons_together":
