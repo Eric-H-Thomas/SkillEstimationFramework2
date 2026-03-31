@@ -63,6 +63,11 @@ def _cached_player_id_text_files(data_root: str) -> list[str]:
 
 
 @st.cache_data(show_spinner=False)
+def _cached_player_name_catalog(player_ids: tuple[int, ...]):
+    return data_io.get_player_name_catalog(list(player_ids))
+
+
+@st.cache_data(show_spinner=False)
 def _cached_union_seasons(player_ids: tuple[int, ...], data_root: str) -> list[int]:
     return data_io.get_all_available_seasons(list(player_ids), data_root)
 
@@ -418,6 +423,8 @@ st.caption("Build a JSON config from local filters, preview sample counts, and s
 _CONFIG_DEFAULTS = {
     "cfg_player_file": "",
     "cfg_players": [],
+    "cfg_player_select_mode": "ID",
+    "cfg_player_names": [],
     "cfg_pasted_players": "",
     "cfg_seasons": [],
     "cfg_shot_groups": data_io.get_shot_group_tags(),
@@ -439,8 +446,8 @@ _CONFIG_DEFAULTS = {
 }
 
 if st.button("Reset config builder", help="Reset all config-builder fields to defaults."):
-    for _key in _CONFIG_DEFAULTS:
-        if _key in st.session_state:
+    for _key in list(st.session_state.keys()):
+        if _key in _CONFIG_DEFAULTS or _key.startswith("cfg_ambig_name_"):
             del st.session_state[_key]
     st.rerun()
 
@@ -448,38 +455,108 @@ config_cols = st.columns([1, 1])
 
 with config_cols[0]:
     st.subheader("Player + Filter Selection")
-    player_file_options = [""] + _cached_player_id_text_files(data_root)
-    selected_player_file = st.selectbox(
-        "Optional player ID text file",
-        options=player_file_options,
-        index=0,
-        key="cfg_player_file",
-        help="Reads IDs from files like Data/Hockey/forwards23-25.txt.",
+    player_select_mode = st.radio(
+        "Player input mode",
+        options=["ID", "Name"],
+        horizontal=True,
+        key="cfg_player_select_mode",
+        help="ID mode is the default. Name mode stays hidden unless you switch to it.",
     )
-    selected_players_for_config = st.multiselect(
-        "Add players from local cache",
-        options=players,
-        default=[],
-        key="cfg_players",
-    )
-    pasted_players = st.text_area(
-        "Optional pasted player IDs",
-        value="",
-        height=90,
-        key="cfg_pasted_players",
-        placeholder="Example: 950182, 950169, 950181",
-    )
+
+    selected_players_for_config: list[int] = []
+    selected_player_names_for_config: list[str] = []
+    selected_player_file = ""
+    pasted_players = ""
+
+    if player_select_mode == "ID":
+        player_file_options = [""] + _cached_player_id_text_files(data_root)
+        selected_player_file = st.selectbox(
+            "Optional player ID text file",
+            options=player_file_options,
+            index=0,
+            key="cfg_player_file",
+            help="Reads IDs from files like Data/Hockey/forwards23-25.txt.",
+        )
+        selected_players_for_config = st.multiselect(
+            "Add players from local cache",
+            options=players,
+            default=[],
+            key="cfg_players",
+        )
+        pasted_players = st.text_area(
+            "Optional pasted player IDs",
+            value="",
+            height=90,
+            key="cfg_pasted_players",
+            placeholder="Example: 950182, 950169, 950181",
+        )
+    else:
+        name_catalog = _cached_player_name_catalog(tuple(players))
+        cached_names = list(name_catalog.keys())
+        st.caption(f"Name mode uses local cache only. {len(cached_names)} cached name(s) available.")
+        selected_player_names_for_config = st.multiselect(
+            "Select player names",
+            options=cached_names,
+            default=[],
+            key="cfg_player_names",
+            help="Search and select names from cache. If a name is missing, switch to ID mode.",
+        )
+
+        explicit_ids_for_ambiguous_names: list[int] = []
+        ambiguous_names = [name for name in selected_player_names_for_config if len(name_catalog.get(name, [])) > 1]
+        if ambiguous_names:
+            st.warning("Some selected names map to multiple player IDs. Choose the exact ID(s) below.")
+            for name in ambiguous_names:
+                candidates = name_catalog.get(name, [])
+                chosen_ids = st.multiselect(
+                    f"Resolve {name}",
+                    options=candidates,
+                    default=[],
+                    key=f"cfg_ambig_name_{name}",
+                    format_func=lambda pid, player_name=name: f"{player_name} ({pid})",
+                    help="Select one or more IDs for this shared name.",
+                )
+                explicit_ids_for_ambiguous_names.extend([int(pid) for pid in chosen_ids])
+
+            unresolved_ambiguous = [
+                name
+                for name in ambiguous_names
+                if not st.session_state.get(f"cfg_ambig_name_{name}")
+            ]
+            if unresolved_ambiguous:
+                st.caption(
+                    f"Waiting for ID selection on {len(unresolved_ambiguous)} ambiguous name(s)."
+                )
+
+            selected_player_names_for_config = [
+                name
+                for name in selected_player_names_for_config
+                if len(name_catalog.get(name, [])) == 1
+            ]
+            selected_players_for_config = explicit_ids_for_ambiguous_names
+
+        if not cached_names:
+            st.info("No cached player names available yet. Use ID mode to populate cache first.")
 
     resolved_players = data_io.resolve_player_ids(
         selected_players=selected_players_for_config,
+        selected_player_names=selected_player_names_for_config,
         player_file=selected_player_file if selected_player_file else None,
         pasted_player_ids=pasted_players,
     )
 
     if resolved_players:
-        st.caption(f"Resolved {len(resolved_players)} unique players.")
+        if player_select_mode == "Name":
+            st.caption(
+                f"Resolved {len(resolved_players)} unique players from {len(selected_player_names_for_config)} unique-name selection(s)."
+            )
+        else:
+            st.caption(f"Resolved {len(resolved_players)} unique players.")
     else:
-        st.warning("Select at least one player source to build a config.")
+        if player_select_mode == "Name":
+            st.warning("Select at least one cached name (and resolve any ambiguous names) to build a config.")
+        else:
+            st.warning("Select at least one player source to build a config.")
 
     available_seasons = _cached_union_seasons(tuple(resolved_players), data_root) if resolved_players else []
     selected_seasons_for_config = st.multiselect(

@@ -21,6 +21,10 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import (
     load_player_data,
     load_player_data_by_games,
 )
+from BlackhawksSkillEstimation.player_cache import (
+    lookup_player,
+    lookup_player_ids_by_name,
+)
 from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     load_intermediate_estimates,
 )
@@ -86,9 +90,24 @@ def get_players(data_dir: Path | str | None = None) -> list[int]:
     return player_ids
 
 
+def get_player_name_catalog(player_ids: list[int]) -> dict[str, list[int]]:
+    """Return cache-backed mapping of player name -> player IDs for local players."""
+    catalog: dict[str, list[int]] = {}
+    for pid in sorted(set(int(player_id) for player_id in player_ids)):
+        player_name = lookup_player(player_id=pid)
+        if not isinstance(player_name, str):
+            continue
+        clean_name = player_name.strip()
+        if not clean_name:
+            continue
+        catalog.setdefault(clean_name, []).append(pid)
+    return {name: sorted(ids) for name, ids in sorted(catalog.items(), key=lambda item: item[0].lower())}
+
+
 def resolve_player_ids(
     *,
     selected_players: list[int] | None = None,
+    selected_player_names: list[str] | None = None,
     player_file: Path | str | None = None,
     pasted_player_ids: str = "",
 ) -> list[int]:
@@ -106,6 +125,10 @@ def resolve_player_ids(
 
     if selected_players:
         _add_many([int(pid) for pid in selected_players])
+
+    if selected_player_names:
+        for player_name in selected_player_names:
+            _add_many(lookup_player_ids_by_name(player_name))
 
     if player_file:
         try:
