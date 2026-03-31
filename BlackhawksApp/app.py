@@ -460,7 +460,6 @@ with config_cols[0]:
         options=["ID", "Name"],
         horizontal=True,
         key="cfg_player_select_mode",
-        help="ID mode is the default. Name mode stays hidden unless you switch to it.",
     )
 
     selected_players_for_config: list[int] = []
@@ -475,7 +474,7 @@ with config_cols[0]:
             options=player_file_options,
             index=0,
             key="cfg_player_file",
-            help="Reads IDs from files like Data/Hockey/forwards23-25.txt.",
+            help="Read IDs from a .txt file under Data/Hockey.",
         )
         selected_players_for_config = st.multiselect(
             "Add players from local cache",
@@ -499,11 +498,12 @@ with config_cols[0]:
             options=cached_names,
             default=[],
             key="cfg_player_names",
-            help="Search and select names from cache. If a name is missing, switch to ID mode.",
+            help="Cache-backed names only.",
         )
 
         explicit_ids_for_ambiguous_names: list[int] = []
         ambiguous_names = [name for name in selected_player_names_for_config if len(name_catalog.get(name, [])) > 1]
+        unresolved_ambiguous_count = 0
         if ambiguous_names:
             st.warning("Some selected names map to multiple player IDs. Choose the exact ID(s) below.")
             for name in ambiguous_names:
@@ -514,18 +514,14 @@ with config_cols[0]:
                     default=[],
                     key=f"cfg_ambig_name_{name}",
                     format_func=lambda pid, player_name=name: f"{player_name} ({pid})",
-                    help="Select one or more IDs for this shared name.",
                 )
+                if not chosen_ids:
+                    unresolved_ambiguous_count += 1
                 explicit_ids_for_ambiguous_names.extend([int(pid) for pid in chosen_ids])
 
-            unresolved_ambiguous = [
-                name
-                for name in ambiguous_names
-                if not st.session_state.get(f"cfg_ambig_name_{name}")
-            ]
-            if unresolved_ambiguous:
+            if unresolved_ambiguous_count:
                 st.caption(
-                    f"Waiting for ID selection on {len(unresolved_ambiguous)} ambiguous name(s)."
+                    f"Waiting for ID selection on {unresolved_ambiguous_count} ambiguous name(s)."
                 )
 
             selected_player_names_for_config = [
@@ -611,7 +607,7 @@ with config_cols[0]:
         "Enable partition filter",
         value=False,
         key="cfg_enable_partition",
-        help="Leave off unless you explicitly want a partition-based subset.",
+        help="Optional subset filter by location on ice.",
     )
     partition_column = ""
     partition_values: list[str] = []
@@ -627,7 +623,7 @@ with config_cols[0]:
             options=partition_column_options,
             index=0,
             key="cfg_partition_column",
-            help="Example values may include labels like Lshallow/Rshallow when present in data.",
+            help="Location-on-ice partition column.",
         )
         if partition_column:
             partition_values = st.multiselect(
@@ -649,10 +645,7 @@ with config_cols[1]:
             if mode == "per_season"
             else "Combined seasons"
         ),
-        help=(
-            "Determines whether to give each season its own job or to pool them all into "
-            "one continuous estimate per player over the course of all selected seasons."
-        ),
+        help="Per-season creates one job per season; Combined pools selected seasons into a single estimate.",
     )
 
     min_shots_per_job = st.number_input(
@@ -696,13 +689,13 @@ with config_cols[1]:
         "Generate convergence PNG from intermediate CSV",
         value=True,
         key="cfg_generate_png",
-        help="When enabled, writes convergence PNGs next to intermediate CSVs.",
+        help="Save PNGs next to intermediate CSV files.",
     )
     png_include_map = st.checkbox(
         "Include MAP estimates in convergence PNG",
         value=True,
         key="cfg_png_include_map",
-        help="Turn off to render expected estimates only (no MAP lines).",
+        help="Disable to render expected estimates only.",
     )
     per_season_estimation = estimation_mode == "per_season"
 
@@ -743,7 +736,7 @@ with config_cols[1]:
         "Generate run_summary JSON",
         value=False,
         key="cfg_write_run_summary",
-        help="When enabled, writes a run_summary JSON after execution.",
+        help="Write run_summary JSON after execution.",
     )
 
 can_build_summary = bool(resolved_players and selected_seasons_for_config and selected_shot_groups)
