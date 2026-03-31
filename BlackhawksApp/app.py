@@ -27,6 +27,7 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
     get_estimate_before_after_delta,
 )
 from BlackhawksSkillEstimation.BlackhawksJEEDS import save_player_data
+from BlackhawksSkillEstimation.player_cache import lookup_player
 
 st.set_page_config(layout="wide")
 st.title("Blackhawks JEEDS Shot Inspector")
@@ -810,60 +811,86 @@ if can_build_summary:
     preview_df = summary_df.copy()
     if estimation_mode == "all_selected_seasons_together":
         preview_df["season"] = "ALL_SELECTED"
+    
+    # Add player names from cache
+    preview_df["player_name"] = preview_df["player_id"].apply(
+        lambda pid: lookup_player(player_id=pid) or f"Player {pid}"
+    )
+    
+    # Display with player names first
+    display_columns = ["player_id", "player_name", "season", "shot_group", "count", "missing_local_data"]
+    display_df = preview_df[[col for col in display_columns if col in preview_df.columns]]
+    
     st.dataframe(
-        preview_df.sort_values(["player_id", "season", "shot_group"]),
+        display_df.sort_values(["player_id", "season", "shot_group"]),
         width="stretch",
         height=260,
     )
 else:
     st.info("Select players, seasons, and shot groups to compute observation counts.")
 
-export_disabled = not can_build_summary or summary_df is None
-if st.button("Export JSON Config", disabled=export_disabled):
-    exported_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    data_filters = {
-        "player_ids": resolved_players,
-        "seasons": selected_seasons_for_config,
-        "shot_groups": selected_shot_groups,
-    }
-    if enable_partition_filter and partition_column:
-        data_filters["partition_column"] = partition_column
-        data_filters["partition_values"] = partition_values
+export_section_cols = st.columns([2, 1])
+with export_section_cols[0]:
+    config_filename = st.text_input(
+        "JSON config filename",
+        value="",
+        placeholder="Leave blank for auto-generated name",
+        help="Optional: specify a custom filename for the exported config (without .json extension)",
+        disabled=not can_build_summary or summary_df is None,
+    )
 
-    config = {
-        "config_version": 1,
-        "created_at": exported_at,
-        "data_root": data_root,
-        "data_filters": data_filters,
-        "estimator": {
-            "per_season": bool(per_season_estimation),
-            "num_execution_skills": int(num_execution_skills),
-            "num_planning_skills": int(num_planning_skills),
-            "rng_seed": int(rng_seed),
-            "save_intermediate_csv": bool(save_intermediate_csv),
-            "generate_convergence_png": bool(generate_convergence_png),
-            "convergence_png_include_map": bool(png_include_map),
-        },
-        "output": {
-            "write_run_summary": bool(write_run_summary),
-        },
-        "validation": {
-            "min_shots_per_job": int(min_shots_per_job),
-            "fail_policy": "skip",
-        },
-        "cluster_plan": {
-            "split_mode": estimation_mode,
-            "total_jobs": len(jobs_preview),
-            "eligible_jobs": sum(1 for j in jobs_preview if j["eligible"]),
-            "sbatch_recommendation": {
-                "time": sbatch_time,
-                "mem": sbatch_mem,
-                "max_concurrent": int(sbatch_max_concurrent),
+export_disabled = not can_build_summary or summary_df is None
+with export_section_cols[1]:
+    if st.button("Export JSON Config", disabled=export_disabled, use_container_width=True):
+        exported_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        data_filters = {
+            "player_ids": resolved_players,
+            "seasons": selected_seasons_for_config,
+            "shot_groups": selected_shot_groups,
+        }
+        if enable_partition_filter and partition_column:
+            data_filters["partition_column"] = partition_column
+            data_filters["partition_values"] = partition_values
+
+        config = {
+            "config_version": 1,
+            "created_at": exported_at,
+            "data_root": data_root,
+            "data_filters": data_filters,
+            "estimator": {
+                "per_season": bool(per_season_estimation),
+                "num_execution_skills": int(num_execution_skills),
+                "num_planning_skills": int(num_planning_skills),
+                "rng_seed": int(rng_seed),
+                "save_intermediate_csv": bool(save_intermediate_csv),
+                "generate_convergence_png": bool(generate_convergence_png),
+                "convergence_png_include_map": bool(png_include_map),
             },
-            "jobs": jobs_preview,
-        },
-    }
-    out_path = data_io.save_job_config(config, data_dir=data_root, output_subdir="jobs")
-    st.success(f"Saved config: {out_path}")
-    with st.expander("View exported config JSON", expanded=False):
-        st.json(config)
+            "output": {
+                "write_run_summary": bool(write_run_summary),
+            },
+            "validation": {
+                "min_shots_per_job": int(min_shots_per_job),
+                "fail_policy": "skip",
+            },
+            "cluster_plan": {
+                "split_mode": estimation_mode,
+                "total_jobs": len(jobs_preview),
+                "eligible_jobs": sum(1 for j in jobs_preview if j["eligible"]),
+                "sbatch_recommendation": {
+                    "time": sbatch_time,
+                    "mem": sbatch_mem,
+                    "max_concurrent": int(sbatch_max_concurrent),
+                },
+                "jobs": jobs_preview,
+            },
+        }
+        out_path = data_io.save_job_config(
+            config,
+            data_dir=data_root,
+            output_subdir="jobs",
+            custom_filename=config_filename if config_filename.strip() else None,
+        )
+        st.success(f"Saved config: {out_path}")
+        with st.expander("View exported config JSON", expanded=False):
+            st.json(config)

@@ -433,14 +433,41 @@ def save_job_config(
     *,
     data_dir: Path | str | None = None,
     output_subdir: str = "jobs",
+    custom_filename: str | None = None,
 ) -> Path:
-    """Persist a JSON run config under Data/Hockey/jobs by default."""
+    """Persist a JSON run config under Data/Hockey/jobs by default.
+    
+    Parameters
+    ----------
+    config : dict[str, object]
+        The configuration dictionary to save.
+    data_dir : Path | str | None
+        The root data directory (defaults to Data/Hockey).
+    output_subdir : str
+        The subdirectory to save to (defaults to "jobs").
+    custom_filename : str | None
+        Optional custom filename (without .json extension). If not provided,
+        a timestamp-based filename will be generated.
+    
+    Returns
+    -------
+    Path
+        The path where the config was saved.
+    """
     root = _resolve_data_dir(data_dir)
     out_dir = root / output_subdir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = out_dir / f"bhjeeds_job_config_{timestamp}.json"
+    if custom_filename:
+        # Ensure filename doesn't already have .json extension
+        if custom_filename.endswith(".json"):
+            custom_filename = custom_filename[:-5]
+        path = out_dir / f"{custom_filename}.json"
+    else:
+        # Generate timestamp-based filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = out_dir / f"bhjeeds_job_config_{timestamp}.json"
+    
     path.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
     return path
 
