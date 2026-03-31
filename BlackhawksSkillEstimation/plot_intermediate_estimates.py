@@ -76,6 +76,48 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _humanize_canonical_season_tag(tag: str) -> str:
+    """Convert canonical season tag to human-readable label.
+    
+    Examples:
+        "s20232024" -> "2023-2024"
+        "s20222023to20242025" -> "2022-2023 to 2024-2025 (3 seasons)"
+        "s20222023__20242025" -> "2022-2023 + 2024-2025 (non-adjacent)"
+    """
+    if not tag or not tag.startswith("s"):
+        # Not a canonical season tag, return as-is
+        return tag
+    
+    tag = tag[1:]  # Strip leading 's'
+    
+    if "__" in tag:
+        # Non-adjacent list form
+        season_strs = tag.split("__")
+        humanized = []
+        for s in season_strs:
+            if len(s) == 8 and s.isdigit():
+                humanized.append(f"{s[:4]}-{s[4:]}")
+            else:
+                return tag  # Fallback if parsing fails
+        return " + ".join(humanized) + f" (non-adjacent, {len(humanized)} seasons)"
+    
+    elif "to" in tag:
+        # Adjacent range form
+        parts = tag.split("to")
+        if len(parts) == 2 and all(len(p) == 8 and p.isdigit() for p in parts):
+            start_season_start = int(parts[0][:4])
+            end_season_start = int(parts[1][:4])
+            num_seasons = end_season_start - start_season_start + 1
+            return f"{parts[0][:4]}-{parts[0][4:]} to {parts[1][:4]}-{parts[1][4:]} ({num_seasons} seasons)"
+        return tag  # Fallback
+    
+    elif len(tag) == 8 and tag.isdigit():
+        # Single season
+        return f"{tag[:4]}-{tag[4:]}"
+    
+    return tag  # Fallback for unrecognized format
+
+
 def _auto_title(csv_path: Path) -> str:
     """Derive a human-readable title from the CSV path."""
     parts = csv_path.stem.replace("intermediate_estimates", "").strip("_")
@@ -98,7 +140,12 @@ def _auto_title(csv_path: Path) -> str:
 
     player_id = player_dir_name.replace("player_", "")
 
-    if parts.isdigit() and len(parts) == 8:
+    # Parse tag: handle canonical season tags and legacy formats
+    if parts.startswith("s"):
+        # Canonical season tag format
+        tag = _humanize_canonical_season_tag(parts)
+    elif parts.isdigit() and len(parts) == 8:
+        # Legacy single-season format (YYYYYYYY)
         tag = f"{parts[:4]}-{parts[4:]}"
     elif parts:
         tag = parts

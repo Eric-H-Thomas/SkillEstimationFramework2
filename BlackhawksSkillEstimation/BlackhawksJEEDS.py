@@ -89,6 +89,56 @@ SHOT_TYPE_GROUPS: dict[str, tuple[str, set[str], bool]] = {
 DEFAULT_SHOT_GROUPS: tuple[str, ...] = ("wristshot_snapshot", "backhand", "slapshot", "deke")
 
 
+def _compute_aggregate_season_tag(seasons: Sequence[int]) -> str:
+    """Generate a canonical season tag for multi-season aggregated estimates.
+    
+    Returns a deterministic, filename-safe tag that identifies which seasons
+    were included in the aggregate. Adjacent seasons use a range format
+    (e.g. 's20222023to20242025'), non-adjacent use explicit list format
+    (e.g. 's20222023__20242025').
+    
+    Parameters
+    ----------
+    seasons : Sequence[int]
+        List of season codes (e.g., [20232024, 20242025, 20222023]).
+    
+    Returns
+    -------
+    str
+        Canonical aggregate season tag (e.g., 's20222023to20242025').
+    """
+    # Normalize: sort and dedupe
+    unique_sorted = sorted(set(seasons))
+    
+    if not unique_sorted:
+        raise ValueError("At least one season must be provided")
+    
+    if len(unique_sorted) == 1:
+        # Single season in aggregate mode is unusual but supported
+        return f"s{unique_sorted[0]}"
+    
+    # Check adjacency based on season boundaries:
+    # 20232024 is adjacent to 20242025 because 2024 == 2024.
+    def _is_adjacent_pair(current: int, nxt: int) -> bool:
+        cur_str = str(current)
+        nxt_str = str(nxt)
+        if len(cur_str) != 8 or len(nxt_str) != 8 or not cur_str.isdigit() or not nxt_str.isdigit():
+            return False
+        return int(cur_str[4:]) == int(nxt_str[:4])
+
+    is_adjacent = all(
+        _is_adjacent_pair(unique_sorted[i], unique_sorted[i + 1])
+        for i in range(len(unique_sorted) - 1)
+    )
+    
+    if is_adjacent:
+        # Range form: s20222023to20242025
+        return f"s{unique_sorted[0]}to{unique_sorted[-1]}"
+    else:
+        # Explicit list form: s20222023__20242025__20262027...
+        return "s" + "__".join(str(season) for season in unique_sorted)
+
+
 def save_intermediate_estimates_csv(
     skill_log: list[dict[str, object]],
     player_id: int,
@@ -1254,6 +1304,8 @@ def estimate_player_skill(
         else:
             # Aggregate mode
             all_game_ids = df["game_id"].unique().tolist()
+            seasons_in_data = sorted(df["season"].unique().tolist()) if "season" in df.columns else []
+            aggregate_tag = _compute_aggregate_season_tag(seasons_in_data) if seasons_in_data else "aggregate"
             return _run_jeeds_estimation(
                 df=df,
                 game_ids=all_game_ids,
@@ -1263,9 +1315,10 @@ def estimate_player_skill(
                 player_dir=player_data_dir,
                 rng_seed=rng_seed,
                 return_intermediate_estimates=return_intermediate_estimates,
+                tag_suffix=f"_agg_{aggregate_tag}",
                 preloaded_shot_maps=preloaded_shot_maps,
                 save_intermediate_csv=save_intermediate_csv,
-                csv_tag="aggregate",
+                csv_tag=aggregate_tag,
                 shot_group=shot_group,
             )
 
@@ -1321,6 +1374,8 @@ def estimate_player_skill(
 
     if not per_season:
         # Aggregate mode: single estimate across all seasons
+        seasons_in_data = sorted(df["season"].unique().tolist())
+        aggregate_tag = _compute_aggregate_season_tag(seasons_in_data)
         return _run_jeeds_estimation(
             df=df,
             game_ids=all_game_ids,
@@ -1330,8 +1385,9 @@ def estimate_player_skill(
             player_dir=player_data_dir,
             rng_seed=rng_seed,
             return_intermediate_estimates=return_intermediate_estimates,
+            tag_suffix=f"_agg_{aggregate_tag}",
             save_intermediate_csv=save_intermediate_csv,
-            csv_tag="aggregate",
+            csv_tag=aggregate_tag,
             shot_group=shot_group,
         )
 
