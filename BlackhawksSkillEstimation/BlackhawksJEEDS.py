@@ -88,6 +88,93 @@ SHOT_TYPE_GROUPS: dict[str, tuple[str, set[str], bool]] = {
 # Convenience tuple of all defined group tags, in canonical order.
 DEFAULT_SHOT_GROUPS: tuple[str, ...] = ("wristshot_snapshot", "backhand", "slapshot", "deke")
 
+GEOMETRIC_PARTITION_COLUMN = "partition_geometry"
+HAND_AWARE_PARTITION_COLUMN = "partition"
+PLAYER_HANDEDNESS_COLUMN = "player_handedness"
+_PARTITION_UNKNOWN = "unknown"
+_DOMINANT_SHALLOW_BY_HANDEDNESS = {
+    "left": "right_shallow",
+    "right": "left_shallow",
+}
+
+
+def _normalize_handedness_value(value: object) -> str | None:
+    """Normalize handedness value to canonical form. Returns 'left', 'right', or None."""
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"l", "left"}:
+        return "left"
+    if text in {"r", "right"}:
+        return "right"
+    return None
+
+
+def _classify_geometric_partition(start_x: object, start_y: object) -> str:
+    """Classify shot location into geometric partition: slot, left_shallow, or right_shallow.
+    
+    Slot: abs(y) <= distance_from_goal (45-degree boundary using L∞-norm).
+    Shallow: abs(y) > distance_from_goal (left or right side).
+    """
+    try:
+        x_val = float(start_x)
+        y_val = float(start_y)
+    except (TypeError, ValueError):
+        return _PARTITION_UNKNOWN
+
+    net_distance_x = abs(float(_NET_CENTER[0]) - x_val)
+    if abs(y_val) <= net_distance_x:
+        return "slot"
+    return "right_shallow" if y_val > 0 else "left_shallow"
+
+
+def _classify_handedness_partition(geometric_partition: str, handedness: object) -> str:
+    """Classify handedness-aware partition: slot, dominant, or non_dominant.
+    
+    Dominant: shooting hand's preferred shallow area.
+    Non-dominant: opposite shallow area.
+    """
+    if geometric_partition == "slot":
+        return "slot"
+
+    normalized_handedness = _normalize_handedness_value(handedness)
+    if normalized_handedness is None:
+        return _PARTITION_UNKNOWN
+
+    dominant_partition = _DOMINANT_SHALLOW_BY_HANDEDNESS.get(normalized_handedness)
+    if dominant_partition is None:
+        return _PARTITION_UNKNOWN
+    return "dominant" if geometric_partition == dominant_partition else "non_dominant"
+
+
+def add_partition_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach geometric and handedness-aware partition labels to a shot dataframe.
+    
+    Adds two columns:
+    - partition_geometry: slot, left_shallow, right_shallow (45-degree boundary)
+    - partition: slot, dominant, non_dominant (relative to player handedness)
+    """
+    out = df.copy()
+    if out.empty:
+        out[GEOMETRIC_PARTITION_COLUMN] = pd.Series(dtype="string")
+        out[HAND_AWARE_PARTITION_COLUMN] = pd.Series(dtype="string")
+        return out
+
+    geometric_values: list[str] = []
+    handedness_values: list[str] = []
+    for _, row in out.iterrows():
+        geometric_partition = _classify_geometric_partition(row.get("start_x"), row.get("start_y"))
+        handedness_partition = _classify_handedness_partition(
+            geometric_partition,
+            row.get(PLAYER_HANDEDNESS_COLUMN),
+        )
+        geometric_values.append(geometric_partition)
+        handedness_values.append(handedness_partition)
+
+    out[GEOMETRIC_PARTITION_COLUMN] = geometric_values
+    out[HAND_AWARE_PARTITION_COLUMN] = handedness_values
+    return out
+
 
 def _compute_aggregate_season_tag(seasons: Sequence[int]) -> str:
     """Generate a canonical season tag for multi-season aggregated estimates.
@@ -528,6 +615,7 @@ def _filter_estimable_shots_for_persistence(
         keep_mask.append(True)
 
     filtered_df = df_lc.loc[keep_mask].reset_index(drop=True)
+    filtered_df = add_partition_columns(filtered_df)
     filtered_maps, maps_pruned = _prune_shot_maps_to_event_ids(shot_maps, filtered_df["event_id"].tolist())
     stats["maps_pruned"] = maps_pruned
     stats["kept"] = len(filtered_df)

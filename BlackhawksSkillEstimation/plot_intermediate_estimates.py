@@ -38,8 +38,7 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
 
     Expected columns: ``shot_count``, ``expected_execution_skill``,
     ``map_execution_skill``, ``expected_rationality``, ``map_rationality``.
-    Also reads ``log10_expected_rationality`` and ``log10_map_rationality``
-    when present.
+    Also requires ``log10_expected_rationality`` and ``log10_map_rationality``.
     """
     csv_path = Path(csv_path)
     data: dict[str, list[float]] = {
@@ -60,15 +59,8 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
             mr = float(row["map_rationality"])
             data["expected_rationality"].append(er)
             data["map_rationality"].append(mr)
-            # Derive log10 if not in CSV (backward compatibility)
-            if "log10_expected_rationality" in row and row["log10_expected_rationality"]:
-                data["log10_expected_rationality"].append(float(row["log10_expected_rationality"]))
-            else:
-                data["log10_expected_rationality"].append(np.log10(er) if er > 0 else float("nan"))
-            if "log10_map_rationality" in row and row["log10_map_rationality"]:
-                data["log10_map_rationality"].append(float(row["log10_map_rationality"]))
-            else:
-                data["log10_map_rationality"].append(np.log10(mr) if mr > 0 else float("nan"))
+            data["log10_expected_rationality"].append(float(row["log10_expected_rationality"]))
+            data["log10_map_rationality"].append(float(row["log10_map_rationality"]))
     return data
 
 
@@ -118,6 +110,24 @@ def _humanize_canonical_season_tag(tag: str) -> str:
     return tag  # Fallback for unrecognized format
 
 
+def _humanize_partition_suffix(partition_blob: str) -> str:
+    """Convert filename partition suffix into a readable value label."""
+    if not partition_blob:
+        return ""
+
+    if "-" not in partition_blob:
+        return partition_blob.replace("_", " ")
+
+    _column_slug, value_slug = partition_blob.split("-", 1)
+
+    if value_slug.startswith("multi-"):
+        value_slug = value_slug[len("multi-") :]
+        values = [v.replace("-", " ") for v in value_slug.split("-or-") if v]
+        return ", ".join(values)
+    else:
+        return value_slug.replace("-", " ")
+
+
 def _auto_title(csv_path: Path) -> str:
     """Derive a human-readable title from the CSV path."""
     parts = csv_path.stem.replace("intermediate_estimates", "").strip("_")
@@ -140,17 +150,22 @@ def _auto_title(csv_path: Path) -> str:
 
     player_id = player_dir_name.replace("player_", "")
 
-    # Parse tag: handle canonical season tags and legacy formats
-    if parts.startswith("s"):
-        # Canonical season tag format
-        tag = _humanize_canonical_season_tag(parts)
-    elif parts.isdigit() and len(parts) == 8:
-        # Legacy single-season format (YYYYYYYY)
-        tag = f"{parts[:4]}-{parts[4:]}"
-    elif parts:
-        tag = parts
+    season_part = parts
+    partition_part = ""
+    if "__" in parts:
+        season_part, partition_part = parts.split("__", 1)
+
+    # Parse season tag: handle canonical season tags and legacy formats.
+    if season_part.startswith("s"):
+        tag = _humanize_canonical_season_tag(season_part)
+    elif season_part.isdigit() and len(season_part) == 8:
+        tag = f"{season_part[:4]}-{season_part[4:]}"
+    elif season_part:
+        tag = season_part
     else:
         tag = None
+
+    partition_label = _humanize_partition_suffix(partition_part)
     
     player_name = lookup_player(player_id=int(player_id))
 
@@ -159,7 +174,11 @@ def _auto_title(csv_path: Path) -> str:
         base += f" ({player_name})"
     if group_label:
         base += f" \u2013 {group_label}"
-    return f"{base} - {tag}" if tag else base
+    if tag:
+        base += f" - {tag}"
+    if partition_label:
+        base += f" ({partition_label})"
+    return base
 
 
 def get_estimate_value_at_shot(

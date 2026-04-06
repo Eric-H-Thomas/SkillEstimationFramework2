@@ -316,7 +316,7 @@ def filter_by_partition(
     partition_column: str | None = None,
     partition_values: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Filter a dataframe by partition column and selected values."""
+    """Filter a dataframe by partition column and selected values. Returns all rows if filter not specified."""
     if partition_column is None or partition_column == "":
         return df.copy()
     if partition_column not in df.columns:
@@ -335,20 +335,12 @@ def discover_partition_values(
     *,
     data_dir: Path | str | None = None,
 ) -> dict[str, list[str]]:
-    """Discover categorical partition candidates from local season files.
-
-    This avoids hard-coding partition names while still supporting columns
-    like side/partition buckets when present in local metadata.
+    """Discover partition columns and their values from local season files.
+    
+    Scans parquet metadata for partition_geometry and partition columns.
+    Returns dict mapping column name -> sorted list of unique values found.
     """
-    candidates = {
-        "partition",
-        "partition_tag",
-        "lane_partition",
-        "shallow_partition",
-        "shot_partition",
-        "start_side",
-        "side",
-    }
+    candidates = {"partition", "partition_geometry"}
     collected: dict[str, set[str]] = {}
 
     for player_id in player_ids:
@@ -383,7 +375,11 @@ def build_observation_summary(
     partition_column: str | None = None,
     partition_values: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Build counts of observations matching filter combinations."""
+    """Build shot-count summary: aggregated by player/season/shot-group with optional partition filtering.
+    
+    Returns DataFrame with columns: player_id, season, shot_group, count, missing_local_data.
+    If partition_column/values specified, counts are filtered accordingly.
+    """
     rows: list[dict[str, object]] = []
     for player_id in player_ids:
         for season in seasons:
@@ -431,23 +427,28 @@ def build_job_rows(
     *,
     min_shots_per_job: int,
 ) -> list[dict[str, object]]:
-    """Build flattened per-job rows for cluster arrays."""
+    """Build job payloads from observation summary.
+    
+    Marks jobs as eligible if shot_count >= min_shots_per_job and data exists locally.
+    Preserves partition_value column if present (for split-by-partition-value jobs).
+    """
     jobs: list[dict[str, object]] = []
     if summary_df.empty:
         return jobs
 
     for _, row in summary_df.iterrows():
         count = int(row["count"])
-        jobs.append(
-            {
-                "player_id": int(row["player_id"]),
-                "season": int(row["season"]),
-                "shot_group": str(row["shot_group"]),
-                "count": count,
-                "missing_local_data": bool(row.get("missing_local_data", False)),
-                "eligible": bool(count >= min_shots_per_job and not bool(row.get("missing_local_data", False))),
-            }
-        )
+        payload: dict[str, object] = {
+            "player_id": int(row["player_id"]),
+            "season": int(row["season"]),
+            "shot_group": str(row["shot_group"]),
+            "count": count,
+            "missing_local_data": bool(row.get("missing_local_data", False)),
+            "eligible": bool(count >= min_shots_per_job and not bool(row.get("missing_local_data", False))),
+        }
+        if "partition_value" in row and pd.notna(row["partition_value"]):
+            payload["partition_value"] = str(row["partition_value"])
+        jobs.append(payload)
     return jobs
 
 
@@ -458,24 +459,25 @@ def save_job_config(
     output_subdir: str = "jobs",
     custom_filename: str | None = None,
 ) -> Path:
-    """Persist a JSON run config under Data/Hockey/jobs by default.
+    """Save a JSON job config to Data/Hockey/jobs/ (or custom path).
+    
+    If no custom_filename provided, generates timestamp-based name: bhjeeds_job_config_YYYYMMDD_HHMMSS.json
     
     Parameters
     ----------
-    config : dict[str, object]
-        The configuration dictionary to save.
+    config : dict
+        Configuration dictionary to save.
     data_dir : Path | str | None
-        The root data directory (defaults to Data/Hockey).
+        Root data directory (defaults to Data/Hockey).
     output_subdir : str
-        The subdirectory to save to (defaults to "jobs").
+        Subdirectory to save to (defaults to "jobs").
     custom_filename : str | None
-        Optional custom filename (without .json extension). If not provided,
-        a timestamp-based filename will be generated.
+        Optional custom filename (without .json extension).
     
     Returns
     -------
     Path
-        The path where the config was saved.
+        Path where the config was saved.
     """
     root = _resolve_data_dir(data_dir)
     out_dir = root / output_subdir
@@ -607,3 +609,86 @@ def get_convergence_artifact(
     if flat.exists():
         return flat
     return None
+
+
+def list_convergence_artifacts(
+    player_id: int,
+    season: int,
+    *,
+    shot_group: str | None = None,
+    shot_type: str | None = None,
+    data_dir: Path | str | None = None,
+    suffix: str = ".csv",
+) -> list[Path]:
+    """Return all convergence artifacts for a player-season and optional shot group."""
+    root = _resolve_data_dir(data_dir)
+    logs_dir = root / "players" / f"player_{player_id}" / "logs"
+    if not logs_dir.exists():
+        return []
+
+    season_tag = str(season)
+    group_tag = shot_group if shot_group is not None else _raw_shot_to_group(shot_type)
+    search_dirs = [logs_dir / group_tag, logs_dir] if group_tag is not None else [logs_dir]
+
+    artifacts: list[Path] = []
+    seen: set[Path] = set()
+    pattern = f"intermediate_estimates_{season_tag}*{suffix}"
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for path in sorted(search_dir.glob(pattern)):
+            if path in seen:
+                continue
+            seen.add(path)
+            artifacts.append(path)
+    return artifacts
+
+
+def describe_convergence_artifact(path: Path | str) -> dict[str, object]:
+    """Parse a convergence artifact name into a human-readable label and partition filter."""
+    artifact_path = Path(path)
+    stem = artifact_path.stem
+    prefix = "intermediate_estimates_"
+
+    info: dict[str, object] = {
+        "season_tag": stem,
+        "partition_column": None,
+        "partition_values": [],
+        "label": stem,
+    }
+    if not stem.startswith(prefix):
+        return info
+
+    remainder = stem[len(prefix) :]
+    season_tag, marker, partition_blob = remainder.partition("__")
+
+    info["season_tag"] = season_tag
+    if not marker or not partition_blob:
+        info["label"] = "baseline"
+        return info
+
+    # Parse known partition columns from current filename suffix format.
+    column_slug = ""
+    value_slug = ""
+    for candidate in ("geometry", "partition"):
+        prefix_text = f"{candidate}-"
+        if partition_blob.startswith(prefix_text):
+            column_slug = candidate
+            value_slug = partition_blob[len(prefix_text) :]
+            break
+
+    if not column_slug or not value_slug:
+        info["label"] = "baseline"
+        return info
+
+    raw_value_slugs = value_slug[len("multi-") :].split("-or-") if value_slug.startswith("multi-") else [value_slug]
+    partition_column = "partition_geometry" if column_slug == "geometry" else "partition"
+    partition_values = [slug.replace("-", "_") for slug in raw_value_slugs if slug]
+
+    info["partition_column"] = partition_column
+    info["partition_values"] = partition_values
+    if partition_values:
+        info["label"] = ", ".join(partition_values)
+    else:
+        info["label"] = partition_column
+    return info

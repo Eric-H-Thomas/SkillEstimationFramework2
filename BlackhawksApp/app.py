@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 from BlackhawksApp import data_io
@@ -75,6 +76,17 @@ def _cached_union_seasons(player_ids: tuple[int, ...], data_root: str) -> list[i
 @st.cache_data(show_spinner=False)
 def _cached_partition_values(player_ids: tuple[int, ...], seasons: tuple[int, ...], data_root: str):
     return data_io.discover_partition_values(list(player_ids), list(seasons), data_dir=data_root)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_convergence_artifacts(player_id: int, season: int, shot_group: str, data_root: str):
+    return data_io.list_convergence_artifacts(
+        player_id=player_id,
+        season=season,
+        shot_group=shot_group,
+        data_dir=data_root,
+        suffix=".csv",
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -151,6 +163,28 @@ shot_group = st.sidebar.selectbox(
     format_func=lambda g: f"{g} ({data_io.get_shot_group_display(g)})",
 )
 
+available_estimate_csvs = _cached_convergence_artifacts(player_id, season, shot_group, data_root)
+selected_estimate_csv = None
+selected_estimate_info = {
+    "label": "baseline",
+    "partition_column": None,
+    "partition_values": [],
+}
+if available_estimate_csvs:
+    selected_estimate_csv = st.sidebar.selectbox(
+        "Estimate run",
+        options=available_estimate_csvs,
+        format_func=lambda path: data_io.describe_convergence_artifact(path)["label"],
+        help="Choose among saved intermediate-estimate runs for this player, season, and shot group.",
+    )
+    selected_estimate_info = data_io.describe_convergence_artifact(selected_estimate_csv)
+    if selected_estimate_info["partition_column"] and selected_estimate_info["partition_values"]:
+        st.sidebar.caption(
+            f"Filter: {selected_estimate_info['partition_column']} = {', '.join(selected_estimate_info['partition_values'])}"
+        )
+else:
+    st.sidebar.caption("No saved estimate CSVs found for this player/season/shot group.")
+
 try:
     season_df = _cached_shots_metadata(player_id=player_id, season=season, data_root=data_root)
 except Exception as exc:
@@ -158,20 +192,26 @@ except Exception as exc:
     st.stop()
 
 filtered_df = data_io.filter_by_shot_group(season_df, shot_group=shot_group)
+if selected_estimate_info["partition_column"] and selected_estimate_info["partition_values"]:
+    filtered_df = data_io.filter_by_partition(
+        filtered_df,
+        partition_column=str(selected_estimate_info["partition_column"]),
+        partition_values=list(selected_estimate_info["partition_values"]),
+    )
 filtered_df = data_io.with_shot_index(filtered_df)
 
 if filtered_df.empty:
     st.warning("No shots match the selected season and shot group.")
     st.stop()
 
-csv_path = data_io.get_convergence_artifact(
+csv_path = selected_estimate_csv or data_io.get_convergence_artifact(
     player_id=player_id,
     season=season,
     shot_group=shot_group,
     data_dir=data_root,
     suffix=".csv",
 )
-png_path = data_io.get_convergence_artifact(
+png_path = csv_path.with_suffix(".png") if csv_path is not None else data_io.get_convergence_artifact(
     player_id=player_id,
     season=season,
     shot_group=shot_group,
@@ -203,7 +243,7 @@ else:
     center_cols = st.columns([1, 12, 1])
     center_cols[1].image(str(png_path), caption=f"{png_path.name}", width='stretch')
 
-selection_context = (player_id, season, shot_group, len(filtered_df), nav_max)
+selection_context = (player_id, season, shot_group, str(csv_path) if csv_path else None, len(filtered_df), nav_max)
 if st.session_state.get("selection_context") != selection_context:
     st.session_state["selection_context"] = selection_context
     _sync_shot_index(1)
@@ -348,7 +388,21 @@ table_columns = [
     ]
     if col in table_df.columns
 ]
+
+if st.session_state.get("cfg_split_partition_jobs", False):
+    selected_partition_column = str(st.session_state.get("cfg_partition_column", ""))
+    if selected_partition_column and selected_partition_column in table_df.columns:
+        if selected_partition_column not in table_columns:
+            table_columns.append(selected_partition_column)
+
+if selected_estimate_info["partition_column"]:
+    selected_partition_column = str(selected_estimate_info["partition_column"])
+    if selected_partition_column in table_df.columns and selected_partition_column not in table_columns:
+        table_columns.append(selected_partition_column)
+
 table_col.dataframe(table_df[table_columns], width='stretch', height=320, hide_index=True)
+if selected_estimate_csv is not None:
+    table_col.caption(f"Selected estimate: {selected_estimate_info['label']}")
 
 if selected_row is not None:
     st.write(
@@ -431,6 +485,7 @@ _CONFIG_DEFAULTS = {
     "cfg_enable_partition": False,
     "cfg_partition_column": "",
     "cfg_partition_values": [],
+    "cfg_split_partition_jobs": False,
     "cfg_estimation_mode": "per_season",
     "cfg_min_shots": 50,
     "cfg_num_execution_skills": 50,
@@ -443,11 +498,12 @@ _CONFIG_DEFAULTS = {
     "cfg_sbatch_mem": "16G",
     "cfg_sbatch_max_concurrent": 100,
     "cfg_write_run_summary": False,
+    "cfg_extra_seasons": "",
 }
 
 if st.button("Reset config builder", help="Reset all config-builder fields to defaults."):
     for _key in list(st.session_state.keys()):
-        if _key in _CONFIG_DEFAULTS or _key.startswith("cfg_ambig_name_"):
+        if _key.startswith("cfg_"):
             del st.session_state[_key]
     st.rerun()
 
@@ -611,6 +667,7 @@ with config_cols[0]:
     )
     partition_column = ""
     partition_values: list[str] = []
+    split_partition_jobs = False
     if enable_partition_filter:
         partition_catalog = (
             _cached_partition_values(tuple(resolved_players), tuple(selected_seasons_for_config), data_root)
@@ -618,13 +675,28 @@ with config_cols[0]:
             else {}
         )
         partition_column_options = [""] + sorted(partition_catalog.keys())
-        partition_column = st.selectbox(
-            "Partition column",
-            options=partition_column_options,
-            index=0,
-            key="cfg_partition_column",
-            help="Location-on-ice partition column.",
-        )
+        preferred_partition_column = "partition" if "partition" in partition_column_options else ""
+        if not preferred_partition_column and "partition_geometry" in partition_column_options:
+            preferred_partition_column = "partition_geometry"
+        current_partition_column = st.session_state.get("cfg_partition_column")
+        if current_partition_column not in partition_column_options:
+            st.session_state.pop("cfg_partition_column", None)
+            partition_column = st.selectbox(
+                "Partition column",
+                options=partition_column_options,
+                index=partition_column_options.index(preferred_partition_column)
+                if preferred_partition_column in partition_column_options
+                else 0,
+                key="cfg_partition_column",
+                help="Location-on-ice partition column.",
+            )
+        else:
+            partition_column = st.selectbox(
+                "Partition column",
+                options=partition_column_options,
+                key="cfg_partition_column",
+                help="Location-on-ice partition column.",
+            )
         if partition_column:
             partition_values = st.multiselect(
                 "Partition values",
@@ -632,6 +704,16 @@ with config_cols[0]:
                 default=partition_catalog.get(partition_column, []),
                 key="cfg_partition_values",
             )
+            split_partition_jobs = st.checkbox(
+                "Split into one job per partition value",
+                value=False,
+                key="cfg_split_partition_jobs",
+                help="Create a separate estimate job for each selected partition value.",
+            )
+        else:
+            st.session_state["cfg_split_partition_jobs"] = False
+    else:
+        st.session_state["cfg_split_partition_jobs"] = False
 
 with config_cols[1]:
     st.subheader("Estimator + Job Settings")
@@ -693,7 +775,7 @@ with config_cols[1]:
     )
     png_include_map = st.checkbox(
         "Include MAP estimates in convergence PNG",
-        value=True,
+        value=False,
         key="cfg_png_include_map",
         help="Disable to render expected estimates only.",
     )
@@ -745,27 +827,56 @@ download_target_df = None
 jobs_preview: list[dict[str, object]] = []
 
 if can_build_summary:
-    summary_df = _cached_observation_summary(
-        tuple(resolved_players),
-        tuple(selected_seasons_for_config),
-        tuple(selected_shot_groups),
-        data_root,
-        partition_column,
-        tuple(partition_values),
+    should_split_partition_jobs = bool(
+        split_partition_jobs
+        and enable_partition_filter
+        and partition_column
+        and partition_values
     )
+
+    if should_split_partition_jobs:
+        per_value_frames: list[pd.DataFrame] = []
+        for partition_value in partition_values:
+            value_df = _cached_observation_summary(
+                tuple(resolved_players),
+                tuple(selected_seasons_for_config),
+                tuple(selected_shot_groups),
+                data_root,
+                partition_column,
+                (str(partition_value),),
+            ).copy()
+            value_df["partition_value"] = str(partition_value)
+            per_value_frames.append(value_df)
+        summary_df = pd.concat(per_value_frames, ignore_index=True) if per_value_frames else pd.DataFrame()
+    else:
+        summary_df = _cached_observation_summary(
+            tuple(resolved_players),
+            tuple(selected_seasons_for_config),
+            tuple(selected_shot_groups),
+            data_root,
+            partition_column,
+            tuple(partition_values),
+        )
+
     download_target_df = summary_df.copy()
 
     if estimation_mode == "all_selected_seasons_together" and not summary_df.empty:
+        group_cols = ["player_id", "shot_group"]
+        if should_split_partition_jobs and "partition_value" in summary_df.columns:
+            group_cols.append("partition_value")
         grouped = (
             summary_df
-            .groupby(["player_id", "shot_group"], as_index=False)
+            .groupby(group_cols, as_index=False)
             .agg(
                 count=("count", "sum"),
                 missing_local_data=("missing_local_data", "max"),
             )
         )
         grouped["season"] = -1
-        summary_df = grouped[["player_id", "season", "shot_group", "count", "missing_local_data"]]
+        ordered_cols = ["player_id", "season", "shot_group", "count", "missing_local_data"]
+        if should_split_partition_jobs and "partition_value" in grouped.columns:
+            ordered_cols.insert(3, "partition_value")
+        summary_df = grouped[[col for col in ordered_cols if col in grouped.columns]]
 
     jobs_preview = data_io.build_job_rows(summary_df, min_shots_per_job=int(min_shots_per_job))
 
@@ -889,10 +1000,15 @@ if can_build_summary:
     
     # Display with player names first
     display_columns = ["player_id", "player_name", "season", "shot_group", "count", "missing_local_data"]
+    if should_split_partition_jobs and "partition_value" in preview_df.columns:
+        display_columns.insert(4, "partition_value")
     display_df = preview_df[[col for col in display_columns if col in preview_df.columns]]
     
+    sort_cols = ["player_id", "season", "shot_group"]
+    if "partition_value" in display_df.columns:
+        sort_cols.insert(2, "partition_value")
     st.dataframe(
-        display_df.sort_values(["player_id", "season", "shot_group"]),
+        display_df.sort_values(sort_cols),
         width="stretch",
         height=260,
     )
@@ -921,6 +1037,7 @@ with export_section_cols[1]:
         if enable_partition_filter and partition_column:
             data_filters["partition_column"] = partition_column
             data_filters["partition_values"] = partition_values
+            data_filters["split_partition_jobs"] = bool(split_partition_jobs)
 
         config = {
             "config_version": 1,
@@ -945,6 +1062,7 @@ with export_section_cols[1]:
             },
             "cluster_plan": {
                 "split_mode": estimation_mode,
+                "split_by_partition_value": bool(split_partition_jobs),
                 "total_jobs": len(jobs_preview),
                 "eligible_jobs": sum(1 for j in jobs_preview if j["eligible"]),
                 "sbatch_recommendation": {

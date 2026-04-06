@@ -15,6 +15,31 @@ SHOT_MAP_HEIGHT = 120
 SHOT_MAP_WIDTH = 72
 
 
+def _normalize_shooting_hand(value: object) -> str | None:
+    text = str(value).strip().upper()
+    if text == "L":
+        return "left"
+    if text == "R":
+        return "right"
+    return None
+
+
+def get_player_handedness(player_id: int) -> str | None:
+    """Lookup a player's handedness from ``PUBLIC.PLAYER.SHOOTING_HAND``."""
+    query = """
+        SELECT p.SHOOTING_HAND
+        FROM HAWKS_HOCKEY.PUBLIC.PLAYER AS p
+        WHERE p.PLAYER_ID_HAWKS = %(player_id)s
+        LIMIT 1;
+    """
+    df = db.get_df(query, query_params={"player_id": player_id})
+    if df.empty:
+        return None
+
+    row = df.rename(columns=str.lower).iloc[0]
+    return _normalize_shooting_hand(row.get("shooting_hand"))
+
+
 def _extract_covariance_matrix(row: pd.Series) -> np.ndarray:
     """Extract 2x2 covariance matrix from database row."""
     cov_cols = ["cov_00", "cov_01", "cov_10", "cov_11"]
@@ -161,6 +186,8 @@ def query_player_season_shots(
     # No data for this player/season
     if df.empty:
         return df
+
+    df["player_handedness"] = get_player_handedness(player_id)
     
     # Fix reversed Y-coordinate: shot_trajectories uses positive-y-left (Blackhawks convention);
     # negate so our codebase's positive-y-right convention is used consistently everywhere.
@@ -310,6 +337,8 @@ def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:
     # No data for these games/player
     if df.empty:
         return {}
+
+    df["player_handedness"] = get_player_handedness(player_id)
     
     # Fix reversed Y-coordinate: shot_trajectories uses positive-y-left (Blackhawks convention);
     # negate so our codebase's positive-y-right convention is used consistently everywhere.
