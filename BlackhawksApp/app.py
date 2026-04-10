@@ -21,6 +21,8 @@ import streamlit as st
 
 from BlackhawksApp import data_io
 from BlackhawksSkillEstimation.blackhawks_plots import (
+    plot_net_center_covariance_angular_muted_heatmap,
+    plot_net_center_covariance_cartesian_standardized,
     plot_shot_angular_heatmap,
     plot_shot_rink,
 )
@@ -171,11 +173,15 @@ selected_estimate_info = {
     "partition_values": [],
 }
 if available_estimate_csvs:
+    # Context-key the selectbox state to force reset when player/season/shot-group changes.
+    # This prevents stale CSV selection when filters are updated.
+    estimate_run_key = f"estimate_run_{player_id}_{season}_{shot_group}"
     selected_estimate_csv = st.sidebar.selectbox(
         "Estimate run",
         options=available_estimate_csvs,
         format_func=lambda path: data_io.describe_convergence_artifact(path)["label"],
         help="Choose among saved intermediate-estimate runs for this player, season, and shot group.",
+        key=estimate_run_key,
     )
     selected_estimate_info = data_io.describe_convergence_artifact(selected_estimate_csv)
     if selected_estimate_info["partition_column"] and selected_estimate_info["partition_values"]:
@@ -459,12 +465,47 @@ if st.session_state.get("confirmed_context") == (player_id, season, shot_group, 
                 title=f"Player {player_id} - Event {selected_event_id}",
                 player_xy_list=[player_loc],
             )
+            # Render side-by-side: rink diagram (left) and covariance visualizations (right, tabbed).
+            # Covariance circles are derived from post-shot expected_execution_skill (xskill) in
+            # intermediate-estimate CSVs, not shot-map net_cov, to avoid selection bias.
             rink_col, cov_col = st.columns([1, 1])
             if fig_rink is not None:
                 with rink_col:
                     st.pyplot(fig_rink)
             with cov_col:
-                st.caption("Net-face covariance plot placeholder (coming soon).")
+                if after is None:
+                    st.warning(
+                        "No post-shot expected xskill is available for this shot index, so covariance plots cannot be rendered."
+                    )
+                else:
+                    # Angular tab (default): shot-origin view with muted xG heatmap and net outline.
+                    # Cartesian tab: standardized head-on view (fixed 20 ft distance for cross-player comparison).
+                    tab_ang, tab_cart = st.tabs([
+                        "Angular Covariance",
+                        "Standardized Cartesian",
+                    ])
+
+                    with tab_ang:
+                        fig_cov_heat = plot_net_center_covariance_angular_muted_heatmap(
+                            value_map=payload["value_map"],
+                            player_location=player_loc,
+                            executed_action=executed_action,
+                            xskill_rad=float(after),
+                            show=False,
+                            title="Angular Covariance (Shot Origin)",
+                        )
+                        if fig_cov_heat is not None:
+                            st.pyplot(fig_cov_heat)
+
+                    with tab_cart:
+                        fig_cov_cart = plot_net_center_covariance_cartesian_standardized(
+                            xskill_rad=float(after),
+                            view_distance_ft=20.0,
+                            executed_action=executed_action,
+                            show=False,
+                            title="Standardized Cartesian (20 ft)",
+                        )
+                        st.pyplot(fig_cov_cart)
         except Exception as exc:
             st.error(f"Failed to render selected-shot visuals: {exc}")
 else:

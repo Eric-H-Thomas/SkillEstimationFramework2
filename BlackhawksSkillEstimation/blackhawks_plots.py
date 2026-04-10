@@ -2,8 +2,8 @@
 
 Bridges Blackhawks offline data (shot maps in parquet/npz, JEEDS CSVs) with the
 framework's existing hockey visualization functions so that angular heatmaps,
-rink diagrams, and convergence plots can be generated without a live
-experiment folder.
+rink diagrams, convergence plots, and covariance visualizations can be generated
+without a live experiment folder.
 
 Delegates to
 ------------
@@ -21,19 +21,29 @@ Typical usage
     from BlackhawksSkillEstimation.blackhawks_plots import (
         plot_shot_angular_heatmap,
         plot_shot_rink,
-        plot_player_convergence,
+        plot_net_center_covariance_cartesian_standardized,
+        plot_net_center_covariance_angular_muted_heatmap,
     )
-
-    # One shot's angular heatmap (needs its value_map and player location)
-    plot_shot_angular_heatmap(value_map, player_location, executed_action,
-                              save_path="Data/Hockey/players/player_950160/plots/angular/shot_42.png")
 
     # Rink diagram with scattered shots
     plot_shot_rink(player_locations, executed_actions,
                     save_path="Data/Hockey/players/player_950160/plots/rink/all_shots.png")
 
-    # Convergence (wraps plot_intermediate_estimates)
-    plot_player_convergence(csv_path="Data/Hockey/players/player_950160/logs/intermediate_estimates_20242025.csv")
+    # Standardized Cartesian covariance (fixed 20 ft view distance for cross-player comparison)
+    plot_net_center_covariance_cartesian_standardized(
+        xskill_rad=0.0523,
+        executed_action=[0.5, 2.1],
+        save_path="Data/Hockey/players/player_950160/plots/covariance_cartesian.png"
+    )
+
+    # Angular covariance with muted heatmap (from shot origin)
+    plot_net_center_covariance_angular_muted_heatmap(
+        value_map=xg_grid,
+        player_location=[45.0, -5.2],
+        executed_action=[0.5, 2.1],
+        xskill_rad=0.0523,
+        save_path="Data/Hockey/players/player_950160/plots/covariance_angular.png"
+    )
 """
 from __future__ import annotations
 
@@ -47,6 +57,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap
+from matplotlib.patches import Circle, Rectangle
 from scipy.interpolate import RegularGridInterpolator
 
 
@@ -109,7 +120,24 @@ def _is_trajectory_miss(exec_act: list | np.ndarray) -> bool:
 
 
 def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
-    """Build a brighter custom colormap for heatmap scatter plots."""
+    """Build a muted (brightened) custom colormap for heatmap scatter plots.
+
+    Reduces intensity by blending the base colormap with white, avoiding washout
+    and improving detail visibility in dense point clouds. Used in angular
+    covariance heatmap to emphasize structure over extreme color saturation.
+
+    Parameters
+    ----------
+    base : str, optional
+        Base colormap name (default: "gist_rainbow").
+    brightness : float, optional
+        Blend factor toward white (0.0=original, 1.0=white, default=0.4).
+
+    Returns
+    -------
+    ListedColormap
+        Muted colormap suitable for scatter heatmaps.
+    """
     n = plt.cm.jet.N
     cmap = (1.0 - brightness) * plt.get_cmap(base)(np.linspace(0.0, 1.0, n)) + brightness * np.ones((n, 4))
     return ListedColormap(cmap)
@@ -170,6 +198,357 @@ def _format_rink_title(
     if shot_count is not None:
         return f"{base} — {shot_count} shots"
     return base
+
+
+def _xskill_to_std_ft(
+    xskill_rad: float,
+    distance_to_net_ft: float,
+) -> float:
+    """Convert angular execution std-dev (rad) to net-face std-dev (ft).
+
+    Uses the pinhole relation: linear_std = tan(theta_std) * distance.
+    """
+    safe_xskill = max(0.0, float(xskill_rad))
+    safe_distance = max(1e-6, float(distance_to_net_ft))
+    return float(np.tan(safe_xskill) * safe_distance)
+
+
+def _net_yz_to_angular(
+    origin_xy: Sequence[float],
+    y: np.ndarray,
+    z: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Project net-face Y/Z points into angular (direction, elevation)."""
+    origin_x, origin_y = float(origin_xy[0]), float(origin_xy[1])
+    delta_x = _GOAL_LINE_X - origin_x
+    delta_y = y - origin_y
+    horizontal_distance = np.sqrt((delta_x ** 2) + (delta_y ** 2))
+
+    direction = np.arctan2(delta_y, delta_x)
+    elevation = np.arctan2(z, horizontal_distance)
+    return direction, elevation
+
+
+def _plot_projected_net_outline(ax: plt.Axes, player_location: Sequence[float], *, color: str = "gray", lw: float = 1.4) -> None:
+    """Draw the projected net rectangle in angular space."""
+    n_edge = 120
+    y_line = np.linspace(_NET_Y_MIN, _NET_Y_MAX, n_edge)
+    z_bottom = np.full_like(y_line, _NET_Z_MIN)
+    z_top = np.full_like(y_line, _NET_Z_MAX)
+    z_line = np.linspace(_NET_Z_MIN, _NET_Z_MAX, n_edge)
+    y_left = np.full_like(z_line, _NET_Y_MIN)
+    y_right = np.full_like(z_line, _NET_Y_MAX)
+
+    dir_bottom, ele_bottom = _net_yz_to_angular(player_location, y_line, z_bottom)
+    dir_top, ele_top = _net_yz_to_angular(player_location, y_line, z_top)
+    dir_left, ele_left = _net_yz_to_angular(player_location, y_left, z_line)
+    dir_right, ele_right = _net_yz_to_angular(player_location, y_right, z_line)
+
+    ax.plot(dir_bottom, ele_bottom, color=color, lw=lw)
+    ax.plot(dir_top, ele_top, color=color, lw=lw)
+    ax.plot(dir_left, ele_left, color=color, lw=lw)
+    ax.plot(dir_right, ele_right, color=color, lw=lw)
+
+
+def plot_net_center_covariance_cartesian_standardized(
+    xskill_rad: float,
+    *,
+    view_distance_ft: float = 20.0,
+    executed_action: Sequence[float] | None = None,
+    save_path: Path | str | None = None,
+    show: bool = False,
+    title: str | None = None,
+) -> plt.Figure:
+    """Plot a standardized net-face covariance circle centered on net center.
+
+    This is the head-on Cartesian view in goal-face coordinates (Y/Z), using
+    a fixed shooter distance from the net (default: 20 ft) so cross-player
+    comparisons share a common scale. The covariance std-dev is computed from
+    post-shot expected_execution_skill (xskill_rad in radians) via the pinhole
+    relation: linear_std_ft = tan(xskill_rad) * view_distance_ft.
+
+    Parameters
+    ----------
+    xskill_rad : float
+        Angular execution standard deviation in radians, typically from
+        post-shot expected_execution_skill in intermediate-estimate CSVs.
+    view_distance_ft : float, optional
+        Assumed shooter distance from net in feet (default 20.0). Used to
+        scale angular std-dev to net-face std-dev.
+    executed_action : Sequence[float] | None, optional
+        [Y, Z] coordinates of the executed shot on the net face (feet).
+        If provided, plotted as an X marker and checked for off-frame.
+    save_path : Path | str | None, optional
+        If provided, saves the figure to this path (dpi=150).
+    show : bool, optional
+        If True, displays the figure.
+    title : str | None, optional
+        Figure title; defaults to "Standardized Net-Face Covariance".
+
+    Returns
+    -------
+    plt.Figure
+        The matplotlib figure object (closed if show=False).
+    """
+    std_ft = _xskill_to_std_ft(xskill_rad=xskill_rad, distance_to_net_ft=view_distance_ft)
+
+    fig, ax = plt.subplots(figsize=(6.0, 5.5))
+
+    net_rect = Rectangle(
+        (_NET_Y_MIN, _NET_Z_MIN),
+        _NET_Y_MAX - _NET_Y_MIN,
+        _NET_Z_MAX - _NET_Z_MIN,
+        fill=False,
+        ec="black",
+        lw=2.0,
+    )
+    ax.add_patch(net_rect)
+
+    center_y, center_z = 0.0, 2.0
+    cov_circle = Circle(
+        (center_y, center_z),
+        radius=std_ft,
+        fill=False,
+        ec="#1f77b4",
+        lw=2.0,
+    )
+    ax.add_patch(cov_circle)
+    ax.scatter([center_y], [center_z], c="#1f77b4", s=45, zorder=5, label="Net center")
+
+    shot_in_frame = True
+    if executed_action is not None:
+        shot_y = float(executed_action[0])
+        shot_z = float(executed_action[1])
+        ax.scatter(
+            [shot_y],
+            [shot_z],
+            c="#111111",
+            marker="x",
+            s=70,
+            zorder=6,
+            label="Shot location",
+        )
+        shot_in_frame = (-5.0 <= shot_y <= 5.0) and (-0.5 <= shot_z <= 6.0)
+
+    ax.set_xlim(-5.0, 5.0)
+    ax.set_ylim(-0.5, 6.0)
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(alpha=0.25)
+    ax.set_xlabel("Y on net (ft)")
+    ax.set_ylabel("Z on net (ft)")
+
+    if title is None:
+        title = "Standardized Net-Face Covariance"
+    ax.set_title(title)
+
+    ax.text(
+        0.02,
+        0.98,
+        f"xskill={float(xskill_rad):.4f} rad",
+        transform=ax.transAxes,
+        fontsize=8,
+        va="top",
+        ha="left",
+        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+    )
+
+    if executed_action is not None and not shot_in_frame:
+        ax.text(
+            0.02,
+            0.90,
+            "shot location is off-frame",
+            transform=ax.transAxes,
+            fontsize=8,
+            va="top",
+            ha="left",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+        )
+
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.85)
+    plt.tight_layout()
+
+    if save_path is not None:
+        out_path = Path(save_path)
+        _ensure_dir(out_path.parent)
+        fig.savefig(out_path, bbox_inches="tight", dpi=150)
+
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+
+    return fig
+
+
+def plot_net_center_covariance_angular_muted_heatmap(
+    value_map: np.ndarray,
+    player_location: Sequence[float],
+    executed_action: Sequence[float],
+    xskill_rad: float,
+    *,
+    save_path: Path | str | None = None,
+    show: bool = False,
+    title: str | None = None,
+) -> plt.Figure | None:
+    """Plot the angular heatmap with muted colors and net-centered covariance circle.
+
+    This view shows expected xG in angular coordinates (direction, elevation from
+    the shot origin) as a muted heatmap scatter plot, with the projected net outline
+    and a covariance circle centered at the net's angular projection. The "muted"
+    colormap uses reduced brightness to avoid washout and improve visibility of
+    underlying detail.
+
+    The covariance circle radius is the post-shot execution std-dev (xskill_rad
+    in radians), plotted directly in angular space.
+
+    Parameters
+    ----------
+    value_map : np.ndarray
+        Expected xG grid from JEEDS (shape: 72×120 for Z∈[0,6]×Y∈[-5,5]).
+    player_location : Sequence[float]
+        [X, Y] coordinates of the shot origin (rink feet).
+    executed_action : Sequence[float]
+        [Y, Z] coordinates of the executed shot on the net face (feet).
+    xskill_rad : float
+        Angular execution standard deviation in radians (post-shot
+        expected_execution_skill from intermediate-estimate CSVs).
+    save_path : Path | str | None, optional
+        If provided, saves the figure to this path (dpi=150).
+    show : bool, optional
+        If True, displays the figure.
+    title : str | None, optional
+        Figure title; defaults to "Angular Covariance (Shot Origin)".
+
+    Returns
+    -------
+    plt.Figure | None
+        The matplotlib figure object (closed if show=False), or None if
+        player location is too close to the goal line (skips rendering).
+    """
+    heatmap = np.asarray(value_map)
+
+    (
+        dirs,
+        elevations,
+        listedTargetsAngular,
+        _gridTargetsAngular,
+        _listedTargetsAngular2YZ,
+        _gridTargetsAngular2YZ,
+        listedUtilitiesComputed,
+        _gridUtilitiesComputed,
+        executedActionAngular,
+        skip,
+        _,
+    ) = getAngularHeatmap(
+        heatmap,
+        np.asarray(player_location),
+        np.asarray(executed_action),
+        grid_y=_BH_Y,
+        grid_z=_BH_Z,
+    )
+
+    if skip:
+        print("Warning: muted angular heatmap skipped (player location too close to goal line).")
+        return None
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    cmap = _make_custom_cmap(brightness=0.78)
+    flat_utils = np.asarray(listedUtilitiesComputed, dtype=float).reshape(-1)
+    norm = plt.Normalize(0.0, float(np.nanmax(np.asarray(heatmap))))
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+
+    angular_points = np.asarray(listedTargetsAngular, dtype=float)
+    ax.scatter(
+        angular_points[:, 0],
+        angular_points[:, 1],
+        c=flat_utils,
+        cmap=cmap,
+        norm=norm,
+        s=20,
+        marker="s",
+        linewidths=0,
+    )
+    fig.colorbar(sm, ax=ax, shrink=0.9, pad=0.02, aspect=20)
+
+    _plot_projected_net_outline(ax, player_location, color="#303030", lw=1.6)
+
+    center_dir, center_ele = _net_yz_to_angular(
+        player_location,
+        np.array([0.0]),
+        np.array([2.0]),
+    )
+    cov_circle = Circle(
+        (float(center_dir[0]), float(center_ele[0])),
+        radius=max(0.0, float(xskill_rad)),
+        fill=False,
+        ec="#1f77b4",
+        lw=2.0,
+    )
+    ax.add_patch(cov_circle)
+    ax.scatter(center_dir, center_ele, c="#1f77b4", s=45, zorder=5, label="Net center")
+    ax.scatter(
+        [float(executedActionAngular[0])],
+        [float(executedActionAngular[1])],
+        c="#111111",
+        marker="x",
+        s=70,
+        zorder=6,
+        label="Shot location",
+    )
+
+    ax.set_xlim(float(np.min(dirs)), float(np.max(dirs)))
+    ax.set_ylim(float(np.min(elevations)), float(np.max(elevations)))
+    shot_in_frame = (
+        float(np.min(dirs)) <= float(executedActionAngular[0]) <= float(np.max(dirs))
+        and float(np.min(elevations)) <= float(executedActionAngular[1]) <= float(np.max(elevations))
+    )
+    ax.set_xlabel("Direction (rad)")
+    ax.set_ylabel("Elevation (rad)")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(alpha=0.18)
+
+    if title is None:
+        title = "Angular Covariance (Shot Origin)"
+    ax.set_title(title)
+
+    ax.text(
+        0.02,
+        0.98,
+        f"xskill={float(xskill_rad):.4f} rad",
+        transform=ax.transAxes,
+        fontsize=8,
+        va="top",
+        ha="left",
+        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+    )
+
+    if not shot_in_frame:
+        ax.text(
+            0.02,
+            0.90,
+            "shot location is off-frame",
+            transform=ax.transAxes,
+            fontsize=8,
+            va="top",
+            ha="left",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+        )
+
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.85)
+    plt.tight_layout()
+
+    if save_path is not None:
+        out_path = Path(save_path)
+        _ensure_dir(out_path.parent)
+        fig.savefig(out_path, bbox_inches="tight", dpi=150)
+
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+
+    return fig
 
 
 # ---------------------------------------------------------------------------
