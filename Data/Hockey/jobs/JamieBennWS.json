@@ -1,0 +1,56 @@
+{
+  "cluster_plan": {
+    "eligible_jobs": 1,
+    "jobs": [
+      {
+        "count": 620,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949910,
+        "season": -1,
+        "shot_group": "wristshot_snapshot"
+      }
+    ],
+    "sbatch_recommendation": {
+      "max_concurrent": 100,
+      "mem": "16G",
+      "time": "24:00:00"
+    },
+    "split_by_partition_value": false,
+    "split_mode": "all_selected_seasons_together",
+    "total_jobs": 1
+  },
+  "config_version": 1,
+  "created_at": "2026-04-11T00:00:30Z",
+  "data_filters": {
+    "player_ids": [
+      949910
+    ],
+    "seasons": [
+      20212022,
+      20222023,
+      20232024,
+      20242025
+    ],
+    "shot_groups": [
+      "wristshot_snapshot"
+    ]
+  },
+  "data_root": "Data/Hockey",
+  "estimator": {
+    "convergence_png_include_map": false,
+    "generate_convergence_png": true,
+    "num_execution_skills": 50,
+    "num_planning_skills": 100,
+    "per_season": false,
+    "rng_seed": 0,
+    "save_intermediate_csv": true
+  },
+  "output": {
+    "write_run_summary": false
+  },
+  "validation": {
+    "fail_policy": "skip",
+    "min_shots_per_job": 50
+  }
+}
