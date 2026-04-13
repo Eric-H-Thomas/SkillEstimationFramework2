@@ -792,11 +792,24 @@ def compute_agent_log_likelihood_grid(
         elif not np.allclose(reference_targets, target_actions):
             raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
 
-        # JEEDS currently uses a plain Gaussian density around each target when
-        # evaluating P(x | t, sigma), even though the simulator wraps executed
-        # actions back onto the board. We mirror that production update here so
-        # this standalone likelihood table stays aligned with the existing code.
-        action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
+        # The simulator wraps executed actions back onto the 1D board, so the
+        # likelihood must measure the shortest wrapped distance between each
+        # executed action and candidate target. For example, on [-10, 10], an
+        # executed action near -10 can be close to a target near +10 because the
+        # board edge wraps around.
+        raw_action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
+        board_limit = float(darts.BOARD_LIMIT)
+        board_width = 2.0 * board_limit
+        action_differences = np.where(
+            raw_action_differences > board_limit,
+            raw_action_differences - board_width,
+            raw_action_differences,
+        )  # shape: (N, T)
+        action_differences = np.where(
+            action_differences < -board_limit,
+            action_differences + board_width,
+            action_differences,
+        )  # shape: (N, T)
         gaussian_scale = float(sigma_hypothesis)
         gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
         pdf_matrix = gaussian_coeff * np.exp(-0.5 * np.square(action_differences / gaussian_scale))  # shape: (N, T)
@@ -822,7 +835,7 @@ def compute_agent_log_likelihood_grid(
             # as the observation likelihood contribution under (sigma, lambda).
             # The denominator is only the softmax normalizer. The Gaussian term
             # appears inside the numerator's sum, so there is no cancellation.
-            weighted_pdfs = pdf_matrix @ exponentiated_values  # shape: (N,)
+            weighted_pdfs = np.sum(pdf_matrix * exponentiated_values[None, :], axis=1)  # shape: (N,)
             observation_updates = weighted_pdfs / normalization  # shape: (N,)
 
             if np.any(observation_updates <= 0.0) or np.any(~np.isfinite(observation_updates)):
