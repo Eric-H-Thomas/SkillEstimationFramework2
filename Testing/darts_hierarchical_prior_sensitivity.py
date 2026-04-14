@@ -4,7 +4,7 @@ This script wraps ``Testing/darts_hierarchical_vs_jeeds.py`` and reruns the
 same simulated experiment under nine empirical-Bayes hyperprior conditions:
 
 - confidence: weak, default, strong
-- bias: default (approximately unbiased), slightly biased, significantly biased
+- bias: unbiased, slightly biased, significantly biased
 
 The goal is to answer a simple paper question: does the hierarchical method
 still help when the population-level hyperpriors are weaker, stronger, or
@@ -260,7 +260,7 @@ def build_sensitivity_conditions(args: argparse.Namespace) -> tuple[PriorSensiti
         ("strong", "strong", float(args.strong_std_multiplier)),
     ]
     bias_levels = [
-        ("default (approximately unbiased)", "default_approximately_unbiased", 0.0),
+        ("unbiased", "unbiased", 0.0),
         ("slightly biased", "slightly_biased", float(args.slight_bias_sd_units)),
         ("significantly biased", "significantly_biased", float(args.significant_bias_sd_units)),
     ]

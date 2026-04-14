@@ -143,8 +143,8 @@ DEFAULT_TRUE_POPULATION = TruePopulationConfig(
 )
 DEFAULT_HYPERPRIORS = HyperpriorConfig(
     # For simulation studies, the default hyperprior centers are aligned with
-    # the true data-generating population so the "default" sensitivity condition
-    # is as close to unbiased as possible. The prior variances still leave room
+    # the true data-generating population so the "unbiased" sensitivity condition
+    # has centered hyperpriors. The prior variances still leave room
     # for empirical Bayes to move when the observed data disagree.
     mean_vector=(DEFAULT_TRUE_POPULATION.mean_log_sigma, DEFAULT_TRUE_POPULATION.mean_log_lambda),
     covariance_diagonal=(0.6**2, 3.0**2),
