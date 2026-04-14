@@ -52,8 +52,10 @@ class HyperpriorConfig:
 
     mean_vector: tuple[float, float]
     covariance_diagonal: tuple[float, float]
-    a_eta: float
-    a_rho: float
+    log_tau_eta_mean: float
+    log_tau_eta_sd: float
+    log_tau_rho_mean: float
+    log_tau_rho_sd: float
     m_r: float
     s_r: float
 
@@ -132,20 +134,26 @@ DEFAULT_OUTPUT_DIR = Path("Testing/results/hierarchical_darts")
 DEFAULT_MIN_REGIONS = 2
 DEFAULT_MAX_REGIONS = 6
 DEFAULT_MIN_REGION_WIDTH = 0.25
-DEFAULT_HYPERPRIORS = HyperpriorConfig(
-    mean_vector=(0.41, -1.15),
-    covariance_diagonal=(0.6**2, 3.0**2),
-    a_eta=0.31,
-    a_rho=1.53,
-    m_r=-0.31,
-    s_r=0.75,
-)
 DEFAULT_TRUE_POPULATION = TruePopulationConfig(
     mean_log_sigma=math.log(1.5),
     mean_log_lambda=math.log(1.0),
     tau_eta=0.35,
     tau_rho=1.0,
     correlation=-0.5,
+)
+DEFAULT_HYPERPRIORS = HyperpriorConfig(
+    # For simulation studies, the default hyperprior centers are aligned with
+    # the true data-generating population so the "default" sensitivity condition
+    # is as close to unbiased as possible. The prior variances still leave room
+    # for empirical Bayes to move when the observed data disagree.
+    mean_vector=(DEFAULT_TRUE_POPULATION.mean_log_sigma, DEFAULT_TRUE_POPULATION.mean_log_lambda),
+    covariance_diagonal=(0.6**2, 3.0**2),
+    log_tau_eta_mean=math.log(DEFAULT_TRUE_POPULATION.tau_eta),
+    log_tau_eta_sd=0.5,
+    log_tau_rho_mean=math.log(DEFAULT_TRUE_POPULATION.tau_rho),
+    log_tau_rho_sd=0.5,
+    m_r=math.atanh(DEFAULT_TRUE_POPULATION.correlation),
+    s_r=0.75,
 )
 
 AGENT_LEVEL_FILENAME = "agent_level_results.csv"
@@ -936,8 +944,8 @@ def fit_population_hyperparameters_map(
 
     1. The marginal likelihood of each agent's JEEDS grid under the current
        population prior, plus
-    2. The paper's hyperpriors over ``mu``, ``tau_eta``, ``tau_rho``, and
-       ``zeta_r``.
+    2. The paper's hyperpriors over ``mu``, ``log_tau_eta``,
+       ``log_tau_rho``, and ``zeta_r``.
 
     We optimize in an unconstrained parameter space with SciPy:
 
@@ -974,10 +982,17 @@ def fit_population_hyperparameters_map(
     m0 = np.asarray(config.hyperpriors.mean_vector, dtype=float)  # shape: (2,)
     s0 = np.asarray(config.hyperpriors.covariance_matrix, dtype=float)  # shape: (2, 2)
     s0_inverse = np.linalg.inv(s0)
-    a_eta = float(config.hyperpriors.a_eta)
-    a_rho = float(config.hyperpriors.a_rho)
+    log_tau_eta_mean = float(config.hyperpriors.log_tau_eta_mean)
+    log_tau_eta_sd = float(config.hyperpriors.log_tau_eta_sd)
+    log_tau_rho_mean = float(config.hyperpriors.log_tau_rho_mean)
+    log_tau_rho_sd = float(config.hyperpriors.log_tau_rho_sd)
     m_r = float(config.hyperpriors.m_r)
     s_r = float(config.hyperpriors.s_r)
+
+    if log_tau_eta_sd <= 0.0 or log_tau_rho_sd <= 0.0:
+        raise ValueError("Log-tau prior standard deviations must be positive.")
+    if s_r <= 0.0:
+        raise ValueError("Correlation prior standard deviation must be positive.")
 
     def unpack_parameters(parameter_vector: np.ndarray) -> dict[str, Any]:
         """Map unconstrained search coordinates into model parameters."""
@@ -1043,7 +1058,8 @@ def fit_population_hyperparameters_map(
 
         mu_centered = unpacked["mu"] - m0  # shape: (2,)
         mu_log_prior = -0.5 * float(mu_centered @ s0_inverse @ mu_centered)
-        tau_log_prior = -0.5 * (unpacked["tau_eta"] / a_eta) ** 2 - 0.5 * (unpacked["tau_rho"] / a_rho) ** 2
+        tau_log_prior = -0.5 * ((parameter_vector[2] - log_tau_eta_mean) / log_tau_eta_sd) ** 2
+        tau_log_prior += -0.5 * ((parameter_vector[3] - log_tau_rho_mean) / log_tau_rho_sd) ** 2
         zeta_log_prior = -0.5 * ((unpacked["zeta_r"] - m_r) / s_r) ** 2
 
         total_log_posterior = marginal_log_likelihood + mu_log_prior + tau_log_prior + zeta_log_prior
@@ -1055,8 +1071,8 @@ def fit_population_hyperparameters_map(
         [
             m0[0],
             m0[1],
-            math.log(max(a_eta, 1e-6)),
-            math.log(max(a_rho, 1e-6)),
+            log_tau_eta_mean,
+            log_tau_rho_mean,
             m_r,
         ],
         dtype=float,
