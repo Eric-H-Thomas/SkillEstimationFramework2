@@ -7,6 +7,7 @@ Default output layout is centralized under:
 Data/Hockey/general_plots/stability/<txt_stem>/
   - per_player/
   - combined/
+    - population/
   - stability_summary.csv
 
 Usage examples
@@ -271,6 +272,219 @@ def _write_summary_csv(
             writer.writerow(row)
 
 
+def _consecutive_season_pairs(seasons: list[int]) -> list[tuple[int, int]]:
+    seasons_sorted = sorted(seasons)
+    return [(seasons_sorted[i], seasons_sorted[i + 1]) for i in range(len(seasons_sorted) - 1)]
+
+
+def _weighted_corr_and_fit(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    ws: np.ndarray,
+) -> tuple[float, float, float]:
+    """Return weighted Pearson r, weighted slope, weighted intercept."""
+    if xs.size < 2:
+        return float("nan"), float("nan"), float("nan")
+
+    w_sum = float(np.sum(ws))
+    if w_sum <= 0:
+        return float("nan"), float("nan"), float("nan")
+
+    mx = float(np.average(xs, weights=ws))
+    my = float(np.average(ys, weights=ws))
+
+    dx = xs - mx
+    dy = ys - my
+    cov = float(np.average(dx * dy, weights=ws))
+    varx = float(np.average(dx * dx, weights=ws))
+    vary = float(np.average(dy * dy, weights=ws))
+
+    if varx <= 0 or vary <= 0:
+        return float("nan"), float("nan"), float("nan")
+
+    r = cov / float(np.sqrt(varx * vary))
+    slope = cov / varx
+    intercept = my - slope * mx
+    return float(r), float(slope), float(intercept)
+
+
+def _collect_population_pair_points(
+    season_lookup: dict[int, dict[int, dict[str, float | int | str]]],
+    season_1: int,
+    season_2: int,
+    metric_key: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
+    xs: list[float] = []
+    ys: list[float] = []
+    ws: list[float] = []
+    n_used = 0
+    n_skipped = 0
+
+    for _pid, player_seasons in season_lookup.items():
+        row_1 = player_seasons.get(season_1)
+        row_2 = player_seasons.get(season_2)
+        if row_1 is None or row_2 is None:
+            n_skipped += 1
+            continue
+
+        x = float(row_1[metric_key])
+        y = float(row_2[metric_key])
+        shots_1 = int(row_1.get("shots", 0))
+        shots_2 = int(row_2.get("shots", 0))
+        w = float(min(shots_1, shots_2))
+
+        if not np.isfinite(x) or not np.isfinite(y) or w <= 0:
+            n_skipped += 1
+            continue
+
+        xs.append(x)
+        ys.append(y)
+        ws.append(w)
+        n_used += 1
+
+    return np.array(xs), np.array(ys), np.array(ws), n_used, n_skipped
+
+
+def _draw_population_scatter_ax(
+    ax: plt.Axes,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    ws: np.ndarray,
+    *,
+    season_1: int,
+    season_2: int,
+    metric_label: str,
+) -> tuple[float, float, float]:
+    label_1 = _season_label(season_1)
+    label_2 = _season_label(season_2)
+
+    # Set up axis labels and grid early.
+    ax.set_title(f"{label_1} vs {label_2}")
+    ax.set_xlabel(f"{label_1} {metric_label}")
+    ax.set_ylabel(f"{label_2} {metric_label}")
+    ax.grid(alpha=0.25)
+
+    if xs.size == 0:
+        ax.text(0.5, 0.5, "No overlapping players", ha="center", va="center", transform=ax.transAxes)
+        return float("nan"), float("nan"), float("nan")
+
+    r, slope, intercept = _weighted_corr_and_fit(xs, ys, ws)
+    ax.scatter(xs, ys, s=36, alpha=0.75)
+
+    mn = float(min(np.min(xs), np.min(ys)))
+    mx = float(max(np.max(xs), np.max(ys)))
+    span = max(mx - mn, 1e-12)
+    pad = span * 0.05
+    lo = mn - pad
+    hi = mx + pad
+
+    if np.isfinite(slope) and np.isfinite(intercept):
+        x_line = np.array([lo, hi])
+        y_line = slope * x_line + intercept
+        ax.plot(x_line, y_line, color="#CC0000", lw=2.0, ls="--")
+
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal", adjustable="box")
+
+    r_text = f"weighted r={r:.3f}" if np.isfinite(r) else "weighted r=N/A"
+    ax.text(
+        0.02,
+        0.98,
+        r_text,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        color="#333333",
+        bbox={"facecolor": "white", "alpha": 0.65, "edgecolor": "none", "pad": 2.0},
+    )
+
+    return r, slope, intercept
+
+
+def _plot_population_pair_scatter(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    ws: np.ndarray,
+    *,
+    season_1: int,
+    season_2: int,
+    metric_label: str,
+    output_path: Path,
+) -> tuple[float, float, float]:
+    fig, ax = plt.subplots(figsize=(6.0, 6.0))
+    r, slope, intercept = _draw_population_scatter_ax(
+        ax,
+        xs,
+        ys,
+        ws,
+        season_1=season_1,
+        season_2=season_2,
+        metric_label=metric_label,
+    )
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return r, slope, intercept
+
+
+def _plot_population_pairs_multipanel(
+    pair_payloads: list[dict[str, object]],
+    *,
+    metric_label: str,
+    output_path: Path,
+) -> None:
+    if not pair_payloads:
+        return
+
+    n = len(pair_payloads)
+    fig, axes = plt.subplots(1, n, figsize=(6.0 * n, 5.8))
+    if n == 1:
+        axes = [axes]
+
+    for ax, payload in zip(axes, pair_payloads):
+        _draw_population_scatter_ax(
+            ax,
+            payload["xs"],
+            payload["ys"],
+            payload["ws"],
+            season_1=int(payload["season_1"]),
+            season_2=int(payload["season_2"]),
+            metric_label=metric_label,
+        )
+
+    fig.suptitle("Population Stability: Consecutive Season Correlations", fontsize=14)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _write_population_stats_csv(
+    rows: list[dict[str, object]],
+    output_csv: Path,
+) -> None:
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    fields = [
+        "season_1",
+        "season_2",
+        "pair_label",
+        "metric",
+        "weighted_r",
+        "weighted_slope",
+        "weighted_intercept",
+        "n_used",
+        "n_skipped",
+    ]
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
 def _expand_limits_if_needed(
     base_limits: tuple[float, float] | None,
     values: list[float],
@@ -319,6 +533,7 @@ def run_stability_plots_from_txt(
     run_dir = output_root / run_name
     per_player_dir = run_dir / "per_player"
     combined_dir = run_dir / "combined"
+    population_dir = run_dir / "population"
     execution_limits = (0.04, 0.14)
     rationality_limits = (1.0, 2.2)
 
@@ -439,12 +654,71 @@ def run_stability_plots_from_txt(
     summary_csv = run_dir / "stability_summary.csv"
     _write_summary_csv(summary_rows=summary_rows, output_csv=summary_csv)
 
+    # Population-level stability: consecutive season pair correlations.
+    season_lookup = {pid: {int(r["season"]): r for r in rows} for pid, rows in all_rows_by_player.items()}
+    pair_payloads: list[dict[str, object]] = []
+    pair_stats_rows: list[dict[str, object]] = []
+    for season_1, season_2 in _consecutive_season_pairs(seasons_resolved):
+        xs, ys, ws, n_used, n_skipped = _collect_population_pair_points(
+            season_lookup,
+            season_1,
+            season_2,
+            "execution_skill",
+        )
+
+        pair_png = population_dir / f"execution_scatter_{season_1}_vs_{season_2}.png"
+        weighted_r, weighted_slope, weighted_intercept = _plot_population_pair_scatter(
+            xs,
+            ys,
+            ws,
+            season_1=season_1,
+            season_2=season_2,
+            metric_label="Final expected execution skill (rad)",
+            output_path=pair_png,
+        )
+
+        pair_payloads.append(
+            {
+                "season_1": season_1,
+                "season_2": season_2,
+                "xs": xs,
+                "ys": ys,
+                "ws": ws,
+            }
+        )
+
+        pair_stats_rows.append(
+            {
+                "season_1": season_1,
+                "season_2": season_2,
+                "pair_label": f"{season_1}_vs_{season_2}",
+                "metric": "execution_skill",
+                "weighted_r": f"{weighted_r:.6f}" if np.isfinite(weighted_r) else "",
+                "weighted_slope": f"{weighted_slope:.6f}" if np.isfinite(weighted_slope) else "",
+                "weighted_intercept": f"{weighted_intercept:.6f}" if np.isfinite(weighted_intercept) else "",
+                "n_used": n_used,
+                "n_skipped": n_skipped,
+            }
+        )
+
+    multipanel_png = population_dir / "execution_scatter_consecutive_pairs.png"
+    _plot_population_pairs_multipanel(
+        pair_payloads,
+        metric_label="Final expected execution skill (rad)",
+        output_path=multipanel_png,
+    )
+
+    population_stats_csv = population_dir / "population_pair_stats.csv"
+    _write_population_stats_csv(pair_stats_rows, population_stats_csv)
+
     return {
         "players_file": str(players_file),
         "run_dir": str(run_dir),
         "per_player_dir": str(per_player_dir),
         "combined_dir": str(combined_dir),
+        "population_dir": str(population_dir),
         "summary_csv": str(summary_csv),
+        "population_stats_csv": str(population_stats_csv),
         "player_count": len(player_ids),
         "seasons": seasons_resolved,
         "execution_ylim": execution_limits,
@@ -507,6 +781,8 @@ def main() -> None:
     print("Stability plots complete")
     print(f"Run directory: {result['run_dir']}")
     print(f"Summary CSV:   {result['summary_csv']}")
+    print(f"Population:    {result['population_dir']}")
+    print(f"Pair stats:    {result['population_stats_csv']}")
     print(f"Players:       {result['player_count']}")
     print(f"Seasons:       {result['seasons']}")
     print(f"Skill ylim:    {result['execution_ylim']}")

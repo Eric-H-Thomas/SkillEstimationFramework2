@@ -1,0 +1,3751 @@
+{
+  "cluster_plan": {
+    "eligible_jobs": 278,
+    "jobs": [
+      {
+        "count": 59,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949165,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 122,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949165,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 55,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949944,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 174,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949944,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 59,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949540,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 95,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949540,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 80,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949602,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 163,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949602,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949104,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 146,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949104,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 99,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950171,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 159,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950171,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 95,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949060,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 117,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949060,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 58,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932303,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 59,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932303,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 49,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932659,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 112,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932659,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 207,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950159,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 331,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950159,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 83,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950177,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 91,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950177,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 49,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949968,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 134,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949968,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 73,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950064,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 156,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950064,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 81,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949624,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949624,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 151,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949167,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 340,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949167,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 109,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949572,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949572,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 950158,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 950158,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 92,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948501,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 126,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948501,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 47,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950206,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 133,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950206,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948705,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 119,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948705,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 176,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950191,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 281,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950191,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 148,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932701,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 291,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932701,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 72,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932591,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 68,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932591,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 154,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950202,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 209,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950202,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 102,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948446,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 105,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948446,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 931234,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 931234,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 10,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 931895,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 68,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 931895,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 178,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950203,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 374,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950203,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 4,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948889,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 42,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948889,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 105,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932629,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 43,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932629,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 126,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932731,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 119,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932731,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 70,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950183,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 281,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950183,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 105,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932713,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 91,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932713,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 85,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932705,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 90,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932705,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 113,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950122,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 175,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950122,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 110,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 918330,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 136,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 918330,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 134,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949947,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 156,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949947,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948327,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948327,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 121,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950036,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 172,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950036,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 150,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949649,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 154,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949649,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 118,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950181,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 244,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950181,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 67,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950054,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 133,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950054,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 170,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949526,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 247,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949526,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 127,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948549,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 154,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948549,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 46,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 947199,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 165,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 947199,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 132,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950161,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 262,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950161,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 173,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949646,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 290,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949646,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 127,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948686,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 214,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948686,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 64,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949876,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 117,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949876,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 117,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932597,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 174,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932597,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 248,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949932,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 316,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949932,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949557,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 129,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949557,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 124,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950070,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 224,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950070,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 232,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950000,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 311,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950000,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 195,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950020,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 160,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950020,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 200,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950001,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 256,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950001,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 101,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948983,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 137,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948983,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 6,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949266,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 111,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949266,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 68,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950149,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 218,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950149,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 103,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949671,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 3,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949671,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 140,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949742,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 158,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949742,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 146,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949919,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 185,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949919,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932727,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 228,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932727,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 140,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950201,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 102,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950201,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 102,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932716,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 169,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932716,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 77,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949388,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 87,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949388,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 169,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950180,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 169,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950180,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 950157,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 50,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950157,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 70,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950170,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 178,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950170,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 162,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950016,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 270,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950016,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 114,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932723,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 206,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932723,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 189,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950145,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 206,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950145,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 5,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949511,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 76,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949511,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950163,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 311,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950163,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 21,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932362,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 67,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932362,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 3,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948456,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 200,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948456,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 98,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949317,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949317,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 213,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950164,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 317,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950164,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 214,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950160,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 426,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950160,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948320,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 45,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948320,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 152,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950200,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 235,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950200,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 118,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949759,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 270,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949759,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 47,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950040,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 141,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950040,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 58,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949402,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949402,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 53,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949982,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 70,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949982,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949996,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 103,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949996,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948896,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 1,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948896,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 145,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932664,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 200,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932664,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 190,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950045,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 218,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950045,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 219,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950185,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 289,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950185,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 90,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949921,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949921,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 115,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949049,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 218,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949049,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949707,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 86,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949707,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 135,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950039,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 159,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950039,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 80,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950135,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 66,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950135,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 946405,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 122,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 946405,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 120,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932668,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932668,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 160,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950205,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 175,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950205,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 83,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949733,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 214,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949733,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 127,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950119,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 161,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950119,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 3,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949952,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 138,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949952,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950053,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 185,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950053,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 197,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932725,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 213,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932725,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 76,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 907469,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 141,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 907469,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 86,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949903,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 83,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949903,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 72,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932254,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932254,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 138,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948872,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948872,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 223,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950014,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 304,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950014,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 221,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950162,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 275,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950162,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 166,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949782,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 238,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949782,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 8,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 947611,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 53,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 947611,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 1,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949085,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 59,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949085,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 168,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949725,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 207,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949725,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 88,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932704,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 236,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932704,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948457,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948457,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 125,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948963,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948963,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950126,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 174,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950126,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 84,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949703,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 135,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949703,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 78,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949248,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949248,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 81,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948879,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 160,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948879,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 180,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950141,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 234,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950141,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 65,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950103,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 97,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950103,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 147,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949662,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 192,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949662,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 122,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949910,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 191,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949910,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 78,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949553,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 88,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949553,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950178,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 167,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950178,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 932558,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 932558,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 168,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950024,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 236,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950024,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 57,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950013,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 118,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950013,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 120,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949997,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 142,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949997,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 141,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948559,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 112,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948559,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 7,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950048,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 16,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950048,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 119,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949133,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 187,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949133,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948843,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 106,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948843,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 135,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950195,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 199,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950195,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 84,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949444,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 89,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949444,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 243,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950021,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 366,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950021,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 152,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949722,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 163,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949722,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 78,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949543,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 159,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949543,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 139,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949738,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 212,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949738,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 137,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932736,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 140,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932736,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949999,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 133,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949999,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 100,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949672,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 55,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949672,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949243,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 51,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949243,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 64,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948984,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948984,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 118,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932433,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 136,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932433,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 167,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950061,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 182,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950061,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 120,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948897,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 62,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948897,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950005,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 195,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950005,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 92,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949962,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 296,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949962,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950033,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 17,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950033,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 210,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950182,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 331,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950182,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 37,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949055,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 124,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949055,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 54,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 898605,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 117,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 898605,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 108,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949946,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 88,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949946,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949993,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 155,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949993,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 153,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950012,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 232,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950012,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 86,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949992,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 251,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949992,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 23,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950025,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 94,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950025,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 121,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949723,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 103,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949723,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 3,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949567,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 70,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949567,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 187,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948838,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 176,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948838,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 114,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949650,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 225,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949650,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 105,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949309,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 192,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949309,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 91,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949913,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 162,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949913,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 96,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949680,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 113,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949680,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 244,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950193,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 303,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950193,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949280,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949280,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 102,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950148,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 209,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950148,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 947593,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 947593,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 74,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948972,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 87,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948972,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950115,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 195,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950115,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 201,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950069,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 289,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950069,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 239,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932724,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 181,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932724,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 187,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949905,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 294,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949905,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 94,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950138,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950138,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 117,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 231265,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 121,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 231265,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 81,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932575,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 120,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932575,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 110,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949312,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 158,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949312,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 116,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949840,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949840,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 138,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949986,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 299,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949986,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 31,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 946959,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 64,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 946959,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 167,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949990,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 406,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949990,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 18,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949961,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 20,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949961,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949974,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949974,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 4,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950052,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 123,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950052,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 81,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948036,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 125,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948036,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 87,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932589,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 147,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932589,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 47,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949938,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 116,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949938,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 74,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948855,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 83,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948855,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 88,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950197,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 139,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950197,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 93,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950042,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 100,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950042,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 154,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950130,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 183,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950130,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 34,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950154,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 72,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 950154,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 82,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949915,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 141,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949915,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 103,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949585,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 132,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949585,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 30,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 898539,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 55,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 898539,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 81,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949556,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 159,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949556,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 232,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950169,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 259,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950169,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 162,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950094,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 143,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950094,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 243,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950173,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 247,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950173,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 95,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949433,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 71,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949433,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 163,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949316,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 161,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949316,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 165,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950133,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 142,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950133,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 142,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950194,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 207,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950194,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 185,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949929,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 245,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949929,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949698,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 949698,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 83,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949258,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 88,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949258,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 60,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932695,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 1,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932695,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 191,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950144,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 303,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950144,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 119,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950029,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 189,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950029,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 179,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949892,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 202,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949892,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 202,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949582,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 262,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949582,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 0,
+        "eligible": false,
+        "missing_local_data": true,
+        "player_id": 948317,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 2,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948317,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 9,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 949513,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 129,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 949513,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 116,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950121,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 238,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950121,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 91,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 948796,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 131,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 948796,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 60,
+        "eligible": false,
+        "missing_local_data": false,
+        "player_id": 932543,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot"
+      },
+      {
+        "count": 152,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 932543,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot"
+      }
+    ],
+    "sbatch_recommendation": {
+      "max_concurrent": 100,
+      "mem": "16G",
+      "time": "24:00:00"
+    },
+    "split_by_partition_value": false,
+    "split_mode": "per_season",
+    "total_jobs": 436
+  },
+  "config_version": 1,
+  "created_at": "2026-04-15T23:51:48Z",
+  "data_filters": {
+    "player_ids": [
+      949165,
+      949944,
+      949540,
+      949602,
+      949104,
+      950171,
+      949060,
+      932303,
+      932659,
+      950159,
+      950177,
+      949968,
+      950064,
+      949624,
+      949167,
+      949572,
+      950158,
+      948501,
+      950206,
+      948705,
+      950191,
+      932701,
+      932591,
+      950202,
+      948446,
+      931234,
+      931895,
+      950203,
+      948889,
+      932629,
+      932731,
+      950183,
+      932713,
+      932705,
+      950122,
+      918330,
+      949947,
+      948327,
+      950036,
+      949649,
+      950181,
+      950054,
+      949526,
+      948549,
+      947199,
+      950161,
+      949646,
+      948686,
+      949876,
+      932597,
+      949932,
+      949557,
+      950070,
+      950000,
+      950020,
+      950001,
+      948983,
+      949266,
+      950149,
+      949671,
+      949742,
+      949919,
+      932727,
+      950201,
+      932716,
+      949388,
+      950180,
+      950157,
+      950170,
+      950016,
+      932723,
+      950145,
+      949511,
+      950163,
+      932362,
+      948456,
+      949317,
+      950164,
+      950160,
+      948320,
+      950200,
+      949759,
+      950040,
+      949402,
+      949982,
+      949996,
+      948896,
+      932664,
+      950045,
+      950185,
+      949921,
+      949049,
+      949707,
+      950039,
+      950135,
+      946405,
+      932668,
+      950205,
+      949733,
+      950119,
+      949952,
+      950053,
+      932725,
+      907469,
+      949903,
+      932254,
+      948872,
+      950014,
+      950162,
+      949782,
+      947611,
+      949085,
+      949725,
+      932704,
+      948457,
+      948963,
+      950126,
+      949703,
+      949248,
+      948879,
+      950141,
+      950103,
+      949662,
+      949910,
+      949553,
+      950178,
+      932558,
+      950024,
+      950013,
+      949997,
+      948559,
+      950048,
+      949133,
+      948843,
+      950195,
+      949444,
+      950021,
+      949722,
+      949543,
+      949738,
+      932736,
+      949999,
+      949672,
+      949243,
+      948984,
+      932433,
+      950061,
+      948897,
+      950005,
+      949962,
+      950033,
+      950182,
+      949055,
+      898605,
+      949946,
+      949993,
+      950012,
+      949992,
+      950025,
+      949723,
+      949567,
+      948838,
+      949650,
+      949309,
+      949913,
+      949680,
+      950193,
+      949280,
+      950148,
+      947593,
+      948972,
+      950115,
+      950069,
+      932724,
+      949905,
+      950138,
+      231265,
+      932575,
+      949312,
+      949840,
+      949986,
+      946959,
+      949990,
+      949961,
+      949974,
+      950052,
+      948036,
+      932589,
+      949938,
+      948855,
+      950197,
+      950042,
+      950130,
+      950154,
+      949915,
+      949585,
+      898539,
+      949556,
+      950169,
+      950094,
+      950173,
+      949433,
+      949316,
+      950133,
+      950194,
+      949929,
+      949698,
+      949258,
+      932695,
+      950144,
+      950029,
+      949892,
+      949582,
+      948317,
+      949513,
+      950121,
+      948796,
+      932543
+    ],
+    "seasons": [
+      20212022,
+      20222023
+    ],
+    "shot_groups": [
+      "wristshot_snapshot"
+    ]
+  },
+  "data_root": "Data/Hockey",
+  "estimator": {
+    "convergence_png_include_map": false,
+    "generate_convergence_png": true,
+    "num_execution_skills": 250,
+    "num_planning_skills": 250,
+    "per_season": true,
+    "rng_seed": 0,
+    "save_intermediate_csv": true
+  },
+  "output": {
+    "write_run_summary": false
+  },
+  "validation": {
+    "fail_policy": "skip",
+    "min_shots_per_job": 100
+  }
+}
