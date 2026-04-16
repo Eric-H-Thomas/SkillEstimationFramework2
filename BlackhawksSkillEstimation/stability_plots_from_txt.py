@@ -12,8 +12,10 @@ Data/Hockey/general_plots/stability/<txt_stem>/
 
 Usage examples
 --------------
-python -m BlackhawksSkillEstimation.stability_plots_from_txt \
-  --players-file Data/Hockey/stability9.txt
+py -m BlackhawksSkillEstimation.stability_plots_from_txt \
+  --players-file Data/Hockey/forwards23-25.txt \
+  --seasons 20212022 20222023 20232024 20242025 \
+  --also-save-under-player-dirs 
 
 python -m BlackhawksSkillEstimation.stability_plots_from_txt \
   --players-file Data/Hockey/stability9.txt \

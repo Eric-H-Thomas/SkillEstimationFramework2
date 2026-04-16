@@ -18,17 +18,10 @@ Implemented so far
 	(`st.cache_data` and `st.cache_resource`).
 - The app now renders from cached in-memory shot blobs (`df` + `shot_maps`)
 	to avoid reloading parquet/npz on every plot request.
-- `BlackhawksApp/benchmark_loaders.py`: benchmark current parquet+npz loader performance.
 
 Run:
 
 ```bash
 pip install -r BlackhawksApp/requirements.txt
 python -m streamlit run BlackhawksApp/app.py
-```
-
-Benchmark loader performance:
-
-```bash
-python -m BlackhawksApp.benchmark_loaders --player 950160 --seasons 20242025 --repeats 3
 ```
