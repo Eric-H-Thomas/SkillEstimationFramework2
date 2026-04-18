@@ -213,6 +213,23 @@ def _xskill_to_std_ft(
     return float(np.tan(safe_xskill) * safe_distance)
 
 
+def _coverage_to_sigma_scale(coverage: float) -> float:
+    """Convert 2D isotropic Gaussian coverage to a radial sigma multiplier.
+
+    For radius r = k*sigma in 2D, coverage is: p = 1 - exp(-k^2/2).
+    Rearranging gives: k = sqrt(-2 * ln(1-p)).
+    """
+    p = float(coverage)
+    if not (0.0 < p < 1.0):
+        raise ValueError(f"coverage must be in (0, 1), got {coverage}")
+    return float(np.sqrt(-2.0 * np.log(1.0 - p)))
+
+
+def _one_sigma_2d_coverage() -> float:
+    """Return probability mass inside a 1-sigma radius for 2D isotropic Gaussian."""
+    return float(1.0 - np.exp(-0.5))
+
+
 def _net_yz_to_angular(
     origin_xy: Sequence[float],
     y: np.ndarray,
@@ -255,6 +272,8 @@ def plot_net_center_covariance_cartesian_standardized(
     *,
     view_distance_ft: float = 20.0,
     executed_action: Sequence[float] | None = None,
+    extra_coverage_levels: Sequence[float] = (0.68, 0.95),
+    show_coverage_note: bool = True,
     save_path: Path | str | None = None,
     show: bool = False,
     title: str | None = None,
@@ -278,6 +297,12 @@ def plot_net_center_covariance_cartesian_standardized(
     executed_action : Sequence[float] | None, optional
         [Y, Z] coordinates of the executed shot on the net face (feet).
         If provided, plotted as an X marker and checked for off-frame.
+    extra_coverage_levels : Sequence[float], optional
+        Additional 2D Gaussian coverage contours to draw as dashed circles
+        (e.g., ``(0.68, 0.95)``). Each value must be in (0, 1).
+    show_coverage_note : bool, optional
+        If True (default), annotate the plot with 1-sigma 2D coverage and
+        the sigma multipliers used for extra contours.
     save_path : Path | str | None, optional
         If provided, saves the figure to this path (dpi=150).
     show : bool, optional
@@ -311,8 +336,35 @@ def plot_net_center_covariance_cartesian_standardized(
         fill=False,
         ec="#1f77b4",
         lw=2.0,
+        label="1sigma radius",
     )
     ax.add_patch(cov_circle)
+
+    contour_colors = ["#ff8c00", "#cc0000", "#6a3d9a", "#2e8b57"]
+    contour_text_parts: list[str] = []
+    for idx, coverage in enumerate(extra_coverage_levels):
+        try:
+            scale = _coverage_to_sigma_scale(float(coverage))
+        except ValueError:
+            continue
+        color = contour_colors[idx % len(contour_colors)]
+        radius = std_ft * scale
+        ax.add_patch(
+            Circle(
+                (center_y, center_z),
+                radius=radius,
+                fill=False,
+                ec=color,
+                lw=1.8,
+                ls="--",
+                alpha=0.9,
+                label=f"{int(round(coverage * 100.0))}% contour",
+            )
+        )
+        contour_text_parts.append(
+            f"{int(round(coverage * 100.0))}%={scale:.2f}sigma"
+        )
+
     ax.scatter([center_y], [center_z], c="#1f77b4", s=45, zorder=5, label="Net center")
 
     shot_in_frame = True
@@ -352,10 +404,26 @@ def plot_net_center_covariance_cartesian_standardized(
         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
     )
 
-    if executed_action is not None and not shot_in_frame:
+    if show_coverage_note:
+        base_cov = _one_sigma_2d_coverage() * 100.0
+        lines = [f"1sigma 2D coverage: {base_cov:.1f}%"]
+        if contour_text_parts:
+            lines.append("; ".join(contour_text_parts))
         ax.text(
             0.02,
             0.90,
+            "\n".join(lines),
+            transform=ax.transAxes,
+            fontsize=8,
+            va="top",
+            ha="left",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+        )
+
+    if executed_action is not None and not shot_in_frame:
+        ax.text(
+            0.02,
+            0.82 if show_coverage_note else 0.90,
             "shot location is off-frame",
             transform=ax.transAxes,
             fontsize=8,
@@ -386,6 +454,8 @@ def plot_net_center_covariance_angular_muted_heatmap(
     executed_action: Sequence[float],
     xskill_rad: float,
     *,
+    extra_coverage_levels: Sequence[float] = (0.68, 0.95),
+    show_coverage_note: bool = True,
     save_path: Path | str | None = None,
     show: bool = False,
     title: str | None = None,
@@ -412,6 +482,12 @@ def plot_net_center_covariance_angular_muted_heatmap(
     xskill_rad : float
         Angular execution standard deviation in radians (post-shot
         expected_execution_skill from intermediate-estimate CSVs).
+    extra_coverage_levels : Sequence[float], optional
+        Additional 2D Gaussian coverage contours to draw as dashed circles
+        (e.g., ``(0.68, 0.95)``). Each value must be in (0, 1).
+    show_coverage_note : bool, optional
+        If True (default), annotate the plot with 1-sigma 2D coverage and
+        the sigma multipliers used for extra contours.
     save_path : Path | str | None, optional
         If provided, saves the figure to this path (dpi=150).
     show : bool, optional
@@ -484,8 +560,34 @@ def plot_net_center_covariance_angular_muted_heatmap(
         fill=False,
         ec="#1f77b4",
         lw=2.0,
+        label="1sigma radius",
     )
     ax.add_patch(cov_circle)
+
+    contour_colors = ["#ff8c00", "#cc0000", "#6a3d9a", "#2e8b57"]
+    contour_text_parts: list[str] = []
+    for idx, coverage in enumerate(extra_coverage_levels):
+        try:
+            scale = _coverage_to_sigma_scale(float(coverage))
+        except ValueError:
+            continue
+        color = contour_colors[idx % len(contour_colors)]
+        ax.add_patch(
+            Circle(
+                (float(center_dir[0]), float(center_ele[0])),
+                radius=max(0.0, float(xskill_rad) * scale),
+                fill=False,
+                ec=color,
+                lw=1.8,
+                ls="--",
+                alpha=0.9,
+                label=f"{int(round(coverage * 100.0))}% contour",
+            )
+        )
+        contour_text_parts.append(
+            f"{int(round(coverage * 100.0))}%={scale:.2f}sigma"
+        )
+
     ax.scatter(center_dir, center_ele, c="#1f77b4", s=45, zorder=5, label="Net center")
     ax.scatter(
         [float(executedActionAngular[0])],
@@ -523,10 +625,26 @@ def plot_net_center_covariance_angular_muted_heatmap(
         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
     )
 
-    if not shot_in_frame:
+    if show_coverage_note:
+        base_cov = _one_sigma_2d_coverage() * 100.0
+        lines = [f"1sigma 2D coverage: {base_cov:.1f}%"]
+        if contour_text_parts:
+            lines.append("; ".join(contour_text_parts))
         ax.text(
             0.02,
             0.90,
+            "\n".join(lines),
+            transform=ax.transAxes,
+            fontsize=8,
+            va="top",
+            ha="left",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.85),
+        )
+
+    if not shot_in_frame:
+        ax.text(
+            0.02,
+            0.82 if show_coverage_note else 0.90,
             "shot location is off-frame",
             transform=ax.transAxes,
             fontsize=8,
