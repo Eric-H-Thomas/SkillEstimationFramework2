@@ -7,12 +7,12 @@ Default output layout is centralized under:
 Data/Hockey/general_plots/stability/<txt_stem>/
   - per_player/
   - combined/
-    - population/
+  - population/
   - stability_summary.csv
 
 Usage examples
 --------------
-py -m BlackhawksSkillEstimation.stability_plots_from_txt \
+python -m BlackhawksSkillEstimation.stability_plots_from_txt \
   --players-file Data/Hockey/forwards23-25.txt \
   --seasons 20212022 20222023 20232024 20242025 \
   --also-save-under-player-dirs 
@@ -21,6 +21,11 @@ python -m BlackhawksSkillEstimation.stability_plots_from_txt \
   --players-file Data/Hockey/stability9.txt \
   --jobs-config Data/Hockey/jobs/stability9.json \
   --shot-group wristshot_snapshot
+
+python -m BlackhawksSkillEstimation.stability_plots_from_txt \
+  --players-file Data/Hockey/forwards23-25.txt \
+  --min-observations 150 \
+  --output-root Data/Hockey/general_plots/stability/min150_custom
 """
 from __future__ import annotations
 
@@ -109,6 +114,7 @@ def _final_values_for_player(
     seasons: list[int],
     data_root: Path,
     shot_group: str,
+    min_observations: int = 0,
 ) -> tuple[list[dict[str, float | int | str]], list[int]]:
     rows: list[dict[str, float | int | str]] = []
     missing: list[int] = []
@@ -131,13 +137,18 @@ def _final_values_for_player(
             missing.append(season)
             continue
 
+        shots = int(data["shot_count"][-1])
+        if shots < min_observations:
+            missing.append(season)
+            continue
+
         rows.append(
             {
                 "player_id": player_id,
                 "season": season,
                 "execution_skill": float(data["expected_execution_skill"][-1]),
                 "log10_rationality": float(data["log10_expected_rationality"][-1]),
-                "shots": int(data["shot_count"][-1]),
+                "shots": shots,
             }
         )
 
@@ -523,16 +534,18 @@ def run_stability_plots_from_txt(
     seasons: list[int] | None = None,
     jobs_config: Path | None = None,
     output_root: Path = Path("Data/Hockey/general_plots/stability"),
+    nest_under_players_file_stem: bool = True,
     include_per_player: bool = True,
     include_combined: bool = True,
     also_save_under_player_dirs: bool = False,
     annotate_variability: bool = True,
+    min_observations: int = 0,
 ) -> dict[str, object]:
     player_ids = _read_player_ids(players_file)
     seasons_resolved = _resolve_seasons(seasons, jobs_config, data_root, player_ids, shot_group)
 
     run_name = players_file.stem
-    run_dir = output_root / run_name
+    run_dir = (output_root / run_name) if nest_under_players_file_stem else output_root
     per_player_dir = run_dir / "per_player"
     combined_dir = run_dir / "combined"
     population_dir = run_dir / "population"
@@ -552,6 +565,7 @@ def run_stability_plots_from_txt(
             seasons=seasons_resolved,
             data_root=data_root,
             shot_group=shot_group,
+            min_observations=min_observations,
         )
         all_rows_by_player[pid] = rows
 
@@ -725,6 +739,7 @@ def run_stability_plots_from_txt(
         "seasons": seasons_resolved,
         "execution_ylim": execution_limits,
         "rationality_ylim": rationality_limits,
+        "min_observations": min_observations,
     }
 
 
@@ -744,7 +759,19 @@ def main() -> None:
         "--output-root",
         type=Path,
         default=Path("Data/Hockey/general_plots/stability"),
-        help="Root output directory. Outputs go to <output-root>/<players-file-stem>/...",
+        help=(
+            "Output directory. By default, outputs go to <output-root>/<players-file-stem>/. "
+            "If you pass a custom output-root, outputs are written directly there."
+        ),
+    )
+    parser.add_argument(
+        "--min-observations",
+        type=int,
+        default=0,
+        help=(
+            "Minimum final shot_count required per player-season to include that season. "
+            "Seasons below threshold are treated as missing."
+        ),
     )
     parser.add_argument("--no-per-player", action="store_true", help="Skip per-player plots.")
     parser.add_argument("--no-combined", action="store_true", help="Skip combined plots.")
@@ -765,6 +792,8 @@ def main() -> None:
     args = parser.parse_args()
 
     players_file = args.players_file
+    default_output_root = Path("Data/Hockey/general_plots/stability")
+    nest_under_players_file_stem = args.output_root == default_output_root
     jobs_config = args.jobs_config or _default_jobs_config(players_file, args.data_root)
 
     result = run_stability_plots_from_txt(
@@ -774,10 +803,12 @@ def main() -> None:
         seasons=args.seasons,
         jobs_config=jobs_config,
         output_root=args.output_root,
+        nest_under_players_file_stem=nest_under_players_file_stem,
         include_per_player=not args.no_per_player,
         include_combined=not args.no_combined,
         also_save_under_player_dirs=args.also_save_under_player_dirs,
         annotate_variability=not args.no_variability_annotation,
+        min_observations=args.min_observations,
     )
 
     print("Stability plots complete")
@@ -786,6 +817,7 @@ def main() -> None:
     print(f"Population:    {result['population_dir']}")
     print(f"Pair stats:    {result['population_stats_csv']}")
     print(f"Players:       {result['player_count']}")
+    print(f"Min shots:     {result['min_observations']}")
     print(f"Seasons:       {result['seasons']}")
     print(f"Skill ylim:    {result['execution_ylim']}")
     print(f"Rat ylim:      {result['rationality_ylim']}")
