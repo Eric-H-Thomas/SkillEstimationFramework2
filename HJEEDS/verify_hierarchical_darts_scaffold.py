@@ -1,3 +1,4 @@
+# This file still requires human verification. Delete this comment when done.
 """Structural verification for the hierarchical darts experiment script.
 
 This verification intentionally checks the lightweight parts of the experiment
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import io
 import sys
+from contextlib import redirect_stderr
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -25,22 +27,34 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-from Testing import darts_hierarchical_vs_jeeds as experiment
+from HJEEDS import darts_hierarchical_vs_jeeds as experiment
 
 
-def verify_default_arguments() -> None:
-    """Check a few key parser defaults so accidental drift is visible."""
+def verify_num_seeds_is_required() -> None:
+    """Check that the parser rejects omitted ``--num-seeds`` values."""
 
-    args = experiment.parse_args([])
-    assert args.num_agents == experiment.DEFAULT_NUM_AGENTS
-    assert args.num_seeds == experiment.DEFAULT_NUM_SEEDS
-    assert args.count_buckets == "5,10,25,100"
-    assert args.dry_run is False
+    # Capture argparse's error output so this verification can assert on the
+    # exact behavior without polluting normal test output.
+    stderr = io.StringIO()
+    with redirect_stderr(stderr):
+        try:
+            experiment.parse_args([])
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError("Expected parse_args([]) to reject missing --num-seeds.")
+
+    error_output = stderr.getvalue()
+    assert "--num-seeds" in error_output
+    assert "required" in error_output
 
 
 def verify_tiny_config_build() -> None:
     """Build a small custom config and verify the main derived fields."""
 
+    # This tiny configuration is intentionally cheap to construct while still
+    # exercising the main derived fields, especially bucket parsing and seed
+    # expansion.
     args = experiment.parse_args(
         [
             "--seed",
@@ -56,7 +70,7 @@ def verify_tiny_config_build() -> None:
             "--delta",
             "0.2",
             "--output-dir",
-            "Testing/results/hierarchical_darts_verification",
+            "HJEEDS/results/hierarchical_darts_verification",
         ]
     )
     config = experiment.build_config_from_args(args)
@@ -71,6 +85,8 @@ def verify_tiny_config_build() -> None:
 def verify_dry_run_path() -> None:
     """Run ``main`` in dry-run mode and confirm it exits cleanly."""
 
+    # ``dry-run`` is the safest execution path to validate top-level wiring
+    # without requiring the full darts/scipy stack.
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         exit_code = experiment.main(
@@ -105,7 +121,9 @@ def math_is_close(left: float, right: float, tolerance: float = 1e-12) -> bool:
 def main() -> None:
     """Execute all structural verification checks."""
 
-    verify_default_arguments()
+    # Keep the verification order simple: parser contract, config building,
+    # then top-level execution wiring.
+    verify_num_seeds_is_required()
     verify_tiny_config_build()
     verify_dry_run_path()
     print("Hierarchical darts experiment verification succeeded.")

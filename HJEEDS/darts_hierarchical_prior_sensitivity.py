@@ -1,6 +1,7 @@
+# This file still requires human verification. Delete this comment when done.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
-This script wraps ``Testing/darts_hierarchical_vs_jeeds.py`` and reruns the
+This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
 same simulated experiment under nine empirical-Bayes hyperprior conditions:
 
 - confidence: weak, default, strong
@@ -31,10 +32,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from Testing import darts_hierarchical_vs_jeeds as base_experiment
+from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
 
 
-DEFAULT_OUTPUT_DIR = Path("Testing/results/hierarchical_darts_prior_sensitivity")
+# This script answers the paper's robustness question: if H-JEEDS benefits from
+# a shared prior in low-data settings, how sensitive is that benefit to the
+# hyperprior being too weak, too strong, or miscentered?
+#
+# The implementation works by reusing the main experiment pipeline and swapping
+# in nine alternative hyperprior settings arranged in a 3x3 grid.
+
+
+DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_prior_sensitivity")
 DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 DEFAULT_WEAK_STD_MULTIPLIER = 3.0
 DEFAULT_STRONG_STD_MULTIPLIER = 1.0 / 3.0
@@ -92,14 +101,16 @@ class PriorSensitivityCondition:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI options for the 3x3 sensitivity sweep."""
 
+    # Most arguments simply forward through to the base experiment so the
+    # sensitivity runner stays aligned with the main H-JEEDS script.
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument("--seed", type=int, default=12345, help="Base seed used to derive per-run seeds.")
     parser.add_argument(
         "--num-seeds",
         type=int,
-        default=base_experiment.DEFAULT_NUM_SEEDS,
-        help="Number of random seeds to run for each prior condition.",
+        required=True,
+        help="Number of random seeds to run for each prior condition. This argument is required.",
     )
     parser.add_argument(
         "--count-buckets",
@@ -215,6 +226,8 @@ def _parse_count_buckets(raw_value: str) -> tuple[int, ...]:
 def build_base_config_from_args(args: argparse.Namespace) -> base_experiment.ExperimentConfig:
     """Build the underlying darts experiment config shared by all conditions."""
 
+    # The sensitivity sweep shares one common experimental design; only the
+    # hyperpriors change from condition to condition.
     count_buckets = _parse_count_buckets(args.count_buckets)
     num_agents = args.num_agents
     if num_agents is None:
@@ -245,6 +258,8 @@ def build_base_config_from_args(args: argparse.Namespace) -> base_experiment.Exp
 def build_sensitivity_conditions(args: argparse.Namespace) -> tuple[PriorSensitivityCondition, ...]:
     """Return the full 3x3 grid, optionally filtered to requested slugs."""
 
+    # The 3x3 grid is generated mechanically from one set of confidence levels
+    # crossed with one set of bias levels.
     if args.weak_std_multiplier <= 0.0:
         raise ValueError("weak_std_multiplier must be positive.")
     if args.strong_std_multiplier <= 0.0:
@@ -278,6 +293,8 @@ def build_sensitivity_conditions(args: argparse.Namespace) -> tuple[PriorSensiti
         for bias_label, bias_slug, bias_sd_units in bias_levels
     )
 
+    # Optional filtering makes smoke tests cheap without changing the logic of
+    # how conditions are defined.
     requested_slugs = {piece.strip() for piece in args.condition_slugs.split(",") if piece.strip()}
     if not requested_slugs:
         return conditions
@@ -306,6 +323,10 @@ def build_condition_hyperpriors(
     shifting the log-tau prior means upward.
     """
 
+    # Start from the base hyperpriors used in the main experiment and then
+    # perturb them along two interpretable axes:
+    # - confidence: scale the prior standard deviations
+    # - bias: shift the centers of the priors
     base_mu_eta, base_mu_rho = base_hyperpriors.mean_vector
     base_mu_eta_sd = math.sqrt(float(base_hyperpriors.covariance_diagonal[0]))
     base_mu_rho_sd = math.sqrt(float(base_hyperpriors.covariance_diagonal[1]))
@@ -314,6 +335,9 @@ def build_condition_hyperpriors(
     base_log_tau_eta_sd = float(base_hyperpriors.log_tau_eta_sd)
     base_log_tau_rho_sd = float(base_hyperpriors.log_tau_rho_sd)
 
+    # The biased conditions intentionally assume weaker demonstrators on
+    # average: higher sigma (worse execution) and lower lambda
+    # (less rational decision-making).
     mean_shift_eta = condition.bias_sd_units * base_mu_eta_sd
     mean_shift_rho = -condition.bias_sd_units * base_mu_rho_sd
     log_tau_eta_shift = condition.bias_sd_units * base_log_tau_eta_sd
@@ -345,6 +369,8 @@ def condition_metadata_row(
     mu_eta_sd = math.sqrt(float(hyperpriors.covariance_diagonal[0]))
     mu_rho_sd = math.sqrt(float(hyperpriors.covariance_diagonal[1]))
 
+    # This row records the actual numeric hyperpriors used for the condition so
+    # later CSVs/plots can be traced back to concrete assumptions.
     return {
         "condition_slug": condition.condition_slug,
         "confidence_level": condition.confidence_label,
@@ -372,6 +398,8 @@ def condition_metadata_row(
 def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[dict[str, Any]]) -> None:
     """Write dictionaries with a fixed header, leaving missing fields blank."""
 
+    # This local writer mirrors the base experiment helper but keeps the
+    # sensitivity script self-contained for its combined artifacts.
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(header))
@@ -395,6 +423,8 @@ def run_condition(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Run all seeds for one sensitivity condition and write per-condition artifacts."""
 
+    # Clone the shared experiment config and swap in this condition's concrete
+    # hyperprior settings.  Everything else about the experiment remains fixed.
     hyperpriors = build_condition_hyperpriors(base_config.hyperpriors, condition)
     condition_config = replace(
         base_config,
@@ -412,6 +442,8 @@ def run_condition(
         )
         seed_results.append(base_experiment.run_single_seed(condition_config, seed))
 
+    # Each condition gets its own normal per-condition artifact directory in
+    # addition to contributing rows to the combined CSVs.
     output_paths = base_experiment.planned_output_paths(condition_config.output_dir)
     all_agent_results = [
         result
@@ -428,6 +460,8 @@ def run_condition(
     )
     base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
 
+    # Combined output files prepend each result row with the condition metadata
+    # so one CSV can hold the full sweep without losing provenance.
     prefix = condition_prefix(condition, hyperpriors)
     combined_agent_rows = [
         {**prefix, **base_experiment._agent_result_to_row(result)}
@@ -451,6 +485,8 @@ def plot_lowest_bucket_heatmap(
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
+    # The heatmap focuses on the lowest-count bucket because that is where the
+    # hierarchical prior should matter most according to the paper's claim.
     if not summary_by_bucket_rows:
         return
 
@@ -532,6 +568,9 @@ def print_dry_run_summary(
 ) -> None:
     """Report the planned sensitivity workload without running inference."""
 
+    # This summary is intentionally rich because a full 3x3 x many-seed sweep
+    # can be expensive to run; the user should be able to inspect the planned
+    # hyperprior shifts before launching it.
     print("=== DRY RUN: 1D Darts Prior Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
@@ -567,6 +606,8 @@ def print_dry_run_summary(
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the 3x3 prior-sensitivity sweep."""
 
+    # Parse and build the shared experiment design once.  The loop below only
+    # varies the hyperprior assumptions, not the underlying darts setup.
     args = parse_args(argv)
     config = build_base_config_from_args(args)
     conditions = build_sensitivity_conditions(args)
@@ -575,6 +616,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print_dry_run_summary(config, conditions)
         return 0
 
+    # These lists accumulate rows from all nine conditions into one set of
+    # combined CSVs that are easier to analyze in a spreadsheet or notebook.
     all_agent_rows: list[dict[str, Any]] = []
     all_bucket_rows: list[dict[str, Any]] = []
     all_overall_rows: list[dict[str, Any]] = []
