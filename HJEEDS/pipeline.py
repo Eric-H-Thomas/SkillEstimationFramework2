@@ -39,8 +39,8 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
     # same seed reproduces the same reward surface, demonstrators, and throws.
     rng = np.random.default_rng(seed)
     reward_surface = sample_reward_surface(rng, config)
-    sigma_grid, lambda_grid = build_skill_grids(config)
-    agent_truths = sample_true_population_params(rng, config, sigma_grid, lambda_grid)
+    sigma_grid, log_lambda_grid = build_skill_grids(config)
+    agent_truths = sample_true_population_params(rng, config, sigma_grid, log_lambda_grid)
     observation_counts = assign_observation_counts(config)
 
     seed_result = SeedResult(
@@ -64,18 +64,18 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
             agent_truth=agent_truth,
             num_observations=num_observations,
             sigma_grid=sigma_grid,
-            lambda_grid=lambda_grid,
+            log_lambda_grid=log_lambda_grid,
         )
         seed_result.agent_datasets.append(dataset)
 
         # Stage 2: turn those observations into the JEEDS log-likelihood grid
-        # over all candidate ``(sigma, lambda)`` pairs.
+        # over all candidate ``(sigma, log lambda)`` pairs.
         log_likelihood_grid = compute_agent_log_likelihood_grid(
             config=config,
             reward_surface=reward_surface,
             agent_dataset=dataset,
             sigma_grid=sigma_grid,
-            lambda_grid=lambda_grid,
+            log_lambda_grid=log_lambda_grid,
         )
 
         # Stage 3: compute the independent JEEDS posterior using a uniform
@@ -83,7 +83,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
         jeeds_estimate = run_independent_jeeds_baseline(
             log_likelihood_grid=log_likelihood_grid,
             sigma_grid=sigma_grid,
-            lambda_grid=lambda_grid,
+            log_lambda_grid=log_lambda_grid,
         )
 
         agent_records.append((agent_truth, dataset, log_likelihood_grid, jeeds_estimate))
@@ -95,12 +95,12 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
         config=config,
         agent_log_likelihoods=[record[2] for record in agent_records],
         sigma_grid=sigma_grid,
-        lambda_grid=lambda_grid,
+        log_lambda_grid=log_lambda_grid,
     )
     discrete_hierarchical_prior = build_discrete_hierarchical_prior(
         fitted_hyperparameters=fitted_hyperparameters,
         sigma_grid=sigma_grid,
-        lambda_grid=lambda_grid,
+        log_lambda_grid=log_lambda_grid,
     )
 
     seed_result.notes = (
@@ -117,7 +117,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
             log_likelihood_grid=log_likelihood_grid,
             discrete_prior=discrete_hierarchical_prior,
             sigma_grid=sigma_grid,
-            lambda_grid=lambda_grid,
+            log_lambda_grid=log_lambda_grid,
         )
 
         seed_result.agent_results.append(
@@ -127,7 +127,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
                 count_bucket=dataset.count_bucket,
                 num_observations=dataset.num_observations,
                 sigma_true=agent_truth.sigma_true,
-                lambda_true=agent_truth.lambda_true,
+                log_lambda_true=agent_truth.log_lambda_true,
                 jeeds=jeeds_estimate,
                 hierarchical=hierarchical_estimate,
                 notes=(

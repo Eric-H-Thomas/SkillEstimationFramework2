@@ -41,12 +41,12 @@ def sample_reward_surface(rng: np.random.Generator, config: ExperimentConfig) ->
 
 
 def build_skill_grids(config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Construct the JEEDS execution-skill and decision-skill grids.
+    """Construct the JEEDS execution-skill grid and canonical log-lambda grid.
 
-    We expose lambda bounds on the original scale and then build a
-    geometrically spaced grid by interpolating evenly in natural-log space.
-    This is equivalent to the historical ``np.logspace`` style once the
-    original-scale endpoints are fixed.
+    The user still specifies the lambda bounds on the original scale because
+    those are the values used inside the softmax policy. Internally, however,
+    H-JEEDS carries the decision-skill axis in natural-log space so posterior
+    summaries and hierarchical priors share the same geometry.
     """
 
     if config.num_sigma_grid <= 0:
@@ -62,26 +62,24 @@ def build_skill_grids(config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]
     if config.lambda_min >= config.lambda_max:
         raise ValueError("lambda_min must be strictly less than lambda_max.")
 
-    # Execution skill is sampled on a linear grid while decision skill uses a
-    # geometric grid.  That asymmetry mirrors the legacy JEEDS setup, where
-    # lambda spans several orders of magnitude more naturally than sigma.
+    # Execution skill still uses a linear raw-sigma grid. Decision skill is
+    # stored as equally spaced log-lambda values, which correspond to a
+    # geometrically spaced raw-lambda grid once exponentiated.
     sigma_grid = np.linspace(config.sigma_min, config.sigma_max, config.num_sigma_grid, dtype=float)
-    lambda_grid = np.exp(
-        np.linspace(
-            np.log(config.lambda_min),
-            np.log(config.lambda_max),
-            config.num_lambda_grid,
-            dtype=float,
-        )
+    log_lambda_grid = np.linspace(
+        np.log(config.lambda_min),
+        np.log(config.lambda_max),
+        config.num_lambda_grid,
+        dtype=float,
     )
-    return sigma_grid, lambda_grid
+    return sigma_grid, log_lambda_grid
 
 
 def sample_true_population_params(
     rng: np.random.Generator,
     config: ExperimentConfig,
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> list[AgentTruth]:
     """Sample the true demonstrator skill profiles for one seed.
 
@@ -90,9 +88,9 @@ def sample_true_population_params(
     """
 
     sigma_min, sigma_max = float(np.min(sigma_grid)), float(np.max(sigma_grid))
-    lambda_min, lambda_max = float(np.min(lambda_grid)), float(np.max(lambda_grid))
     log_sigma_min, log_sigma_max = math.log(sigma_min), math.log(sigma_max)
-    log_lambda_min, log_lambda_max = math.log(lambda_min), math.log(lambda_max)
+    log_lambda_min = float(np.min(log_lambda_grid))
+    log_lambda_max = float(np.max(log_lambda_grid))
 
     truths: list[AgentTruth] = []
     covariance = config.true_population.covariance_matrix
@@ -152,7 +150,7 @@ def simulate_agent_dataset(
     agent_truth: AgentTruth,
     num_observations: int,
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> AgentDataset:
     """Simulate one demonstrator's observed throws.
 
@@ -179,10 +177,13 @@ def simulate_agent_dataset(
             f"True sigma {agent_truth.sigma_true} lies outside the provided sigma grid "
             f"[{float(np.min(sigma_grid))}, {float(np.max(sigma_grid))}]."
         )
-    if agent_truth.lambda_true < float(np.min(lambda_grid)) or agent_truth.lambda_true > float(np.max(lambda_grid)):
+    if (
+        agent_truth.log_lambda_true < float(np.min(log_lambda_grid))
+        or agent_truth.log_lambda_true > float(np.max(log_lambda_grid))
+    ):
         raise ValueError(
-            f"True lambda {agent_truth.lambda_true} lies outside the provided lambda grid "
-            f"[{float(np.min(lambda_grid))}, {float(np.max(lambda_grid))}]."
+            f"True log_lambda {agent_truth.log_lambda_true} lies outside the provided log-lambda grid "
+            f"[{float(np.min(log_lambda_grid))}, {float(np.max(log_lambda_grid))}]."
         )
 
     # Compute the true expected-value curve over the same 1D target grid shape

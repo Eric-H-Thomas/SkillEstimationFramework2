@@ -6,9 +6,10 @@ import numpy as np
 from .models import AgentDataset, ExperimentConfig
 
 # This module converts one demonstrator's observed actions into the JEEDS
-# log-likelihood grid over all candidate ``(sigma, lambda)`` pairs.  That grid
-# is the shared input to both the independent baseline and the hierarchical
-# variant.
+# log-likelihood grid over all candidate ``(sigma, log lambda)`` grid cells.
+# Raw lambda values are only recovered locally when the softmax policy needs
+# them. The resulting grid is the shared input to both the independent baseline
+# and the hierarchical variant.
 
 
 def compute_agent_log_likelihood_grid(
@@ -16,7 +17,7 @@ def compute_agent_log_likelihood_grid(
     reward_surface: tuple[float, ...],
     agent_dataset: AgentDataset,
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> np.ndarray:
     """Compute the standalone JEEDS log-likelihood table for one agent.
 
@@ -26,8 +27,9 @@ def compute_agent_log_likelihood_grid(
     term obtained after marginalizing over latent intended targets.
 
     The result is a grid of log-likelihoods with shape
-    ``(len(sigma_grid), len(lambda_grid))`` that later estimators can combine
-    with different priors.
+    ``(len(sigma_grid), len(log_lambda_grid))``. The columns are indexed by
+    log-lambda hypotheses, even though the softmax inside the likelihood still
+    needs the corresponding raw lambda values.
     """
 
     # Import lazily so the module remains lightweight to import in dry-run
@@ -45,14 +47,16 @@ def compute_agent_log_likelihood_grid(
     executed_actions = np.asarray(agent_dataset.executed_actions, dtype=float)
     # Start with ``-inf`` everywhere so impossible parameter pairs naturally
     # remain excluded unless a later calculation supplies a valid likelihood.
-    log_likelihood_grid = np.full((len(sigma_grid), len(lambda_grid)), -np.inf, dtype=float)
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
+    raw_lambda_grid = np.exp(log_lambda_grid)
+    log_likelihood_grid = np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
 
     reference_targets: np.ndarray | None = None
 
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
-        # First hold execution skill fixed.  Under that sigma hypothesis we can
-        # compute the target grid, wrapped Gaussian noise model, and then later
-        # evaluate all lambda hypotheses against the same precomputed pieces.
+        # First hold execution skill fixed. Under that sigma hypothesis we can
+        # compute the target grid and wrapped Gaussian noise model once, then
+        # reuse those pieces across all log-lambda grid cells.
         expected_values, target_actions = darts.compute_expected_value_curve(
             reward_surface,
             float(sigma_hypothesis),
@@ -103,11 +107,10 @@ def compute_agent_log_likelihood_grid(
         if np.any(np.sum(pdf_matrix, axis=1) <= 0.0) or np.any(~np.isfinite(pdf_matrix)):
             continue
 
-        for lambda_index, lambda_hypothesis in enumerate(lambda_grid):
-            # Then hold decision-making skill fixed and evaluate the JEEDS
-            # marginal likelihood for this full ``(sigma, lambda)`` cell.
-            # Softmax normalization trick copied from the JEEDS update: shift by
-            # the maximum exponent before taking exp to prevent overflow.
+        for lambda_index, lambda_hypothesis in enumerate(raw_lambda_grid):
+            # The grid cell is identified by its log-lambda coordinate, but the
+            # softmax itself still requires the raw lambda value recovered by
+            # exponentiating that coordinate.
             shifted_values = expected_values * float(lambda_hypothesis)  # shape: (T,)
             shifted_values -= np.max(shifted_values)
             exponentiated_values = np.exp(shifted_values)
@@ -118,7 +121,8 @@ def compute_agent_log_likelihood_grid(
 
             # For each observed action x_n, JEEDS uses
             #   [sum_t exp(lambda * V_t) * phi(x_n; t, sigma)] / [sum_t exp(lambda * V_t)]
-            # as the observation likelihood contribution under (sigma, lambda).
+            # as the observation likelihood contribution under this
+            # ``(sigma, log lambda)`` grid cell.
             # The denominator is only the softmax normalizer. The Gaussian term
             # appears inside the numerator's sum, so there is no cancellation.
             weighted_pdfs = np.sum(pdf_matrix * exponentiated_values[None, :], axis=1)  # shape: (N,)

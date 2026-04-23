@@ -58,18 +58,15 @@ def summarize_seed_results(seed_result: SeedResult) -> tuple[list[dict[str, Any]
             # CSV, but they should not contribute numeric error rows.
             if estimate.status != "ok":
                 continue
-            if estimate.posterior_mean_sigma is None or estimate.posterior_mean_lambda is None:
-                continue
-            if result.lambda_true <= 0.0 or estimate.posterior_mean_lambda <= 0.0:
+            if estimate.posterior_mean_sigma is None or estimate.posterior_mean_log_lambda is None:
                 continue
 
-            # The paper reports execution skill error on the original sigma
-            # scale and decision-making error on a log10(lambda) scale because
-            # lambda spans orders of magnitude.
+            # This experiment reports execution skill error on the original
+            # sigma scale. Decision skill is summarized canonically in
+            # natural-log lambda space, so the error metric compares those log
+            # values directly instead of converting to base-10.
             abs_sigma_error = abs(estimate.posterior_mean_sigma - result.sigma_true)
-            abs_log10_lambda_error = abs(
-                math.log10(estimate.posterior_mean_lambda) - math.log10(result.lambda_true)
-            )
+            abs_log_lambda_error = abs(estimate.posterior_mean_log_lambda - result.log_lambda_true)
 
             add_metric(
                 bucket_metrics,
@@ -81,15 +78,15 @@ def summarize_seed_results(seed_result: SeedResult) -> tuple[list[dict[str, Any]
             add_metric(
                 bucket_metrics,
                 method=method_name,
-                metric="abs_log10_lambda_error",
+                metric="abs_log_lambda_error",
                 count_bucket=result.count_bucket,
-                value=abs_log10_lambda_error,
+                value=abs_log_lambda_error,
             )
 
             overall_sigma_key = (method_name, "abs_sigma_error")
-            overall_lambda_key = (method_name, "abs_log10_lambda_error")
+            overall_lambda_key = (method_name, "abs_log_lambda_error")
             overall_metrics.setdefault(overall_sigma_key, []).append(abs_sigma_error)
-            overall_metrics.setdefault(overall_lambda_key, []).append(abs_log10_lambda_error)
+            overall_metrics.setdefault(overall_lambda_key, []).append(abs_log_lambda_error)
 
     summary_by_bucket_rows: list[dict[str, Any]] = []
     for (method_name, metric_name, count_bucket), values in sorted(bucket_metrics.items()):

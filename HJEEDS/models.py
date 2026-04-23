@@ -159,16 +159,35 @@ class AgentDataset:
 class MethodEstimate:
     """Estimated skill output for one method on one demonstrator."""
 
-    # ``status`` lets downstream code distinguish valid estimates from failed
-    # inference paths without throwing away the rest of the agent's record.
+    # Execution skill is still reported on its original scale, but decision
+    # skill is now stored canonically in log-lambda space. That keeps the
+    # reporting layer aligned with the grid geometry and the hierarchical prior.
     method_name: str
     posterior_mean_sigma: float | None = None
-    posterior_mean_lambda: float | None = None
+    posterior_mean_log_lambda: float | None = None
     map_sigma: float | None = None
-    map_lambda: float | None = None
+    map_log_lambda: float | None = None
     status: str = "todo"
     notes: str = ""
 
+    def __post_init__(self) -> None:
+        """Validate that any stored point estimates are finite."""
+
+        if self.posterior_mean_sigma is not None and not math.isfinite(self.posterior_mean_sigma):
+            raise ValueError(
+                f"posterior_mean_sigma must be finite when provided. Received {self.posterior_mean_sigma}."
+            )
+        if self.posterior_mean_log_lambda is not None and not math.isfinite(self.posterior_mean_log_lambda):
+            raise ValueError(
+                "posterior_mean_log_lambda must be finite when provided. "
+                f"Received {self.posterior_mean_log_lambda}."
+            )
+        if self.map_sigma is not None and not math.isfinite(self.map_sigma):
+            raise ValueError(f"map_sigma must be finite when provided. Received {self.map_sigma}.")
+        if self.map_log_lambda is not None and not math.isfinite(self.map_log_lambda):
+            raise ValueError(
+                f"map_log_lambda must be finite when provided. Received {self.map_log_lambda}."
+            )
 
 @dataclass(frozen=True)
 class AgentResult:
@@ -179,10 +198,24 @@ class AgentResult:
     count_bucket: int
     num_observations: int
     sigma_true: float
-    lambda_true: float
+    log_lambda_true: float
     jeeds: MethodEstimate
     hierarchical: MethodEstimate
     notes: str = ""
+
+    def __post_init__(self) -> None:
+        """Validate the canonical fields stored in the flattened result row."""
+
+        if not math.isfinite(self.sigma_true):
+            raise ValueError(f"sigma_true must be finite. Received {self.sigma_true}.")
+        if not math.isfinite(self.log_lambda_true):
+            raise ValueError(f"log_lambda_true must be finite. Received {self.log_lambda_true}.")
+
+    @property
+    def lambda_true(self) -> float:
+        """Recover the raw lambda only when a downstream calculation needs it."""
+
+        return math.exp(self.log_lambda_true)
 
 
 @dataclass

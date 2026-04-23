@@ -38,16 +38,16 @@ def _agent_result_to_row(result: AgentResult) -> dict[str, Any]:
         "count_bucket": result.count_bucket,
         "num_observations": result.num_observations,
         "sigma_true": result.sigma_true,
-        "lambda_true": result.lambda_true,
+        "log_lambda_true": result.log_lambda_true,
         "jeeds_posterior_mean_sigma": _value_or_blank(result.jeeds.posterior_mean_sigma),
-        "jeeds_posterior_mean_lambda": _value_or_blank(result.jeeds.posterior_mean_lambda),
+        "jeeds_posterior_mean_log_lambda": _value_or_blank(result.jeeds.posterior_mean_log_lambda),
         "jeeds_map_sigma": _value_or_blank(result.jeeds.map_sigma),
-        "jeeds_map_lambda": _value_or_blank(result.jeeds.map_lambda),
+        "jeeds_map_log_lambda": _value_or_blank(result.jeeds.map_log_lambda),
         "jeeds_status": result.jeeds.status,
         "hierarchical_posterior_mean_sigma": _value_or_blank(result.hierarchical.posterior_mean_sigma),
-        "hierarchical_posterior_mean_lambda": _value_or_blank(result.hierarchical.posterior_mean_lambda),
+        "hierarchical_posterior_mean_log_lambda": _value_or_blank(result.hierarchical.posterior_mean_log_lambda),
         "hierarchical_map_sigma": _value_or_blank(result.hierarchical.map_sigma),
-        "hierarchical_map_lambda": _value_or_blank(result.hierarchical.map_lambda),
+        "hierarchical_map_log_lambda": _value_or_blank(result.hierarchical.map_log_lambda),
         "hierarchical_status": result.hierarchical.status,
         "notes": result.notes,
     }
@@ -90,7 +90,7 @@ def write_summary_csvs(
 
 
 def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
-    """Create the two-panel figure for sigma and log-lambda error.
+    """Create the two-panel figure for sigma and natural-log-lambda error.
 
     The input rows are the across-seed summaries, so the figure plots the
     reported mean and 95% CI for each method at each observation-count bucket.
@@ -129,9 +129,9 @@ def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dic
             r"|$\hat{\sigma} - \sigma$|",
         ),
         (
-            "abs_log10_lambda_error",
-            "Decision Skill Error by Count Bucket",
-            r"|$\log_{10}\hat{\lambda} - \log_{10}\lambda$|",
+            "abs_log_lambda_error",
+            "Log-Decision Skill Error by Count Bucket",
+            r"|$\widehat{\log \lambda} - \log \lambda$|",
         ),
     ]
     method_order = {
@@ -160,7 +160,8 @@ def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dic
     bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
     bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
 
-    # The two panels mirror the two headline error metrics used in the paper.
+    # The two panels mirror the two headline error metrics used in this
+    # experiment summary.
     figure, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
 
     for axis, (metric_name, title, ylabel) in zip(axes, metric_panels):

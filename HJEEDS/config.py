@@ -62,16 +62,12 @@ DEFAULT_LAMBDA_MAX = 1e2
 DEFAULT_NUM_LAMBDA_GRID = 21
 
 DEFAULT_SIGMA_GRID = tuple(np.linspace(DEFAULT_SIGMA_MIN, DEFAULT_SIGMA_MAX, DEFAULT_NUM_SIGMA_GRID).tolist())
-# JEEDS models lambda itself, not log(lambda). The historical code builds the
-# lambda hypothesis grid with ``np.logspace`` because the candidate values span
-# several orders of magnitude. That does not make base-10 log part of the
-# model; it is only one way to generate a geometrically spaced grid. Using
-# equally spaced natural logs and exponentiating would yield the same grid once
-# the original-scale endpoints are fixed, so the experiment exposes
-# ``lambda_min``/``lambda_max`` directly to avoid mixing log conventions in the
-# user-facing interface.
-DEFAULT_LAMBDA_GRID = tuple(
-    np.exp(np.linspace(np.log(DEFAULT_LAMBDA_MIN), np.log(DEFAULT_LAMBDA_MAX), DEFAULT_NUM_LAMBDA_GRID)).tolist()
+# H-JEEDS now treats log(lambda) as the canonical decision-skill coordinate.
+# The CLI still exposes raw lambda endpoints because that is the parameter used
+# inside the softmax policy, but the internal grid is stored as evenly spaced
+# natural-log values.
+DEFAULT_LOG_LAMBDA_GRID = tuple(
+    np.linspace(np.log(DEFAULT_LAMBDA_MIN), np.log(DEFAULT_LAMBDA_MAX), DEFAULT_NUM_LAMBDA_GRID).tolist()
 )
 
 DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
@@ -120,16 +116,16 @@ AGENT_LEVEL_CSV_HEADER = [
     "count_bucket",
     "num_observations",
     "sigma_true",
-    "lambda_true",
+    "log_lambda_true",
     "jeeds_posterior_mean_sigma",
-    "jeeds_posterior_mean_lambda",
+    "jeeds_posterior_mean_log_lambda",
     "jeeds_map_sigma",
-    "jeeds_map_lambda",
+    "jeeds_map_log_lambda",
     "jeeds_status",
     "hierarchical_posterior_mean_sigma",
-    "hierarchical_posterior_mean_lambda",
+    "hierarchical_posterior_mean_log_lambda",
     "hierarchical_map_sigma",
-    "hierarchical_map_lambda",
+    "hierarchical_map_log_lambda",
     "hierarchical_status",
     "notes",
 ]
@@ -247,13 +243,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--lambda-min",
         type=float,
         default=DEFAULT_LAMBDA_MIN,
-        help="Minimum decision-skill value on the JEEDS lambda grid.",
+        help="Minimum raw lambda value used to define the internal log-lambda grid.",
     )
     parser.add_argument(
         "--lambda-max",
         type=float,
         default=DEFAULT_LAMBDA_MAX,
-        help="Maximum decision-skill value on the JEEDS lambda grid.",
+        help="Maximum raw lambda value used to define the internal log-lambda grid.",
     )
     parser.add_argument(
         "--output-dir",

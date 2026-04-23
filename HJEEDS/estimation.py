@@ -1,11 +1,9 @@
 # This file still requires human verification. Delete this comment when done.
-from __future__ import annotations
 
+from __future__ import annotations
 import math
 from typing import Any, Sequence
-
 import numpy as np
-
 from .models import ExperimentConfig, MethodEstimate
 
 
@@ -24,16 +22,20 @@ from .models import ExperimentConfig, MethodEstimate
 def run_independent_jeeds_baseline(
     log_likelihood_grid: np.ndarray,
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> MethodEstimate:
     """Infer one agent's skill under the independent JEEDS baseline.
 
-    Use a uniform prior over the ``(sigma, lambda)`` grid, so the posterior is
-    proportional to the likelihood table computed for this agent. The returned
-    estimate reports both posterior means and the MAP grid cell.
+    Use a uniform prior over the ``(sigma, log lambda)`` grid cells, so the
+    posterior is proportional to the likelihood table computed for this agent.
+    The returned estimate reports the posterior mean of sigma on its original
+    scale and the posterior mean of log(lambda) on the canonical decision-skill
+    axis, plus the MAP grid cell.
     """
 
-    expected_shape = (len(sigma_grid), len(lambda_grid))
+    sigma_grid = np.asarray(sigma_grid, dtype=float)
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
+    expected_shape = (len(sigma_grid), len(log_lambda_grid))
     if log_likelihood_grid.shape != expected_shape:
         raise ValueError(
             "log_likelihood_grid has the wrong shape for the provided skill grids: "
@@ -71,28 +73,28 @@ def run_independent_jeeds_baseline(
     posterior = posterior_unnormalized / normalization  # shape: (S, L)
 
     # Marginalize the 2D posterior down to one distribution over sigma and one
-    # over lambda so we can report posterior means on each axis separately.
+    # over log(lambda) so we can report posterior means on each axis separately.
     sigma_marginal = np.sum(posterior, axis=1)  # shape: (S,)
     lambda_marginal = np.sum(posterior, axis=0)  # shape: (L,)
 
     posterior_mean_sigma = float(np.dot(sigma_marginal, sigma_grid))
-    posterior_mean_lambda = float(np.dot(lambda_marginal, lambda_grid))
+    posterior_mean_log_lambda = float(np.dot(lambda_marginal, log_lambda_grid))
 
     # Also record the MAP cell because it is a useful diagnostic when reviewing
     # how concentrated or multimodal the posterior may be.
     map_index = int(np.argmax(posterior))
     sigma_map_index, lambda_map_index = np.unravel_index(map_index, posterior.shape)
     map_sigma = float(sigma_grid[sigma_map_index])
-    map_lambda = float(lambda_grid[lambda_map_index])
+    map_log_lambda = float(log_lambda_grid[lambda_map_index])
 
     return MethodEstimate(
         method_name="jeeds",
         posterior_mean_sigma=posterior_mean_sigma,
-        posterior_mean_lambda=posterior_mean_lambda,
+        posterior_mean_log_lambda=posterior_mean_log_lambda,
         map_sigma=map_sigma,
-        map_lambda=map_lambda,
+        map_log_lambda=map_log_lambda,
         status="ok",
-        notes="Standalone JEEDS posterior computed with a uniform prior over the skill grid.",
+        notes="Standalone JEEDS posterior computed with a uniform prior over the sigma x log-lambda grid.",
     )
 
 
@@ -100,7 +102,7 @@ def fit_population_hyperparameters_map(
     config: ExperimentConfig,
     agent_log_likelihoods: Sequence[np.ndarray],
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> dict[str, Any]:
     """Fit the population hyperparameters for the hierarchical model.
 
@@ -128,13 +130,13 @@ def fit_population_hyperparameters_map(
     # Convert everything to NumPy arrays immediately so the rest of the code can
     # rely on consistent shapes and dtypes.
     sigma_grid = np.asarray(sigma_grid, dtype=float)
-    lambda_grid = np.asarray(lambda_grid, dtype=float)
-    expected_shape = (len(sigma_grid), len(lambda_grid))
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
+    expected_shape = (len(sigma_grid), len(log_lambda_grid))
 
-    if sigma_grid.ndim != 1 or lambda_grid.ndim != 1:
-        raise ValueError("sigma_grid and lambda_grid must both be one-dimensional arrays.")
-    if sigma_grid.size == 0 or lambda_grid.size == 0:
-        raise ValueError("sigma_grid and lambda_grid must both be non-empty.")
+    if sigma_grid.ndim != 1 or log_lambda_grid.ndim != 1:
+        raise ValueError("sigma_grid and log_lambda_grid must both be one-dimensional arrays.")
+    if sigma_grid.size == 0 or log_lambda_grid.size == 0:
+        raise ValueError("sigma_grid and log_lambda_grid must both be non-empty.")
 
     # Validate the per-agent likelihood grids before optimization starts.  This
     # keeps the optimizer from failing later with a shape error that would be
@@ -206,7 +208,7 @@ def fit_population_hyperparameters_map(
             discrete_prior = build_discrete_hierarchical_prior(
                 unpacked,
                 sigma_grid=sigma_grid,
-                lambda_grid=lambda_grid,
+                log_lambda_grid=log_lambda_grid,
             )
         except (KeyError, RuntimeError, ValueError, np.linalg.LinAlgError):
             return -np.inf
@@ -322,15 +324,14 @@ def fit_population_hyperparameters_map(
 def build_discrete_hierarchical_prior(
     fitted_hyperparameters: dict[str, Any],
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> np.ndarray:
     """Discretize the fitted log-space population prior onto the JEEDS grid.
 
-    The fitted population model lives in ``(log sigma, log lambda)`` space, but
-    JEEDS inference happens on a discrete grid in ``(sigma, lambda)`` space.
-    This function bridges that gap by approximating the probability mass
-    associated with each JEEDS grid cell and renormalizing the result to a
-    proper discrete prior.
+    The fitted population model lives in ``(log sigma, log lambda)`` space, and
+    this helper projects it onto the experiment's discrete ``(sigma,
+    log lambda)`` grid cells. This bridges the continuous population model to
+    the same discrete support used by the agent-level posteriors.
 
     Implementation note:
     We use a cell-mass approximation rather than exact rectangle integration.
@@ -350,18 +351,18 @@ def build_discrete_hierarchical_prior(
     # inference happens on the same discrete grid used by JEEDS.  This function
     # is the bridge between those two representations.
     sigma_grid = np.asarray(sigma_grid, dtype=float)
-    lambda_grid = np.asarray(lambda_grid, dtype=float)
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
 
-    if sigma_grid.ndim != 1 or lambda_grid.ndim != 1:
-        raise ValueError("sigma_grid and lambda_grid must both be one-dimensional arrays.")
-    if sigma_grid.size == 0 or lambda_grid.size == 0:
-        raise ValueError("sigma_grid and lambda_grid must both be non-empty.")
-    if np.any(~np.isfinite(sigma_grid)) or np.any(~np.isfinite(lambda_grid)):
-        raise ValueError("sigma_grid and lambda_grid must contain only finite values.")
-    if np.any(sigma_grid <= 0.0) or np.any(lambda_grid <= 0.0):
-        raise ValueError("sigma_grid and lambda_grid must be strictly positive for log-space discretization.")
-    if np.any(np.diff(sigma_grid) <= 0.0) or np.any(np.diff(lambda_grid) <= 0.0):
-        raise ValueError("sigma_grid and lambda_grid must be strictly increasing.")
+    if sigma_grid.ndim != 1 or log_lambda_grid.ndim != 1:
+        raise ValueError("sigma_grid and log_lambda_grid must both be one-dimensional arrays.")
+    if sigma_grid.size == 0 or log_lambda_grid.size == 0:
+        raise ValueError("sigma_grid and log_lambda_grid must both be non-empty.")
+    if np.any(~np.isfinite(sigma_grid)) or np.any(~np.isfinite(log_lambda_grid)):
+        raise ValueError("sigma_grid and log_lambda_grid must contain only finite values.")
+    if np.any(sigma_grid <= 0.0):
+        raise ValueError("sigma_grid must be strictly positive for log-space discretization.")
+    if np.any(np.diff(sigma_grid) <= 0.0) or np.any(np.diff(log_lambda_grid) <= 0.0):
+        raise ValueError("sigma_grid and log_lambda_grid must be strictly increasing.")
 
     # Accept a couple of equivalent key layouts so this function stays easy to
     # reuse once the MAP-fitting step is implemented.
@@ -439,7 +440,6 @@ def build_discrete_hierarchical_prior(
         return edges
 
     log_sigma_grid = np.log(sigma_grid)  # shape: (S,)
-    log_lambda_grid = np.log(lambda_grid)  # shape: (L,)
 
     # Each discrete JEEDS grid point is treated as representing the local
     # log-space cell around it.  The mass of that cell becomes the prior weight
@@ -485,7 +485,7 @@ def run_hierarchical_estimator(
     log_likelihood_grid: np.ndarray,
     discrete_prior: np.ndarray,
     sigma_grid: np.ndarray,
-    lambda_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
 ) -> MethodEstimate:
     """Infer one agent's skill using the fitted hierarchical prior.
 
@@ -498,7 +498,9 @@ def run_hierarchical_estimator(
     This function intentionally mirrors ``run_independent_jeeds_baseline`` so
     the two posterior computations stay easy to compare.
     """
-    expected_shape = (len(sigma_grid), len(lambda_grid))
+    sigma_grid = np.asarray(sigma_grid, dtype=float)
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
+    expected_shape = (len(sigma_grid), len(log_lambda_grid))
     if log_likelihood_grid.shape != expected_shape:
         raise ValueError(
             "log_likelihood_grid has the wrong shape for the provided skill grids: "
@@ -585,25 +587,25 @@ def run_hierarchical_estimator(
 
     posterior = posterior_unnormalized / normalization  # shape: (S, L)
 
-    # As with the independent baseline, report both posterior means and the MAP
-    # cell so later inspection can compare central tendency and mode.
+    # As with the independent baseline, report sigma on its original scale and
+    # decision skill on the canonical log-lambda axis.
     sigma_marginal = np.sum(posterior, axis=1)  # shape: (S,)
     lambda_marginal = np.sum(posterior, axis=0)  # shape: (L,)
 
     posterior_mean_sigma = float(np.dot(sigma_marginal, sigma_grid))
-    posterior_mean_lambda = float(np.dot(lambda_marginal, lambda_grid))
+    posterior_mean_log_lambda = float(np.dot(lambda_marginal, log_lambda_grid))
 
     map_index = int(np.argmax(posterior))
     sigma_map_index, lambda_map_index = np.unravel_index(map_index, posterior.shape)
     map_sigma = float(sigma_grid[sigma_map_index])
-    map_lambda = float(lambda_grid[lambda_map_index])
+    map_log_lambda = float(log_lambda_grid[lambda_map_index])
 
     return MethodEstimate(
         method_name="hierarchical",
         posterior_mean_sigma=posterior_mean_sigma,
-        posterior_mean_lambda=posterior_mean_lambda,
+        posterior_mean_log_lambda=posterior_mean_log_lambda,
         map_sigma=map_sigma,
-        map_lambda=map_lambda,
+        map_log_lambda=map_log_lambda,
         status="ok",
         notes=(
             "Hierarchical posterior computed by combining the agent log-likelihood grid "

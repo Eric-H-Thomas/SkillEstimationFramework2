@@ -59,7 +59,6 @@ CONDITION_METADATA_HEADER = [
     "hyperprior_mu_eta",
     "hyperprior_mu_rho",
     "hyperprior_mu_sigma",
-    "hyperprior_mu_lambda",
     "hyperprior_mu_eta_sd",
     "hyperprior_mu_rho_sd",
     "hyperprior_log_tau_eta_mean",
@@ -348,7 +347,7 @@ def build_condition_hyperpriors(
     base_log_tau_rho_sd = float(base_hyperpriors.log_tau_rho_sd)
 
     # The biased conditions intentionally assume weaker demonstrators on
-    # average: higher sigma (worse execution) and lower lambda
+    # average: higher sigma (worse execution) and lower log-lambda centers
     # (less rational decision-making).
     mean_shift_eta = condition.bias_sd_units * base_mu_eta_sd
     mean_shift_rho = -condition.bias_sd_units * base_mu_rho_sd
@@ -392,7 +391,6 @@ def condition_metadata_row(
         "hyperprior_mu_eta": mu_eta,
         "hyperprior_mu_rho": mu_rho,
         "hyperprior_mu_sigma": math.exp(mu_eta),
-        "hyperprior_mu_lambda": math.exp(mu_rho),
         "hyperprior_mu_eta_sd": mu_eta_sd,
         "hyperprior_mu_rho_sd": mu_rho_sd,
         "hyperprior_log_tau_eta_mean": hyperpriors.log_tau_eta_mean,
@@ -526,7 +524,7 @@ def plot_lowest_bucket_heatmap(
 
     metric_panels = [
         ("abs_sigma_error", "Execution Skill Error"),
-        ("abs_log10_lambda_error", "Decision Skill Error"),
+        ("abs_log_lambda_error", "Log-Decision Skill Error"),
     ]
 
     figure, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
