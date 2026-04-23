@@ -86,8 +86,8 @@ class ExperimentConfig:
     lambda_max: float
     output_dir: Path
     dry_run: bool
-    min_regions: int
-    max_regions: int
+    min_success_regions: int
+    max_success_regions: int
     min_region_width: float
     hyperpriors: HyperpriorConfig
     true_population: TruePopulationConfig

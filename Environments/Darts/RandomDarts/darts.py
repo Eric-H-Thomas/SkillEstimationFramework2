@@ -248,10 +248,10 @@ def sample_noisy_action(rng, state_boundaries, noise_std_dev, action, noise_mode
         # useful for deterministic tests.
         noise = noise_model
 
-    noisy_action = action + noise
-    noisy_action = wrap_action_within_bounds(noisy_action)
+    _noisy_action = action + noise
+    _noisy_action = wrap_action_within_bounds(_noisy_action)
 
-    return noisy_action
+    return _noisy_action
 
 # Note: the actions passed into this function are assumed to already lie in [-BOARD_LIMIT, BOARD_LIMIT]
 def calculate_wrapped_action_difference(action_1, action_2):

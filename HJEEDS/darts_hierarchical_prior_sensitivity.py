@@ -155,8 +155,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--sigma-max", type=float, default=base_experiment.DEFAULT_SIGMA_MAX)
     parser.add_argument("--lambda-min", type=float, default=base_experiment.DEFAULT_LAMBDA_MIN)
     parser.add_argument("--lambda-max", type=float, default=base_experiment.DEFAULT_LAMBDA_MAX)
-    parser.add_argument("--min-regions", type=int, default=base_experiment.DEFAULT_MIN_REGIONS)
-    parser.add_argument("--max-regions", type=int, default=base_experiment.DEFAULT_MAX_REGIONS)
+    parser.add_argument(
+        "--min-success-regions",
+        "--min-regions",
+        dest="min_success_regions",
+        type=int,
+        default=base_experiment.DEFAULT_MIN_SUCCESS_REGIONS,
+    )
+    parser.add_argument(
+        "--max-success-regions",
+        "--max-regions",
+        dest="max_success_regions",
+        type=int,
+        default=base_experiment.DEFAULT_MAX_SUCCESS_REGIONS,
+    )
     parser.add_argument("--min-region-width", type=float, default=base_experiment.DEFAULT_MIN_REGION_WIDTH)
     parser.add_argument(
         "--output-dir",
@@ -248,8 +260,8 @@ def build_base_config_from_args(args: argparse.Namespace) -> base_experiment.Exp
         lambda_max=args.lambda_max,
         output_dir=args.output_dir,
         dry_run=args.dry_run,
-        min_regions=args.min_regions,
-        max_regions=args.max_regions,
+        min_success_regions=args.min_success_regions,
+        max_success_regions=args.max_success_regions,
         min_region_width=args.min_region_width,
     )
     return base_experiment.build_config_from_args(base_args)

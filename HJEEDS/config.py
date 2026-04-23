@@ -80,8 +80,11 @@ DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts")
 
-DEFAULT_MIN_REGIONS = 2
-DEFAULT_MAX_REGIONS = 6
+# These values refer to the number of high-reward "success" regions, not the
+# total number of alternating segments on the board.  The darts environment
+# helper later converts this count into twice as many boundary points.
+DEFAULT_MIN_SUCCESS_REGIONS = 2
+DEFAULT_MAX_SUCCESS_REGIONS = 6
 DEFAULT_MIN_REGION_WIDTH = 0.25
 DEFAULT_TRUE_POPULATION = TruePopulationConfig(
     mean_log_sigma=math.log(1.5),
@@ -259,16 +262,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Directory for CSV summaries and figures.",
     )
     parser.add_argument(
+        "--min-success-regions",
         "--min-regions",
+        dest="min_success_regions",
         type=int,
-        default=DEFAULT_MIN_REGIONS,
-        help="Minimum number of reward regions when sampling a 1D darts surface.",
+        default=DEFAULT_MIN_SUCCESS_REGIONS,
+        help="Minimum number of high-reward success regions when sampling a 1D darts surface.",
     )
     parser.add_argument(
+        "--max-success-regions",
         "--max-regions",
+        dest="max_success_regions",
         type=int,
-        default=DEFAULT_MAX_REGIONS,
-        help="Maximum number of reward regions when sampling a 1D darts surface.",
+        default=DEFAULT_MAX_SUCCESS_REGIONS,
+        help="Maximum number of high-reward success regions when sampling a 1D darts surface.",
     )
     parser.add_argument(
         "--min-region-width",
@@ -309,8 +316,8 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         lambda_max=args.lambda_max,
         output_dir=Path(args.output_dir),
         dry_run=args.dry_run,
-        min_regions=args.min_regions,
-        max_regions=args.max_regions,
+        min_success_regions=args.min_success_regions,
+        max_success_regions=args.max_success_regions,
         min_region_width=args.min_region_width,
         hyperpriors=DEFAULT_HYPERPRIORS,
         true_population=DEFAULT_TRUE_POPULATION,
