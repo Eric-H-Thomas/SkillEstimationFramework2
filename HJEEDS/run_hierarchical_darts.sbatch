@@ -61,8 +61,8 @@ done
 python_args=(
   HJEEDS/darts_hierarchical_vs_jeeds.py
   --seed "${BASE_SEED}"
-  --num-agents 20
-  --count-buckets 5,10,25,100
+  --num-agents 25
+  --count-buckets 5,10,25,100,1000
   --agents-per-bucket 5
   --delta 0.1
   --num-sigma-grid 21

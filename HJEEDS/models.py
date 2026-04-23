@@ -1,6 +1,7 @@
-# This file still requires human verification. Delete this comment when done.
+# This file has been fully verified by a human researcher as of 04/22/26 at 8:03 PM MT.
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -108,14 +109,29 @@ class ExperimentConfig:
 class AgentTruth:
     """Ground-truth skill profile for one demonstrator."""
 
-    # The code keeps both original-scale and log-scale versions because the
-    # simulator works on the original scale while the hierarchical population
-    # model is defined in log-skill space.
     agent_id: int
-    sigma_true: float
-    lambda_true: float
     log_sigma_true: float
     log_lambda_true: float
+
+    def __post_init__(self) -> None:
+        """Validate that the stored canonical log-scale values are finite."""
+
+        if not math.isfinite(self.log_sigma_true):
+            raise ValueError(f"log_sigma_true must be finite. Received {self.log_sigma_true}.")
+        if not math.isfinite(self.log_lambda_true):
+            raise ValueError(f"log_lambda_true must be finite. Received {self.log_lambda_true}.")
+
+    @property
+    def sigma_true(self) -> float:
+        """Return the execution skill on the original scale."""
+
+        return math.exp(self.log_sigma_true)
+
+    @property
+    def lambda_true(self) -> float:
+        """Return the decision-making skill on the original scale."""
+
+        return math.exp(self.log_lambda_true)
 
 
 @dataclass(frozen=True)

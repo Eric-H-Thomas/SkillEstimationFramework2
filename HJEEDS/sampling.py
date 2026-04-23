@@ -41,6 +41,7 @@ def sample_reward_surface(rng: np.random.Generator, config: ExperimentConfig) ->
     return tuple(float(boundary) for boundary in states[0])
 
 
+# TODO: Remove this comment later. This has been checked.
 def build_skill_grids(config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]:
     """Construct the JEEDS execution-skill and decision-skill grids.
 
@@ -92,6 +93,8 @@ def sample_true_population_params(
 
     sigma_min, sigma_max = float(np.min(sigma_grid)), float(np.max(sigma_grid))
     lambda_min, lambda_max = float(np.min(lambda_grid)), float(np.max(lambda_grid))
+    log_sigma_min, log_sigma_max = math.log(sigma_min), math.log(sigma_max)
+    log_lambda_min, log_lambda_max = math.log(lambda_min), math.log(lambda_max)
 
     truths: list[AgentTruth] = []
     covariance = config.true_population.covariance_matrix
@@ -102,15 +105,11 @@ def sample_true_population_params(
         # comparisons do not get dominated by pure grid truncation artifacts.
         for _attempt in range(10_000):
             eta, rho = rng.multivariate_normal(mean_vector, covariance)
-            sigma_true = math.exp(float(eta))
-            lambda_true = math.exp(float(rho))
 
-            if sigma_min <= sigma_true <= sigma_max and lambda_min <= lambda_true <= lambda_max:
+            if log_sigma_min <= float(eta) <= log_sigma_max and log_lambda_min <= float(rho) <= log_lambda_max:
                 truths.append(
                     AgentTruth(
                         agent_id=agent_id,
-                        sigma_true=sigma_true,
-                        lambda_true=lambda_true,
                         log_sigma_true=float(eta),
                         log_lambda_true=float(rho),
                     )

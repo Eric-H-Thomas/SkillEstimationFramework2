@@ -41,9 +41,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-# This file acts as the public face of the package.  The refactor split the
-# implementation into smaller modules, but this entry module intentionally
-# re-exports the main constants and helpers so companion scripts can still
+# This file acts as the public face of the package.  This entry module
+# intentionally exports the main constants and helpers so companion scripts can
 # import from one recognizable location.
 from HJEEDS.aggregation import aggregate_results_across_seeds, summarize_seed_results
 from HJEEDS.artifacts import _agent_result_to_row, plot_error_by_bucket, write_agent_level_csv, write_summary_csvs
