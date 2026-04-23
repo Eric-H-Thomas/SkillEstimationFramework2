@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 import numpy as np
+from mpmath.libmp.libelefun import log_taylor
+
 from .models import ExperimentConfig, MethodEstimate
 
 
@@ -74,18 +76,18 @@ def run_independent_jeeds_baseline(
 
     # Marginalize the 2D posterior down to one distribution over sigma and one
     # over log(lambda) so we can report posterior means on each axis separately.
-    sigma_marginal = np.sum(posterior, axis=1)  # shape: (S,)
-    lambda_marginal = np.sum(posterior, axis=0)  # shape: (L,)
+    marginal_sigma = np.sum(posterior, axis=1)  # shape: (S,)
+    marginal_log_lambda = np.sum(posterior, axis=0)  # shape: (L,)
 
-    posterior_mean_sigma = float(np.dot(sigma_marginal, sigma_grid))
-    posterior_mean_log_lambda = float(np.dot(lambda_marginal, log_lambda_grid))
+    posterior_mean_sigma = float(np.dot(marginal_sigma, sigma_grid))
+    posterior_mean_log_lambda = float(np.dot(marginal_log_lambda, log_lambda_grid))
 
     # Also record the MAP cell because it is a useful diagnostic when reviewing
     # how concentrated or multimodal the posterior may be.
     map_index = int(np.argmax(posterior))
-    sigma_map_index, lambda_map_index = np.unravel_index(map_index, posterior.shape)
+    sigma_map_index, log_lambda_map_index = np.unravel_index(map_index, posterior.shape)
     map_sigma = float(sigma_grid[sigma_map_index])
-    map_log_lambda = float(log_lambda_grid[lambda_map_index])
+    map_log_lambda = float(log_lambda_grid[log_lambda_map_index])
 
     return MethodEstimate(
         method_name="jeeds",
@@ -97,6 +99,7 @@ def run_independent_jeeds_baseline(
         notes="Standalone JEEDS posterior computed with a uniform prior over the sigma x log-lambda grid.",
     )
 
+# TODO: Checked up to here as of 04/23/26 at 3:41 PM MT.
 
 def fit_population_hyperparameters_map(
     config: ExperimentConfig,
