@@ -1,4 +1,4 @@
-# This file still requires human verification. Delete this comment when done.
+# This file has been fully verified by a human researcher as of 04/24/26 at 12:17 PM MT.
 """Initial 1D darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
