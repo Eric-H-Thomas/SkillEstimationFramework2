@@ -1,4 +1,4 @@
-# This file still requires human verification. Delete this comment when done.
+# This file has been fully verified by a human researcher as of 04/24/26 at 12:03 PM MT.
 
 from __future__ import annotations
 import math
@@ -98,8 +98,6 @@ def run_independent_jeeds_baseline(
         status="ok",
         notes="Standalone JEEDS posterior computed with a uniform prior over the sigma x log-lambda grid.",
     )
-
-# TODO: Checked up to here as of 04/23/26 at 3:41 PM MT.
 
 def fit_population_hyperparameters_map(
     config: ExperimentConfig,
@@ -203,11 +201,29 @@ def fit_population_hyperparameters_map(
     def evaluate_log_posterior(parameter_vector: np.ndarray) -> float:
         """Return the approximate population log posterior at one parameter point."""
 
+        # ``parameter_vector`` lives in the optimizer's unconstrained search
+        # space. ``unpack_parameters`` maps it back to the actual statistical
+        # quantities we care about:
+        #
+        # - ``mu``: population mean in (log sigma, log lambda) space
+        # - ``tau_eta`` / ``tau_rho``: population standard deviations
+        # - ``correlation``: dependence between log sigma and log lambda
+        #
+        # The optimizer scores one candidate population model at a time by
+        # asking: "How plausible are all observed agents under this shared
+        # population, after also accounting for the hyperpriors?"
         unpacked = unpack_parameters(parameter_vector)
 
         try:
             # This is where the continuous population model gets projected onto
             # the discrete JEEDS grid used by every downstream posterior.
+            #
+            # Intuitively:
+            # 1. The hierarchical model says agent skills come from a bivariate
+            #    Normal over (log sigma, log lambda).
+            # 2. JEEDS itself only knows how to work with a discrete grid.
+            # 3. So we convert the continuous population density into one prior
+            #    mass value for each JEEDS grid cell.
             discrete_prior = build_discrete_hierarchical_prior(
                 unpacked,
                 sigma_grid=sigma_grid,
@@ -220,22 +236,53 @@ def fit_population_hyperparameters_map(
         if not np.any(positive_prior_mask):
             return -np.inf
 
+        # Convert prior masses into log-space so the later combination with the
+        # per-agent log likelihoods is just addition. Cells with zero prior
+        # mass stay at ``-inf`` so they remain excluded automatically.
         log_prior_grid = np.full_like(discrete_prior, -np.inf, dtype=float)
         log_prior_grid[positive_prior_mask] = np.log(discrete_prior[positive_prior_mask])
 
+        # This accumulator will hold:
+        #
+        #   sum_agents log p(agent_data | population_parameters)
+        #
+        # For each agent, we do not know their exact latent grid cell, so we
+        # must integrate (here: sum) over all supported JEEDS skill cells.
         marginal_log_likelihood = 0.0
         for log_likelihood_grid in validated_log_likelihoods:
             # For each agent, integrate over the latent grid cell by combining
             # the per-agent likelihood with the current population prior.
+            #
+            # In probability notation, this is the discrete analogue of:
+            #
+            #   p(data_agent | population) =
+            #       sum_cell p(data_agent | cell) p(cell | population)
+            #
+            # We only keep cells that have both:
+            # - finite agent log likelihood, and
+            # - positive prior support under the current population model.
             supported_cells = np.isfinite(log_likelihood_grid) & positive_prior_mask  # shape: (S, L)
             if not np.any(supported_cells):
                 return -np.inf
 
+            # ``log_joint_grid`` stores log p(data_agent, cell | population)
+            # for every supported cell:
+            #
+            #   log p(data_agent | cell) + log p(cell | population)
             log_joint_grid = log_likelihood_grid[supported_cells] + log_prior_grid[supported_cells]
             max_log_joint = float(np.max(log_joint_grid))
             if not np.isfinite(max_log_joint):
                 return -np.inf
 
+            # Sum over cells in a numerically stable way using the standard
+            # log-sum-exp identity:
+            #
+            #   log(sum_i exp(a_i))
+            #     = m + log(sum_i exp(a_i - m))
+            #
+            # where ``m`` is the maximum entry. Without this stabilization, the
+            # exponentials can underflow or overflow when the likelihood surface
+            # is very sharp.
             marginal_log_likelihood += max_log_joint + math.log(
                 float(np.sum(np.exp(log_joint_grid - max_log_joint)))
             )
@@ -243,12 +290,29 @@ def fit_population_hyperparameters_map(
         # Add the hyperprior contributions after the data likelihood term.  The
         # resulting objective is the empirical-Bayes analogue of a posterior
         # over population parameters.
+        #
+        # ``mu_log_prior`` is the multivariate-Normal-style quadratic penalty
+        # on the population mean in log-skill space.
         mu_centered = unpacked["mu"] - m0  # shape: (2,)
         mu_log_prior = -0.5 * float(mu_centered @ s0_inverse @ mu_centered)
+
+        # These two terms are Normal priors over the log standard deviations
+        # searched by the optimizer. Working in log space guarantees the
+        # implied ``tau`` values stay positive after exponentiation.
         tau_log_prior = -0.5 * ((parameter_vector[2] - log_tau_eta_mean) / log_tau_eta_sd) ** 2
         tau_log_prior += -0.5 * ((parameter_vector[3] - log_tau_rho_mean) / log_tau_rho_sd) ** 2
+
+        # The correlation prior is expressed on the unconstrained ``zeta_r``
+        # coordinate rather than directly on ``r`` so the optimizer can search
+        # freely on the real line.
         zeta_log_prior = -0.5 * ((unpacked["zeta_r"] - m_r) / s_r) ** 2
 
+        # Final objective:
+        #
+        #   log p(all_agent_data | population_parameters)
+        # + log p(population_parameters)
+        #
+        # up to additive constants that do not affect optimization.
         total_log_posterior = marginal_log_likelihood + mu_log_prior + tau_log_prior + zeta_log_prior
         if not np.isfinite(total_log_posterior):
             return -np.inf
@@ -462,6 +526,20 @@ def build_discrete_hierarchical_prior(
 
     # Evaluate the bivariate Normal density at each JEEDS grid point in
     # log-skill space.
+    # ``np.einsum("...i,ij,...j->...", a, M, a)`` means:
+    #
+    # - treat the last axis of each ``centered_points`` entry as a vector with
+    #   coordinates ``i`` / ``j``,
+    # - multiply on the left and right by the shared 2x2 matrix
+    #   ``inverse_covariance`` with indices ``ij``, and
+    # - sum over the repeated ``i`` and ``j`` indices while keeping the leading
+    #   grid axes (here ``S`` and ``L``) untouched.
+    #
+    # So for each grid cell this computes the Mahalanobis quadratic form
+    #
+    #   (x - mu)^T Sigma^{-1} (x - mu)
+    #
+    # and returns one scalar per ``(sigma, log lambda)`` cell.
     quadratic_form = np.einsum(
         "...i,ij,...j->...",
         centered_points,
@@ -592,11 +670,11 @@ def run_hierarchical_estimator(
 
     # As with the independent baseline, report sigma on its original scale and
     # decision skill on the canonical log-lambda axis.
-    sigma_marginal = np.sum(posterior, axis=1)  # shape: (S,)
-    lambda_marginal = np.sum(posterior, axis=0)  # shape: (L,)
+    marginal_sigma = np.sum(posterior, axis=1)  # shape: (S,)
+    marginal_log_lambda = np.sum(posterior, axis=0)  # shape: (L,)
 
-    posterior_mean_sigma = float(np.dot(sigma_marginal, sigma_grid))
-    posterior_mean_log_lambda = float(np.dot(lambda_marginal, log_lambda_grid))
+    posterior_mean_sigma = float(np.dot(marginal_sigma, sigma_grid))
+    posterior_mean_log_lambda = float(np.dot(marginal_log_lambda, log_lambda_grid))
 
     map_index = int(np.argmax(posterior))
     sigma_map_index, lambda_map_index = np.unravel_index(map_index, posterior.shape)
