@@ -1,4 +1,4 @@
-# This file still requires human verification. Delete this comment when done.
+# This file has been fully verified by a human researcher as of 04/27/26 at 4:12 PM MT.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
@@ -418,15 +418,6 @@ def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[di
             writer.writerow({column: row.get(column, "") for column in header})
 
 
-def condition_prefix(
-    condition: PriorSensitivityCondition,
-    hyperpriors: base_experiment.HyperpriorConfig,
-) -> dict[str, Any]:
-    """Return the condition metadata fields prepended to combined result rows."""
-
-    return condition_metadata_row(condition, hyperpriors)
-
-
 def run_condition(
     base_config: base_experiment.ExperimentConfig,
     condition: PriorSensitivityCondition,
@@ -472,7 +463,7 @@ def run_condition(
 
     # Combined output files prepend each result row with the condition metadata
     # so one CSV can hold the full sweep without losing provenance.
-    prefix = condition_prefix(condition, hyperpriors)
+    prefix = condition_metadata_row(condition, hyperpriors)
     combined_agent_rows = [
         {**prefix, **base_experiment._agent_result_to_row(result)}
         for result in all_agent_results
