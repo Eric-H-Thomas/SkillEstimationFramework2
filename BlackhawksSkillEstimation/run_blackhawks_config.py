@@ -49,7 +49,7 @@ def _load_config(path: Path) -> dict[str, Any]:
 
 
 def _build_candidate_skills(num_execution_skills: int) -> list[float]:
-    return np.linspace(0.004, np.pi / 4.0, int(num_execution_skills)).tolist()
+    return np.linspace(0.004, 0.25, int(num_execution_skills)).tolist()
 
 
 def _normalize_shot_group(shot_group: str) -> str:
