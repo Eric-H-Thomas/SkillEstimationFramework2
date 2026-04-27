@@ -349,9 +349,8 @@ class SimpleHockeySpaces:
     skill: 0.004; variance: 0.000016 (elite execution, tight cluster)
     skill: 0.02;  variance: 0.0004   (strong execution, tight spread)
     skill: 0.1;   variance: 0.01     (moderate execution)
-    skill: 0.3;   variance: 0.09     (loose execution, wide spread)
-    skill: 0.6;   variance: 0.36     (poor execution, very wide spread)
-    skill: 0.785 (π/4); variance: 0.616 (terrible execution, nearly random)
+    skill: 0.2;   variance: 0.04     (loose execution, wide spread)
+    skill: 0.25;  variance: 0.0625   (poor execution, very wide spread)
     '''
 
     @staticmethod
@@ -1254,7 +1253,7 @@ def estimate_player_skill(
         If True (default), return separate estimates for each season.
         If False, aggregate all shots across seasons into one estimate.
     candidate_skills : Sequence[float] | None
-        Execution-skill hypotheses for JEEDS (defaults to 50 values in [0.004, π/4]).
+        Execution-skill hypotheses for JEEDS (defaults to 50 values in [0.004, 0.25]).
     num_planning_skills : int
         Number of planning-skill hypotheses passed to JEEDS.
     rng_seed : int | None
@@ -1337,7 +1336,7 @@ def estimate_player_skill(
         raise ValueError("Must provide 'game_ids', 'seasons', or 'offline_data'.")
 
     candidate_skills = list(
-        candidate_skills or np.linspace(0.004, np.pi / 4, DEFAULT_NUM_EXECUTION_SKILLS)
+        candidate_skills or np.linspace(0.004, 0.25, DEFAULT_NUM_EXECUTION_SKILLS)
     )
     data_dir = Path(data_dir)
     player_data_dir = data_dir / "players" / f"player_{player_id}"
@@ -1597,7 +1596,7 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         nargs="+",
         default=None,
-        help=f"Optional execution-skill grid for JEEDS in radians (defaults to {DEFAULT_NUM_EXECUTION_SKILLS} values between 0.004 and π/4).",
+        help=f"Optional execution-skill grid for JEEDS in radians (defaults to {DEFAULT_NUM_EXECUTION_SKILLS} values between 0.004 and 0.25).",
     )
     parser.add_argument(
         "--num-planning-skills",
