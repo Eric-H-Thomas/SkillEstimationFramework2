@@ -823,7 +823,7 @@ def plot_shot_angular_heatmap(
 
     listedTargetsAngular = np.asarray(_listedTargetsAngular)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True)
 
     # Marker style depends on whether the shot was a goal
     _marker = "*" if is_goal else None #"x"
@@ -840,8 +840,8 @@ def plot_shot_angular_heatmap(
     ax1.set_title("Cartesian (Y, Z)")
     ax1.set_xlabel("Y")
     ax1.set_ylabel("Z")
+    ax1.set_aspect("equal", adjustable="box")
     ax1.legend(loc="upper right", fontsize=8)
-    fig.colorbar(sm, ax=ax1)
 
     # Right: Angular
     ax2.scatter(listedTargetsAngular[:, 0], listedTargetsAngular[:, 1],
@@ -851,8 +851,10 @@ def plot_shot_angular_heatmap(
     ax2.set_title("Angular (direction, elevation)")
     ax2.set_xlabel("Direction (rad)")
     ax2.set_ylabel("Elevation (rad)")
+    ax2.set_aspect("equal", adjustable="box")
     ax2.legend(loc="upper right", fontsize=8)
-    fig.colorbar(sm, ax=ax2)
+    # Single shared colorbar for both subplots.
+    fig.colorbar(sm, ax=[ax1, ax2], shrink=0.78, pad=0.015, aspect=20)
 
     # Build informative super-title with event ID and player XY
     suptitle_parts: list[str] = []
@@ -865,8 +867,9 @@ def plot_shot_angular_heatmap(
     )
     outcome_tag = "GOAL" if is_goal else "Shot"
     suptitle_parts.append(outcome_tag)
-    plt.suptitle(" | ".join(suptitle_parts), fontsize=10)
-    plt.tight_layout()
+    fig.suptitle(" | ".join(suptitle_parts), fontsize=10, y=0.99)
+    # Reduce vertical whitespace while keeping room for the super-title.
+    fig.set_constrained_layout_pads(h_pad=0.01, w_pad=0.01, hspace=0.0, wspace=0.0)
 
     out_path = None
     if save_path is not None:
