@@ -269,3 +269,4 @@ dependencies:
       - tomlkit==0.14.0
       - tqdm==4.67.1
       - tzdata==2025.2
+      - hockey-rink==1.1.4

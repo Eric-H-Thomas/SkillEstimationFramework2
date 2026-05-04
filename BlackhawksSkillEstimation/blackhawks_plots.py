@@ -9,8 +9,8 @@ Delegates to
 ------------
 - ``Environments.Hockey.getAngularHeatmapsPerPlayer.getAngularHeatmap``
   for Cartesian-to-angular coordinate transforms.
-- ``Environments.Hockey.makePlotsAngularHeatmaps.drawRink``
-  for rink diagram rendering.
+- ``hockey_rink.NHLRink``
+    for rink diagram rendering.
 - ``BlackhawksSkillEstimation.plot_intermediate_estimates``
   for convergence plots.
 
@@ -50,7 +50,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -62,6 +62,9 @@ from scipy.interpolate import RegularGridInterpolator
 
 
 from BlackhawksSkillEstimation.player_cache import lookup_player
+
+if TYPE_CHECKING:  # pragma: no cover
+    from hockey_rink import NHLRink
 
 # ---------------------------------------------------------------------------
 # Framework imports
@@ -673,69 +676,67 @@ def plot_net_center_covariance_angular_muted_heatmap(
 # Rink diagram
 # ---------------------------------------------------------------------------
 
-# NHL offensive zone face-off circle positions (feet)
-# Two circles: one above center (y=+22) and one below (y=-22),
-# both at x=69 (20 ft from the goal line at x=89).
-_FACEOFF_X = 69.0
-_FACEOFF_Y_UPPER = 22.0
-_FACEOFF_Y_LOWER = -22.0
-_FACEOFF_RADIUS = 15.0
+_WALL_Y_FT = 42.5
+_OZONE_X_MIN_FT = 26.0
+_END_BOARDS_X_FT = 100.0
 
 
-def _draw_rink() -> tuple[plt.Figure, plt.Axes]:
-    """Create a stylized offensive half-rink diagram.
+def _draw_rink() -> tuple[plt.Figure, plt.Axes, "NHLRink"]:
+    """Draw an offensive-zone rink using ``hockey_rink``.
 
-    Draws the goal line, crease, two NHL-standard offensive zone face-off
-    circles, and the net using standard NHL dimensions.  Returns the figure
-    and axes so callers can overlay additional annotations.
+    Uses the upstream `hockey_rink` library for rink rendering (instead of
+    drawing the rink manually). The view is restricted to the offensive zone
+    using ``display_range='ozone'`` (blue line to end boards), then further
+    constrained to x∈[26, 100] to match the Blackhawks half-rink coordinate
+    convention used throughout this repo.
 
-    The axis spines are hidden but x/y tick marks and labels are kept so
-    that readers can read off precise rink coordinates (feet from center
-    ice along each axis).
+    The y-axis is inverted to preserve the existing Blackhawks plotting
+    orientation.
 
     Returns
     -------
-    (plt.Figure, plt.Axes)
+    (plt.Figure, plt.Axes, NHLRink)
     """
+    # Work around a `hockey_rink` import-time assumption: it references
+    # urllib.request / urllib.error without importing those submodules.
+    import urllib.request  # noqa: F401
+    import urllib.error  # noqa: F401
+
+    try:
+        from hockey_rink import NHLRink
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(
+            "Missing optional dependency 'hockey-rink'. "
+            "Install with: pip install hockey-rink"
+        ) from exc
+
     fig, ax = plt.subplots()
     ax.set_aspect(1)
 
-    wall_y = 42.5
-    rink_boundary = plt.Rectangle((0, -wall_y), _GOAL_LINE_X, 2 * wall_y,
-                                   ec="blue", fc="none", lw=2)
-    ax.add_patch(rink_boundary)
+    rink = NHLRink()
+    rink.draw(
+        ax=ax,
+        display_range="ozone",
+        despine=False,
+    )
 
-    ax.plot([_GOAL_LINE_X, _GOAL_LINE_X], [-wall_y, wall_y], color="red", lw=2)
+    # Preserve existing axis orientation and styling.
+    ax.set_xlim(_OZONE_X_MIN_FT, _END_BOARDS_X_FT)
+    ax.set_ylim(_WALL_Y_FT, -_WALL_Y_FT)
 
-    crease = plt.Circle((_GOAL_LINE_X, 0), 6, color="red", fill=False, lw=2)
-    ax.add_patch(crease)
-
-    # NHL offensive zone: two face-off circles at (69, ±22) — not one at (69, 0)
-    for fo_y in (_FACEOFF_Y_UPPER, _FACEOFF_Y_LOWER):
-        faceoff = plt.Circle((_FACEOFF_X, fo_y), _FACEOFF_RADIUS,
-                              color="red", fill=False, lw=2)
-        ax.add_patch(faceoff)
-
-    net = plt.Rectangle((_GOAL_LINE_X - 4, -3), 4, 6, ec="black", fc="none", lw=2)
-    ax.add_patch(net)
-
-    ax.set_xlim(0, _GOAL_LINE_X + 5)
-    ax.set_ylim(wall_y, -wall_y)
-
-    # Hide box spines but keep tick marks for coordinate readability
-    # (follows the convention in Environments/Hockey/makePlotsFilteredShots.py)
     for spine in ax.spines.values():
         spine.set_visible(False)
     ax.yaxis.set_ticks_position("left")
     ax.xaxis.set_ticks_position("bottom")
-    x_ticks = np.linspace(0, _GOAL_LINE_X, 10, dtype=int, endpoint=True)
+
+    x_ticks = np.linspace(_OZONE_X_MIN_FT, _END_BOARDS_X_FT, 10, dtype=int, endpoint=True)
     ax.set_xticks(x_ticks)
     ax.tick_params(axis="y", which="both", left=True, right=False)
     ax.tick_params(axis="x", which="both", bottom=True, top=False)
     ax.set_xlabel("X (ft from center ice)", fontsize=9)
     ax.set_ylabel("Y (ft)", fontsize=9)
 
-    return fig, ax
+    return fig, ax, rink
 
 
 # ---------------------------------------------------------------------------
@@ -940,7 +941,7 @@ def plot_shot_rink(
     """
     player_locations = np.atleast_2d(player_locations)
 
-    fig, ax = _draw_rink()
+    fig, ax, rink = _draw_rink()
 
     if is_goal is not None:
         is_goal_arr = np.asarray(is_goal, dtype=bool)
@@ -948,23 +949,47 @@ def plot_shot_rink(
         goals_mask = is_goal_arr
 
         if np.any(shots_mask):
-            ax.scatter(
+            rink.scatter(
                 player_locations[shots_mask, 0],
                 player_locations[shots_mask, 1],
-                c="steelblue", s=30, zorder=5, label="Shot",
+                ax=ax,
+                plot_range="ozone",
+                plot_xlim=(_OZONE_X_MIN_FT, _END_BOARDS_X_FT),
+                skip_draw=True,
+                c="steelblue",
+                s=30,
+                zorder=5,
+                label="Shot",
             )
         if np.any(goals_mask):
-            ax.scatter(
+            rink.scatter(
                 player_locations[goals_mask, 0],
                 player_locations[goals_mask, 1],
-                c="#FFD700", edgecolors='k', marker="*", s=90, zorder=6, label="Goal",
+                ax=ax,
+                plot_range="ozone",
+                plot_xlim=(_OZONE_X_MIN_FT, _END_BOARDS_X_FT),
+                skip_draw=True,
+                c="#FFD700",
+                edgecolors="k",
+                marker="*",
+                s=90,
+                zorder=6,
+                label="Goal",
             )
         ax.legend(loc="upper left", fontsize=8, framealpha=0.85)
     else:
         # No goal info — render everything uniformly
-        ax.scatter(
-            player_locations[:, 0], player_locations[:, 1],
-            c="steelblue", s=30, zorder=5, label="Shot location",
+        rink.scatter(
+            player_locations[:, 0],
+            player_locations[:, 1],
+            ax=ax,
+            plot_range="ozone",
+            plot_xlim=(_OZONE_X_MIN_FT, _END_BOARDS_X_FT),
+            skip_draw=True,
+            c="steelblue",
+            s=30,
+            zorder=5,
+            label="Shot location",
         )
 
     # Add player xy annotations if provided
