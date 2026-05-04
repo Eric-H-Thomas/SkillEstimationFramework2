@@ -195,6 +195,139 @@ def query_player_season_shots(
     return df
 
 
+def query_season_shots(
+    seasons: list[int],
+    shot_types: set[str] | None = None,
+    include_null_shot_type: bool = True,
+) -> pd.DataFrame:
+    """Fetch shot-level metadata across all players for the given seasons.
+
+    This query mirrors :func:`query_player_season_shots` but omits the
+    player constraint, making it suitable for benchmark sampling.
+
+    Parameters
+    ----------
+    seasons : list[int]
+        List of season identifiers (e.g., ``[20232024, 20242025]``).
+    shot_types : set[str] | None
+        Optional set of allowed shot types (lowercase). When provided, the
+        query filters to those types.
+    include_null_shot_type : bool
+        If True, include shots with NULL shot_type alongside the allowed
+        shot types.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per shot with event metadata, player position, shot location,
+        and the season the shot occurred in.
+    """
+    if not seasons:
+        return pd.DataFrame()
+
+    seasons_str = ",".join(str(s) for s in seasons)
+    shot_type_clause = ""
+    if shot_types:
+        shot_types_sql = ",".join(f"'{t}'" for t in sorted(shot_types))
+        if include_null_shot_type:
+            shot_type_clause = (
+                f"AND (e.SHOT_TYPE IN ({shot_types_sql}) OR e.SHOT_TYPE IS NULL)"
+            )
+        else:
+            shot_type_clause = f"AND e.SHOT_TYPE IN ({shot_types_sql})"
+
+    query = f"""
+        SELECT
+            e.PLAYER_ID_HAWKS        AS player_id,
+            e.GAME_ID_HAWKS          AS game_id,
+            e.EVENT_ID_HAWKS         AS event_id,
+            g.SEASON                 AS season,
+            e.SHOT_TYPE              AS shot_type,
+            e.X_ADJ_COORD            AS start_x,
+            e.Y_ADJ_COORD            AS start_y,
+            st.GOALLINE_Y_MODEL      AS location_y,
+            st.GOALLINE_Z_MODEL      AS location_z
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.PUBLIC.GAME AS g
+          ON g.GAME_ID_HAWKS = e.GAME_ID_HAWKS
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE g.SEASON IN ({seasons_str})
+          AND e.EVENT_NAME = 'shot'
+          {shot_type_clause}
+          AND EXISTS (
+              SELECT 1
+              FROM hawks_analytics.post_shot_xg_value_maps p
+              WHERE p.event_id_hawks = e.event_id_hawks
+          );
+    """
+
+    df = db.get_df(query).rename(columns=str.lower)
+
+    if df.empty:
+        return df
+
+    # Flip Y-coordinate to match the positive-y-right convention.
+    df["location_y"] = -df["location_y"]
+    return df
+
+
+def get_shot_maps_by_event_ids(event_ids: list[int]) -> dict[int, dict[str, object]]:
+    """Return shot maps for the provided event IDs.
+
+    Parameters
+    ----------
+    event_ids : list[int]
+        List of event identifiers to fetch shot maps for.
+
+    Returns
+    -------
+    dict[int, dict[str, object]]
+        Mapping of event_id_hawks -> shot data dict containing:
+        - 'value_map': 2D numpy array of post-shot xG values
+        - 'net_cov': 2x2 covariance matrix
+        - 'net_coords': [y, z] goal line coordinates
+    """
+    if not event_ids:
+        return {}
+
+    event_ids_str = ",".join(str(eid) for eid in event_ids)
+    query = f"""
+            SELECT p.*
+                , e.game_id_hawks
+                , st.goalline_y_model
+                , st.goalline_z_model
+                , st.cov_00
+                , st.cov_01
+                , st.cov_10
+                , st.cov_11
+                , st.percent_on_net
+            FROM hawks_analytics.post_shot_xg_value_maps p
+            JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
+            JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
+            WHERE e.event_id_hawks IN ({event_ids_str})
+            ORDER BY p.event_id_hawks ASC, location_y ASC, location_z ASC
+            ;
+            """
+    df = db.get_df(query).rename(columns=str.lower)
+
+    if df.empty:
+        return {}
+
+    # Flip Y-coordinate to match the positive-y-right convention.
+    df["goalline_y_model"] = -df["goalline_y_model"]
+
+    shot_maps: dict[int, dict[str, object]] = {}
+    for event_id_hawks in df["event_id_hawks"].unique():
+        shot_df = df[df["event_id_hawks"] == event_id_hawks]
+        shot_maps[event_id_hawks] = {
+            "value_map": shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1],
+            "net_cov": _extract_covariance_matrix(shot_df.iloc[0]),
+            "net_coords": shot_df.iloc[0][["goalline_y_model", "goalline_z_model"]].values,
+        }
+    return shot_maps
+
+
 def get_game_shot_maps(game_id_hawks: int, player_id: int | None = None) -> dict[int, dict[str, object]]:
     """Return shot metadata for a given game keyed by ``event_id_hawks``.
     
