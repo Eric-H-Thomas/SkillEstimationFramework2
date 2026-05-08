@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file requires human re-verification after the bucketed error plot consolidation.
 """Initial 1D darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
@@ -143,7 +143,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
     write_summary_csvs(config.output_dir, summary_by_bucket_rows, summary_overall_rows)
     plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
-    plot_rationality_error_by_bucket(output_paths["rationality_error_plot"], summary_by_bucket_rows)
     print(f"[hier-darts] Wrote results to {config.output_dir.resolve()}", flush=True)
 
     return 0

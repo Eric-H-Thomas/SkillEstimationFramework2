@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file requires human re-verification after the bucketed error plot consolidation.
 from __future__ import annotations
 
 import csv
@@ -19,6 +19,32 @@ from .models import AgentResult
 # This module takes already-computed results and turns them into the artifacts a
 # human reviewer or paper workflow will inspect: flat CSVs and a compact error
 # figure.  There is no modeling here, only formatting and presentation.
+
+ERROR_METRIC_PANELS = [
+    (
+        "abs_sigma_error",
+        "Execution Skill Error",
+        r"|$\hat{\sigma} - \sigma$|",
+        "No rows for execution skill error",
+    ),
+    (
+        "abs_log_lambda_error",
+        "Log Decision Skill Error",
+        r"|$\widehat{\log \lambda} - \log \lambda$|",
+        "No rows for log decision skill error",
+    ),
+    (
+        "abs_rationality_percent_error",
+        "Decision Skill Error (%)",
+        "Absolute rationality error (percentage points)",
+        "No rows for rationality percentage-point error",
+    ),
+]
+
+METHOD_ORDER = {
+    "jeeds": 0,
+    "hierarchical": 1,
+}
 
 
 def _value_or_blank(value: Any) -> Any:
@@ -108,61 +134,33 @@ def write_summary_csvs(
     _write_dict_rows(paths["summary_overall_csv"], SUMMARY_OVERALL_CSV_HEADER, summary_overall_rows)
 
 
-def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
-    """Create the two-panel figure for sigma and natural-log-lambda error.
+def _as_float(value: Any) -> float | None:
+    """Convert CSV-ish values to floats, treating blanks as missing."""
 
-    The input rows are the across-seed summaries, so the figure plots the
-    reported mean and 95% CI for each method at each observation-count bucket.
-    """
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
-    # Import matplotlib lazily so dry-run and non-plotting helper tests do not
-    # need to import the plotting stack. Force a non-interactive backend so the
-    # same script works on headless SLURM nodes.
-    import matplotlib
 
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
+def _as_bucket(value: Any) -> int | None:
+    """Convert a summary row's bucket value to an integer label."""
 
-    def as_float(value: Any) -> float | None:
-        """Convert CSV-ish values to floats, treating blanks as missing."""
+    numeric_value = _as_float(value)
+    if numeric_value is None:
+        return None
+    return int(numeric_value)
 
-        if value is None or value == "":
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
 
-    def as_bucket(value: Any) -> int | None:
-        """Convert a summary row's bucket value to an integer label."""
+def _parse_bucket_summary_rows(summary_by_bucket_rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize summary rows once so all bucket plots share parsing behavior."""
 
-        numeric_value = as_float(value)
-        if numeric_value is None:
-            return None
-        return int(numeric_value)
-
-    metric_panels = [
-        (
-            "abs_sigma_error",
-            "Execution Skill Error by Count Bucket",
-            r"|$\hat{\sigma} - \sigma$|",
-        ),
-        (
-            "abs_log_lambda_error",
-            "Log-Decision Skill Error by Count Bucket",
-            r"|$\widehat{\log \lambda} - \log \lambda$|",
-        ),
-    ]
-    method_order = {
-        "jeeds": 0,
-        "hierarchical": 1,
-    }
-
-    # Parse rows once into a consistent internal representation before plotting.
     parsed_rows: list[dict[str, Any]] = []
     for row in summary_by_bucket_rows:
-        bucket = as_bucket(row.get("count_bucket"))
-        mean = as_float(row.get("mean"))
+        bucket = _as_bucket(row.get("count_bucket"))
+        mean = _as_float(row.get("mean"))
         if bucket is None or mean is None:
             continue
         parsed_rows.append(
@@ -171,158 +169,40 @@ def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dic
                 "metric": str(row.get("metric", "")),
                 "count_bucket": bucket,
                 "mean": mean,
-                "ci_lower": as_float(row.get("ci_lower")),
-                "ci_upper": as_float(row.get("ci_upper")),
+                "ci_lower": _as_float(row.get("ci_lower")),
+                "ci_upper": _as_float(row.get("ci_upper")),
             }
         )
-
-    bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
-    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
-
-    # The two panels mirror the two headline error metrics used in this
-    # experiment summary.
-    figure, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
-
-    for axis, (metric_name, title, ylabel) in zip(axes, metric_panels):
-        axis.set_title(title)
-        axis.set_xlabel("Observation count bucket")
-        axis.set_ylabel(ylabel)
-        axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-
-        metric_rows = [row for row in parsed_rows if row["metric"] == metric_name]
-        methods = sorted(
-            {row["method"] for row in metric_rows},
-            key=lambda method: (method_order.get(method, len(method_order)), method),
-        )
-
-        if metric_rows and bucket_values:
-            for method in methods:
-                method_rows = sorted(
-                    [row for row in metric_rows if row["method"] == method],
-                    key=lambda row: bucket_positions[row["count_bucket"]],
-                )
-
-                x_values: list[int] = []
-                y_values: list[float] = []
-                lower_errors: list[float] = []
-                upper_errors: list[float] = []
-
-                for row in method_rows:
-                    mean = row["mean"]
-                    ci_lower = row["ci_lower"]
-                    ci_upper = row["ci_upper"]
-
-                    x_values.append(bucket_positions[row["count_bucket"]])
-                    y_values.append(mean)
-                    lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
-                    upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
-
-                # Error bars visualize the across-seed uncertainty that was
-                # computed during aggregation.
-                axis.errorbar(
-                    x_values,
-                    y_values,
-                    yerr=np.array([lower_errors, upper_errors], dtype=float),
-                    marker="o",
-                    capsize=4,
-                    linewidth=2,
-                    label=method,
-                )
-
-            axis.set_xticks(list(bucket_positions.values()))
-            axis.set_xticklabels([str(bucket) for bucket in bucket_values])
-            axis.legend(title="Method")
-        else:
-            axis.text(
-                0.5,
-                0.5,
-                f"No rows for {metric_name}",
-                ha="center",
-                va="center",
-                transform=axis.transAxes,
-            )
-
-    # Save directly to disk rather than showing interactively because this code
-    # is also used in headless environments such as Slurm jobs.
-    figure.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(output_path, dpi=300)
-    plt.close(figure)
+    return parsed_rows
 
 
-def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
-    """Create the rationality-percentage-point error figure."""
+def _draw_bucket_error_panel(
+    axis: Any,
+    parsed_rows: Sequence[dict[str, Any]],
+    bucket_values: Sequence[int],
+    bucket_positions: dict[int, int],
+    metric_name: str,
+    title: str,
+    ylabel: str,
+    missing_message: str,
+) -> None:
+    """Draw one method-comparison error panel on the supplied Matplotlib axis."""
 
-    import matplotlib
-
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
-
-    def as_float(value: Any) -> float | None:
-        """Convert CSV-ish values to floats, treating blanks as missing."""
-
-        if value is None or value == "":
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    def as_bucket(value: Any) -> int | None:
-        """Convert a summary row's bucket value to an integer label."""
-
-        numeric_value = as_float(value)
-        if numeric_value is None:
-            return None
-        return int(numeric_value)
-
-    parsed_rows: list[dict[str, Any]] = []
-    for row in summary_by_bucket_rows:
-        # The summary table holds several metrics in one long-form CSV.  This
-        # figure selects just the rationality-percentage-point error rows and
-        # leaves the existing sigma/log-lambda figure untouched.
-        if str(row.get("metric", "")) != "abs_rationality_percent_error":
-            continue
-
-        bucket = as_bucket(row.get("count_bucket"))
-        mean = as_float(row.get("mean"))
-        if bucket is None or mean is None:
-            continue
-        parsed_rows.append(
-            {
-                "method": str(row.get("method", "")),
-                "count_bucket": bucket,
-                "mean": mean,
-                "ci_lower": as_float(row.get("ci_lower")),
-                "ci_upper": as_float(row.get("ci_upper")),
-            }
-        )
-
-    bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
-    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
-    method_order = {
-        "jeeds": 0,
-        "hierarchical": 1,
-    }
-
-    figure, axis = plt.subplots(1, 1, figsize=(7, 5))
-    axis.set_title("Rationality Percentage-Point Error by Count Bucket")
+    axis.set_title(title)
     axis.set_xlabel("Observation count bucket")
-    axis.set_ylabel("Absolute rationality error (percentage points)")
+    axis.set_ylabel(ylabel)
     axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
 
+    metric_rows = [row for row in parsed_rows if row["metric"] == metric_name]
     methods = sorted(
-        {row["method"] for row in parsed_rows},
-        key=lambda method: (method_order.get(method, len(method_order)), method),
+        {row["method"] for row in metric_rows},
+        key=lambda method: (METHOD_ORDER.get(method, len(METHOD_ORDER)), method),
     )
 
-    if parsed_rows and bucket_values:
+    if metric_rows and bucket_values:
         for method in methods:
-            # Each method gets one line across observation-count buckets, with
-            # the same seed-level confidence intervals used in the main error
-            # plot so the visual semantics stay consistent.
             method_rows = sorted(
-                [row for row in parsed_rows if row["method"] == method],
+                [row for row in metric_rows if row["method"] == method],
                 key=lambda row: bucket_positions[row["count_bucket"]],
             )
 
@@ -341,6 +221,8 @@ def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: 
                 lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
                 upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
 
+            # Error bars visualize the across-seed uncertainty that was
+            # computed during aggregation.
             axis.errorbar(
                 x_values,
                 y_values,
@@ -358,13 +240,77 @@ def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: 
         axis.text(
             0.5,
             0.5,
-            "No rows for rationality percentage-point error",
+            missing_message,
             ha="center",
             va="center",
             transform=axis.transAxes,
         )
 
+
+def _plot_bucket_error_panels(
+    output_path: Path,
+    summary_by_bucket_rows: Sequence[dict[str, Any]],
+    metric_panels: Sequence[tuple[str, str, str, str]],
+    figure_size: tuple[float, float],
+) -> None:
+    """Create a multi-panel count-bucket error figure."""
+
+    # Import matplotlib lazily so dry-run and non-plotting helper tests do not
+    # need to import the plotting stack. Force a non-interactive backend so the
+    # same script works on headless SLURM nodes.
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    parsed_rows = _parse_bucket_summary_rows(summary_by_bucket_rows)
+    bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
+    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
+
+    figure, axes = plt.subplots(1, len(metric_panels), figsize=figure_size, sharex=True)
+    axes_array = np.atleast_1d(axes)
+
+    for axis, (metric_name, title, ylabel, missing_message) in zip(axes_array, metric_panels):
+        _draw_bucket_error_panel(
+            axis,
+            parsed_rows,
+            bucket_values,
+            bucket_positions,
+            metric_name,
+            title,
+            ylabel,
+            missing_message,
+        )
+
+    # Save directly to disk rather than showing interactively because this code
+    # is also used in headless environments such as Slurm jobs.
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=300)
     plt.close(figure)
+
+
+def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
+    """Create the combined three-panel bucketed error figure.
+
+    The input rows are the across-seed summaries, so the figure plots the
+    reported mean and 95% CI for each method at each observation-count bucket.
+    """
+
+    _plot_bucket_error_panels(
+        output_path,
+        summary_by_bucket_rows,
+        ERROR_METRIC_PANELS,
+        figure_size=(16, 5),
+    )
+
+
+def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
+    """Create the legacy one-panel rationality error figure using shared logic."""
+
+    _plot_bucket_error_panels(
+        output_path,
+        summary_by_bucket_rows,
+        [ERROR_METRIC_PANELS[2]],
+        figure_size=(7, 5),
+    )

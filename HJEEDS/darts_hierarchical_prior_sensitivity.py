@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file requires human re-verification after the bucketed error plot consolidation.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
@@ -460,10 +460,6 @@ def run_condition(
         summary_overall_rows,
     )
     base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
-    base_experiment.plot_rationality_error_by_bucket(
-        output_paths["rationality_error_plot"],
-        summary_by_bucket_rows,
-    )
 
     # Combined output files prepend each result row with the condition metadata
     # so one CSV can hold the full sweep without losing provenance.
