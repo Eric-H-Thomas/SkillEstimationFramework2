@@ -1,4 +1,4 @@
-# This file requires human re-verification after the bucketed error plot consolidation.
+# This file has been fully verified by a human researcher as of 05/08/2026 at 11:49 AM MT.
 """Initial 1D darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
@@ -48,7 +48,6 @@ from HJEEDS.aggregation import aggregate_results_across_seeds, summarize_seed_re
 from HJEEDS.artifacts import (
     _agent_result_to_row,
     plot_error_by_bucket,
-    plot_rationality_error_by_bucket,
     write_agent_level_csv,
     write_summary_csvs,
 )

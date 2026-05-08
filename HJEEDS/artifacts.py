@@ -1,4 +1,4 @@
-# This file requires human re-verification after the bucketed error plot consolidation.
+# This file has been fully verified by a human researcher as of 05/08/2026 at 11:49 AM MT.
 from __future__ import annotations
 
 import csv
@@ -302,15 +302,4 @@ def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dic
         summary_by_bucket_rows,
         ERROR_METRIC_PANELS,
         figure_size=(16, 5),
-    )
-
-
-def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
-    """Create the legacy one-panel rationality error figure using shared logic."""
-
-    _plot_bucket_error_panels(
-        output_path,
-        summary_by_bucket_rows,
-        [ERROR_METRIC_PANELS[2]],
-        figure_size=(7, 5),
     )

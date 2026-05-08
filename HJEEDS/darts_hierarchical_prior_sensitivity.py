@@ -1,4 +1,4 @@
-# This file requires human re-verification after the bucketed error plot consolidation.
+# This file has been fully verified by a human researcher as of 05/08/2026 at 11:49 AM MT.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
