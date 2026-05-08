@@ -1,10 +1,9 @@
-# This file has been fully verified by a human researcher as of 04/24/26 at 12:03 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 
 from __future__ import annotations
 import math
 from typing import Any, Sequence
 import numpy as np
-from mpmath.libmp.libelefun import log_taylor
 
 from .models import ExperimentConfig, MethodEstimate
 

@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 04/22/26 at 8:03 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 from __future__ import annotations
 
 import math
@@ -167,6 +167,7 @@ class MethodEstimate:
     posterior_mean_log_lambda: float | None = None
     map_sigma: float | None = None
     map_log_lambda: float | None = None
+    rationality_percent: float | None = None
     status: str = "todo"
     notes: str = ""
 
@@ -188,6 +189,11 @@ class MethodEstimate:
             raise ValueError(
                 f"map_log_lambda must be finite when provided. Received {self.map_log_lambda}."
             )
+        if self.rationality_percent is not None and not math.isfinite(self.rationality_percent):
+            raise ValueError(
+                f"rationality_percent must be finite when provided. Received {self.rationality_percent}."
+            )
+
 
 @dataclass(frozen=True)
 class AgentResult:
@@ -199,6 +205,7 @@ class AgentResult:
     num_observations: int
     sigma_true: float
     log_lambda_true: float
+    rationality_percent_true: float | None
     jeeds: MethodEstimate
     hierarchical: MethodEstimate
     notes: str = ""
@@ -210,6 +217,11 @@ class AgentResult:
             raise ValueError(f"sigma_true must be finite. Received {self.sigma_true}.")
         if not math.isfinite(self.log_lambda_true):
             raise ValueError(f"log_lambda_true must be finite. Received {self.log_lambda_true}.")
+        if self.rationality_percent_true is not None and not math.isfinite(self.rationality_percent_true):
+            raise ValueError(
+                "rationality_percent_true must be finite when provided. "
+                f"Received {self.rationality_percent_true}."
+            )
 
     @property
     def lambda_true(self) -> float:

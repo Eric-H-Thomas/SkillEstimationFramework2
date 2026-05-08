@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 04/24/26 at 12:17 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 """Initial 1D darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
@@ -45,7 +45,13 @@ if str(REPO_ROOT) not in sys.path:
 # intentionally exports the main constants and helpers so companion scripts can
 # import from one recognizable location.
 from HJEEDS.aggregation import aggregate_results_across_seeds, summarize_seed_results
-from HJEEDS.artifacts import _agent_result_to_row, plot_error_by_bucket, write_agent_level_csv, write_summary_csvs
+from HJEEDS.artifacts import (
+    _agent_result_to_row,
+    plot_error_by_bucket,
+    plot_rationality_error_by_bucket,
+    write_agent_level_csv,
+    write_summary_csvs,
+)
 from HJEEDS.config import (
     AGENT_LEVEL_CSV_HEADER,
     AGENT_LEVEL_FILENAME,
@@ -68,6 +74,7 @@ from HJEEDS.config import (
     DEFAULT_SIGMA_MIN,
     DEFAULT_TRUE_POPULATION,
     ERROR_PLOT_FILENAME,
+    RATIONALITY_ERROR_PLOT_FILENAME,
     SUMMARY_BY_BUCKET_CSV_HEADER,
     SUMMARY_BY_BUCKET_FILENAME,
     SUMMARY_OVERALL_CSV_HEADER,
@@ -136,6 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
     write_summary_csvs(config.output_dir, summary_by_bucket_rows, summary_overall_rows)
     plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    plot_rationality_error_by_bucket(output_paths["rationality_error_plot"], summary_by_bucket_rows)
     print(f"[hier-darts] Wrote results to {config.output_dir.resolve()}", flush=True)
 
     return 0

@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 04/27/26 at 2:34 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 from __future__ import annotations
 
 import csv
@@ -27,6 +27,14 @@ def _value_or_blank(value: Any) -> Any:
     return "" if value is None else value
 
 
+def _abs_difference_or_blank(left: float | None, right: float | None) -> Any:
+    """Return a CSV-friendly absolute difference when both values exist."""
+
+    if left is None or right is None:
+        return ""
+    return abs(left - right)
+
+
 def _agent_result_to_row(result: AgentResult) -> dict[str, Any]:
     """Flatten an ``AgentResult`` into the agent-level CSV schema."""
 
@@ -39,15 +47,26 @@ def _agent_result_to_row(result: AgentResult) -> dict[str, Any]:
         "num_observations": result.num_observations,
         "sigma_true": result.sigma_true,
         "log_lambda_true": result.log_lambda_true,
+        "rationality_percent_true": _value_or_blank(result.rationality_percent_true),
         "jeeds_posterior_mean_sigma": _value_or_blank(result.jeeds.posterior_mean_sigma),
         "jeeds_posterior_mean_log_lambda": _value_or_blank(result.jeeds.posterior_mean_log_lambda),
         "jeeds_map_sigma": _value_or_blank(result.jeeds.map_sigma),
         "jeeds_map_log_lambda": _value_or_blank(result.jeeds.map_log_lambda),
+        "jeeds_rationality_percent": _value_or_blank(result.jeeds.rationality_percent),
+        "jeeds_abs_rationality_percent_error": _abs_difference_or_blank(
+            result.jeeds.rationality_percent,
+            result.rationality_percent_true,
+        ),
         "jeeds_status": result.jeeds.status,
         "hierarchical_posterior_mean_sigma": _value_or_blank(result.hierarchical.posterior_mean_sigma),
         "hierarchical_posterior_mean_log_lambda": _value_or_blank(result.hierarchical.posterior_mean_log_lambda),
         "hierarchical_map_sigma": _value_or_blank(result.hierarchical.map_sigma),
         "hierarchical_map_log_lambda": _value_or_blank(result.hierarchical.map_log_lambda),
+        "hierarchical_rationality_percent": _value_or_blank(result.hierarchical.rationality_percent),
+        "hierarchical_abs_rationality_percent_error": _abs_difference_or_blank(
+            result.hierarchical.rationality_percent,
+            result.rationality_percent_true,
+        ),
         "hierarchical_status": result.hierarchical.status,
         "notes": result.notes,
     }
@@ -225,6 +244,126 @@ def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dic
 
     # Save directly to disk rather than showing interactively because this code
     # is also used in headless environments such as Slurm jobs.
+    figure.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=300)
+    plt.close(figure)
+
+
+def plot_rationality_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
+    """Create the rationality-percentage-point error figure."""
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    def as_float(value: Any) -> float | None:
+        """Convert CSV-ish values to floats, treating blanks as missing."""
+
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def as_bucket(value: Any) -> int | None:
+        """Convert a summary row's bucket value to an integer label."""
+
+        numeric_value = as_float(value)
+        if numeric_value is None:
+            return None
+        return int(numeric_value)
+
+    parsed_rows: list[dict[str, Any]] = []
+    for row in summary_by_bucket_rows:
+        # The summary table holds several metrics in one long-form CSV.  This
+        # figure selects just the rationality-percentage-point error rows and
+        # leaves the existing sigma/log-lambda figure untouched.
+        if str(row.get("metric", "")) != "abs_rationality_percent_error":
+            continue
+
+        bucket = as_bucket(row.get("count_bucket"))
+        mean = as_float(row.get("mean"))
+        if bucket is None or mean is None:
+            continue
+        parsed_rows.append(
+            {
+                "method": str(row.get("method", "")),
+                "count_bucket": bucket,
+                "mean": mean,
+                "ci_lower": as_float(row.get("ci_lower")),
+                "ci_upper": as_float(row.get("ci_upper")),
+            }
+        )
+
+    bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
+    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
+    method_order = {
+        "jeeds": 0,
+        "hierarchical": 1,
+    }
+
+    figure, axis = plt.subplots(1, 1, figsize=(7, 5))
+    axis.set_title("Rationality Percentage-Point Error by Count Bucket")
+    axis.set_xlabel("Observation count bucket")
+    axis.set_ylabel("Absolute rationality error (percentage points)")
+    axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+
+    methods = sorted(
+        {row["method"] for row in parsed_rows},
+        key=lambda method: (method_order.get(method, len(method_order)), method),
+    )
+
+    if parsed_rows and bucket_values:
+        for method in methods:
+            # Each method gets one line across observation-count buckets, with
+            # the same seed-level confidence intervals used in the main error
+            # plot so the visual semantics stay consistent.
+            method_rows = sorted(
+                [row for row in parsed_rows if row["method"] == method],
+                key=lambda row: bucket_positions[row["count_bucket"]],
+            )
+
+            x_values: list[int] = []
+            y_values: list[float] = []
+            lower_errors: list[float] = []
+            upper_errors: list[float] = []
+
+            for row in method_rows:
+                mean = row["mean"]
+                ci_lower = row["ci_lower"]
+                ci_upper = row["ci_upper"]
+
+                x_values.append(bucket_positions[row["count_bucket"]])
+                y_values.append(mean)
+                lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
+                upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
+
+            axis.errorbar(
+                x_values,
+                y_values,
+                yerr=np.array([lower_errors, upper_errors], dtype=float),
+                marker="o",
+                capsize=4,
+                linewidth=2,
+                label=method,
+            )
+
+        axis.set_xticks(list(bucket_positions.values()))
+        axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+        axis.legend(title="Method")
+    else:
+        axis.text(
+            0.5,
+            0.5,
+            "No rows for rationality percentage-point error",
+            ha="center",
+            va="center",
+            transform=axis.transAxes,
+        )
+
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=300)

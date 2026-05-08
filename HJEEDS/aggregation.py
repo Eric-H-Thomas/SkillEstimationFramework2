@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 04/27/26 at 1:56 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 from __future__ import annotations
 
 import math
@@ -65,6 +65,14 @@ def summarize_seed_results(seed_result: SeedResult) -> tuple[list[dict[str, Any]
             # values directly.
             abs_sigma_error = abs(estimate.posterior_mean_sigma - result.sigma_true)
             abs_log_lambda_error = abs(estimate.posterior_mean_log_lambda - result.log_lambda_true)
+            abs_rationality_percent_error = None
+            if result.rationality_percent_true is not None and estimate.rationality_percent is not None:
+                # Rationality percentage is already on a 0-to-100 style scale,
+                # so the absolute error is interpreted directly as percentage
+                # points rather than another transformed skill-unit error.
+                abs_rationality_percent_error = abs(
+                    estimate.rationality_percent - result.rationality_percent_true
+                )
 
             add_metric(
                 bucket_metrics,
@@ -80,11 +88,22 @@ def summarize_seed_results(seed_result: SeedResult) -> tuple[list[dict[str, Any]
                 count_bucket=result.count_bucket,
                 value=abs_log_lambda_error,
             )
+            if abs_rationality_percent_error is not None:
+                add_metric(
+                    bucket_metrics,
+                    method=method_name,
+                    metric="abs_rationality_percent_error",
+                    count_bucket=result.count_bucket,
+                    value=abs_rationality_percent_error,
+                )
 
             overall_sigma_key = (method_name, "abs_sigma_error")
             overall_lambda_key = (method_name, "abs_log_lambda_error")
             overall_metrics.setdefault(overall_sigma_key, []).append(abs_sigma_error)
             overall_metrics.setdefault(overall_lambda_key, []).append(abs_log_lambda_error)
+            if abs_rationality_percent_error is not None:
+                overall_rationality_key = (method_name, "abs_rationality_percent_error")
+                overall_metrics.setdefault(overall_rationality_key, []).append(abs_rationality_percent_error)
 
     summary_by_bucket_rows: list[dict[str, Any]] = []
     for (method_name, metric_name, count_bucket), values in sorted(bucket_metrics.items()):

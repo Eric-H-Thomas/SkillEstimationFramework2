@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 04/22/26 at 7:19 PM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 from __future__ import annotations
 
 import argparse
@@ -108,6 +108,7 @@ AGENT_LEVEL_FILENAME = "agent_level_results.csv"
 SUMMARY_BY_BUCKET_FILENAME = "summary_by_bucket.csv"
 SUMMARY_OVERALL_FILENAME = "summary_overall.csv"
 ERROR_PLOT_FILENAME = "error_by_count_bucket.png"
+RATIONALITY_ERROR_PLOT_FILENAME = "rationality_percent_error_by_count_bucket.png"
 
 # CSV headers all declared in one place
 AGENT_LEVEL_CSV_HEADER = [
@@ -117,15 +118,20 @@ AGENT_LEVEL_CSV_HEADER = [
     "num_observations",
     "sigma_true",
     "log_lambda_true",
+    "rationality_percent_true",
     "jeeds_posterior_mean_sigma",
     "jeeds_posterior_mean_log_lambda",
     "jeeds_map_sigma",
     "jeeds_map_log_lambda",
+    "jeeds_rationality_percent",
+    "jeeds_abs_rationality_percent_error",
     "jeeds_status",
     "hierarchical_posterior_mean_sigma",
     "hierarchical_posterior_mean_log_lambda",
     "hierarchical_map_sigma",
     "hierarchical_map_log_lambda",
+    "hierarchical_rationality_percent",
+    "hierarchical_abs_rationality_percent_error",
     "hierarchical_status",
     "notes",
 ]
@@ -170,12 +176,13 @@ def planned_output_paths(output_dir: Path) -> dict[str, Path]:
     """Return the artifact locations for this experiment family."""
 
     # Keeping the naming convention here prevents small path mismatches between
-    # the dry-run summary, the writers, and the Slurm wrapper.
+    # the dry-run summary, the writers, and the plotting code.
     return {
         "agent_level_csv": output_dir / AGENT_LEVEL_FILENAME,
         "summary_by_bucket_csv": output_dir / SUMMARY_BY_BUCKET_FILENAME,
         "summary_overall_csv": output_dir / SUMMARY_OVERALL_FILENAME,
         "error_plot": output_dir / ERROR_PLOT_FILENAME,
+        "rationality_error_plot": output_dir / RATIONALITY_ERROR_PLOT_FILENAME,
     }
 
 
@@ -372,4 +379,4 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
     print("  5. Run independent JEEDS on each agent.")
     print("  6. Fit hierarchical MAP hyperparameters and rerun posteriors.")
     print("  7. Aggregate errors by bucket and overall.")
-    print("  8. Write CSV summaries and a two-panel figure.")
+    print("  8. Write CSV summaries and diagnostic figures.")

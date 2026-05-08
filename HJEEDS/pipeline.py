@@ -1,5 +1,7 @@
-# This file has been fully verified by a human researcher as of 04/23/26 at 8:57 AM MT.
+# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
 from __future__ import annotations
+
+from dataclasses import replace
 
 import numpy as np
 
@@ -12,6 +14,7 @@ from .estimation import (
 )
 from .likelihood import compute_agent_log_likelihood_grid
 from .models import AgentDataset, AgentResult, AgentTruth, ExperimentConfig, MethodEstimate, SeedResult
+from .rationality import compute_expected_values_for_rationality, rationality_percent_from_expected_values
 from .sampling import (
     assign_observation_counts,
     build_skill_grids,
@@ -120,6 +123,37 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
             log_lambda_grid=log_lambda_grid,
         )
 
+        # The rationality-percentage metric from the JEEDS paper maps a
+        # decision policy into "how far between uniform random and optimal" it
+        # is for this reward surface.  We use the true execution skill here so
+        # this derived metric isolates decision-making skill rather than mixing
+        # in execution-skill estimation error.
+        rationality_expected_values = compute_expected_values_for_rationality(
+            reward_surface=reward_surface,
+            sigma=agent_truth.sigma_true,
+            delta=config.delta,
+        )
+        rationality_percent_true = rationality_percent_from_expected_values(
+            rationality_expected_values,
+            agent_truth.log_lambda_true,
+        )
+        if jeeds_estimate.status == "ok" and jeeds_estimate.posterior_mean_log_lambda is not None:
+            jeeds_estimate = replace(
+                jeeds_estimate,
+                rationality_percent=rationality_percent_from_expected_values(
+                    rationality_expected_values,
+                    jeeds_estimate.posterior_mean_log_lambda,
+                ),
+            )
+        if hierarchical_estimate.status == "ok" and hierarchical_estimate.posterior_mean_log_lambda is not None:
+            hierarchical_estimate = replace(
+                hierarchical_estimate,
+                rationality_percent=rationality_percent_from_expected_values(
+                    rationality_expected_values,
+                    hierarchical_estimate.posterior_mean_log_lambda,
+                ),
+            )
+
         seed_result.agent_results.append(
             AgentResult(
                 seed=seed,
@@ -128,6 +162,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
                 num_observations=dataset.num_observations,
                 sigma_true=agent_truth.sigma_true,
                 log_lambda_true=agent_truth.log_lambda_true,
+                rationality_percent_true=rationality_percent_true,
                 jeeds=jeeds_estimate,
                 hierarchical=hierarchical_estimate,
                 notes=(
