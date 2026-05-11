@@ -37,6 +37,7 @@ import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import gaussian_filter
 
+import BlackhawksAPI.queries as bh_queries
 from BlackhawksAPI import (
     get_game_shot_maps,
     get_games_shot_maps_batch,
@@ -54,6 +55,38 @@ _NET_CENTER = np.array([89.0, 0.0])
 # Passed to getAngularHeatmap as grid_y and grid_z to use full native extents.
 _BH_Y = np.linspace(-5.0, 5.0, 120)
 _BH_Z = np.linspace(0.0, 6.0, 72)
+
+
+def _infer_grid_axes_from_value_map(value_map: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Infer grid_y/grid_z vectors that match a given xG value_map shape.
+
+    The Blackhawks xG maps (legacy and new-table) cover fixed physical extents:
+    - Y: [-5, 5]
+    - Z: [0, 6]
+
+    But their native grid resolution may vary (e.g., legacy 72×120 vs new 31×51).
+    This helper constructs axes with lengths that match the map's columns/rows.
+
+    Parameters
+    ----------
+    value_map : np.ndarray
+        2D array with shape (n_z, n_y): rows are Z, columns are Y.
+    """
+
+    if value_map is None:
+        return _BH_Y, _BH_Z
+    if not isinstance(value_map, np.ndarray):
+        value_map = np.asarray(value_map)
+    if value_map.ndim != 2:
+        raise ValueError(f"Expected 2D value_map, got shape={value_map.shape!r}")
+
+    n_z, n_y = int(value_map.shape[0]), int(value_map.shape[1])
+    if n_z <= 1 or n_y <= 1:
+        raise ValueError(f"value_map has invalid grid shape {value_map.shape!r}")
+
+    grid_y = np.linspace(-5.0, 5.0, n_y)
+    grid_z = np.linspace(0.0, 6.0, n_z)
+    return grid_y, grid_z
 
 # Minimum distance (in feet) from the net center below which a shot is
 # discarded.  The Blackhawks analytics team cannot accurately model shots
@@ -440,7 +473,9 @@ def transform_shots_for_jeeds(
             continue
 
         shot_map_data = shot_maps[event_id]
-        base_ev = shot_map_data["value_map"]  # native (72×120) over Y∈[-5,5] Z∈[0,6]
+        base_ev = shot_map_data["value_map"]  # native (n_z×n_y) over Y∈[-5,5] Z∈[0,6]
+
+        grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
 
         # Convert Blackhawks Cartesian reward surface to angular coordinates.
         (
@@ -459,8 +494,8 @@ def transform_shots_for_jeeds(
             base_ev,
             player_location,
             executed_action,
-            grid_y=_BH_Y,
-            grid_z=_BH_Z,
+            grid_y=grid_y,
+            grid_z=grid_z,
         )
 
         if skip:
@@ -595,12 +630,13 @@ def _filter_estimable_shots_for_persistence(
 
         base_ev = shot_maps[event_id]["value_map"]
         try:
+            grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
             angular_out = angular_heatmaps.getAngularHeatmap(
                 base_ev,
                 player_location,
                 executed_action,
-                grid_y=_BH_Y,
-                grid_z=_BH_Z,
+                grid_y=grid_y,
+                grid_z=grid_z,
             )
             skip = bool(angular_out[9])
         except Exception:
@@ -736,6 +772,8 @@ def save_player_data_by_games(
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
     tag: str = "games",
+    maps_source: str = "legacy",
+    value_column: str = "expected_goals",
 ) -> dict[str, Path]:
     """Fetch and save player shot data + shot maps for specific games.
 
@@ -796,7 +834,16 @@ def save_player_data_by_games(
         "Fetching shot maps..."
     )
     try:
-        shot_maps = get_games_shot_maps_batch(filtered_game_ids, player_id=player_id)
+        if maps_source == "legacy":
+            shot_maps = get_games_shot_maps_batch(filtered_game_ids, player_id=player_id)
+        elif maps_source == "new":
+            shot_maps = bh_queries.get_games_shot_maps_batch_new_xg(
+                filtered_game_ids,
+                player_id=player_id,
+                value_column=value_column,
+            )
+        else:
+            raise ValueError("maps_source must be one of {'legacy','new'}")
     except Exception as e:
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
@@ -867,6 +914,8 @@ def save_player_data(
     seasons: list[int],
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
+    maps_source: str = "legacy",
+    value_column: str = "expected_goals",
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
 
@@ -925,7 +974,16 @@ def save_player_data(
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
         try:
-            shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
+            if maps_source == "legacy":
+                shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
+            elif maps_source == "new":
+                shot_maps = bh_queries.get_games_shot_maps_batch_new_xg(
+                    game_ids,
+                    player_id=player_id,
+                    value_column=value_column,
+                )
+            else:
+                raise ValueError("maps_source must be one of {'legacy','new'}")
         except Exception as e:
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}
