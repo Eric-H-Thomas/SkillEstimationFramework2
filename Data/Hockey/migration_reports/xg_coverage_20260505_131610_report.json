@@ -1,0 +1,212 @@
+{
+  "game_ids": null,
+  "grid_checks": [
+    {
+      "event_id_hawks": 42344010570,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42468010894,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42599020912,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42698030564,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42726020831,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42935030067,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 42994020779,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 43019010524,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 43142010764,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    },
+    {
+      "event_id_hawks": 43148010248,
+      "expected_rows_rectangular": 1581,
+      "grid_ok": true,
+      "max_y": 5.0,
+      "max_z": 6.0,
+      "min_y": -5.0,
+      "min_z": 0.0,
+      "n_rows": 1581,
+      "n_unique_y": 51,
+      "n_unique_z": 31,
+      "season": 20212022
+    }
+  ],
+  "legacy_grid_reference": {
+    "n_unique_y": 120,
+    "n_unique_z": 72
+  },
+  "per_season": [
+    {
+      "legacy_distinct_event_ids": 98669,
+      "legacy_only_event_ids": 12791,
+      "new_distinct_event_ids": 91992,
+      "new_only_event_ids": 6114,
+      "overlap_event_ids": 85878,
+      "season": 20212022
+    }
+  ],
+  "player_id": null,
+  "reshape_validation": [
+    {
+      "event_id_hawks": 42935030067,
+      "expected_shape": [
+        31,
+        51
+      ],
+      "ok": true,
+      "value_map_shape": [
+        31,
+        51
+      ]
+    },
+    {
+      "event_id_hawks": 43142010764,
+      "expected_shape": [
+        31,
+        51
+      ],
+      "ok": true,
+      "value_map_shape": [
+        31,
+        51
+      ]
+    }
+  ],
+  "sample_size": 5,
+  "samples": {
+    "20212022": {
+      "legacy_only": [
+        43391011060,
+        43374031105,
+        43189030657,
+        43389020202,
+        43366010610
+      ],
+      "new_only": [
+        43142010764,
+        42599020912,
+        43019010524,
+        42468010894,
+        42698030564
+      ],
+      "overlap": [
+        42935030067,
+        42994020779,
+        42344010570,
+        42726020831,
+        43148010248
+      ]
+    }
+  },
+  "seasons": [
+    20212022
+  ],
+  "seed": 0,
+  "started_at": "2026-05-05T13:16:10",
+  "tables": {
+    "legacy": "hawks_analytics.post_shot_xg_value_maps",
+    "new": "hawks_analytics.expected_goal_values_post_shot_net_grid"
+  },
+  "warnings": []
+}
