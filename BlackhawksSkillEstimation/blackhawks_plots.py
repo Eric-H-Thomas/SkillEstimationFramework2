@@ -96,8 +96,13 @@ _DEFAULT_DATA_DIR = Path("Data/Hockey")
 
 # Blackhawks xG grid extent and resolution (from Snowflake queries.py)
 # The grid covers a wider area than the net face so misses are captured.
-_BH_Y = np.linspace(-5.0, 5.0, 120)   # Y in [-5, 5]
-_BH_Z = np.linspace(0.0,  6.0,  72)   # Z in [0, 6]
+_BH_Y_EXTENT = (-5.0, 5.0)  # Y in [-5, 5]
+_BH_Z_EXTENT = (0.0, 6.0)   # Z in [0, 6]
+
+# Legacy reference axes (historical 72×120 maps). Prefer `_infer_bhawks_grid_yz`
+# for rendering so plots work for both legacy and new-table resolutions.
+_BH_Y = np.linspace(_BH_Y_EXTENT[0], _BH_Y_EXTENT[1], 120)
+_BH_Z = np.linspace(_BH_Z_EXTENT[0], _BH_Z_EXTENT[1], 72)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +151,121 @@ def _make_custom_cmap(base: str = "gist_rainbow", brightness: float = 0.4):
     return ListedColormap(cmap)
 
 
+def _infer_bhawks_grid_yz(
+    value_map: np.ndarray,
+    *,
+    y_extent: tuple[float, float] = _BH_Y_EXTENT,
+    z_extent: tuple[float, float] = _BH_Z_EXTENT,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Infer Blackhawks (grid_y, grid_z) axes from a Z×Y value map.
+
+    Phase 2 migration requirement: legacy maps are 72×120 (Z×Y) and new-table
+    maps are typically 31×51 (Z×Y), but both share the same physical extents:
+    Y∈[-5,5], Z∈[0,6].
+
+    Parameters
+    ----------
+    value_map : np.ndarray
+        2D array with shape (n_z, n_y).
+    y_extent, z_extent : (float, float)
+        Physical coordinate extents to map across the grid.
+
+    Returns
+    -------
+    (grid_y, grid_z) : tuple[np.ndarray, np.ndarray]
+        1D arrays of centers for the Y and Z axes matching value_map columns/rows.
+    """
+
+    heatmap = np.asarray(value_map)
+    if heatmap.ndim != 2:
+        raise ValueError(f"value_map must be 2D (Z×Y); got shape={heatmap.shape}")
+
+    n_z, n_y = int(heatmap.shape[0]), int(heatmap.shape[1])
+    if n_z <= 1 or n_y <= 1:
+        raise ValueError(f"value_map shape must be at least 2×2; got {heatmap.shape}")
+
+    y0, y1 = float(y_extent[0]), float(y_extent[1])
+    z0, z1 = float(z_extent[0]), float(z_extent[1])
+    grid_y = np.linspace(y0, y1, n_y)
+    grid_z = np.linspace(z0, z1, n_z)
+    return grid_y, grid_z
+
+
+def plot_xg_map_cartesian_native(
+    value_map: np.ndarray,
+    *,
+    net_coords: Sequence[float] | None = None,
+    ax: plt.Axes | None = None,
+    title: str | None = None,
+    cmap: str = "viridis",
+    vmin: float | None = 0.0,
+    vmax: float | None = None,
+) -> tuple[plt.Axes, ScalarMappable]:
+    """Render a native-resolution Cartesian (Y/Z) xG map with an optional marker.
+
+    This helper is intentionally *native-only* (no resampling/diff) so it can be
+    used for the Phase 2 migration A/B sanity checks.
+
+    Parameters
+    ----------
+    value_map : np.ndarray
+        2D Z×Y heatmap.
+    net_coords : Sequence[float] | None
+        Optional [y, z] marker location (goal line coordinates).
+    ax : plt.Axes | None
+        Axis to draw on; if None, creates a new figure/axis.
+    title : str | None
+        Optional title for the axis.
+    cmap : str
+        Matplotlib colormap.
+    vmin, vmax : float | None
+        Color scale bounds; defaults to vmin=0 and vmax inferred from the data.
+
+    Returns
+    -------
+    (ax, mappable)
+        The axis and the image mappable for optional colorbar creation.
+    """
+
+    heatmap = np.asarray(value_map, dtype=float)
+    grid_y, grid_z = _infer_bhawks_grid_yz(heatmap)
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(5.2, 3.8))
+
+    extent = (
+        float(grid_y.min()),
+        float(grid_y.max()),
+        float(grid_z.min()),
+        float(grid_z.max()),
+    )
+    im = ax.imshow(
+        heatmap,
+        origin="lower",
+        extent=extent,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest",
+        aspect="equal",
+    )
+
+    if net_coords is not None:
+        y, z = float(net_coords[0]), float(net_coords[1])
+        ax.scatter([y], [z], c="#ffffff", edgecolors="#000000", marker="x", s=70, zorder=5)
+
+    ax.set_xlabel("Y")
+    ax.set_ylabel("Z")
+    if title:
+        ax.set_title(title)
+    ax.set_xlim(float(grid_y.min()), float(grid_y.max()))
+    ax.set_ylim(float(grid_z.min()), float(grid_z.max()))
+
+    sm = ScalarMappable(norm=im.norm, cmap=im.cmap)
+    sm.set_array([])
+    return ax, sm
+
+
 def _resize_value_map(value_map: np.ndarray) -> np.ndarray:
     """Remap a Blackhawks xG map onto the SpacesHockey coordinate grid.
 
@@ -161,8 +281,9 @@ def _resize_value_map(value_map: np.ndarray) -> np.ndarray:
     sh_zz, sh_yy = np.meshgrid(sh_z, sh_y, indexing='ij')
     sh_query_pts = np.stack([sh_zz.ravel(), sh_yy.ravel()], axis=-1)
     
+    grid_y, grid_z = _infer_bhawks_grid_yz(value_map)
     interp = RegularGridInterpolator(
-        (_BH_Z, _BH_Y), value_map, method='linear',
+        (grid_z, grid_y), value_map, method='linear',
         bounds_error=False, fill_value=0.0,
     )
     return interp(sh_query_pts).reshape(40, 60)
@@ -505,6 +626,7 @@ def plot_net_center_covariance_angular_muted_heatmap(
         player location is too close to the goal line (skips rendering).
     """
     heatmap = np.asarray(value_map)
+    grid_y, grid_z = _infer_bhawks_grid_yz(heatmap)
 
     (
         dirs,
@@ -522,8 +644,8 @@ def plot_net_center_covariance_angular_muted_heatmap(
         heatmap,
         np.asarray(player_location),
         np.asarray(executed_action),
-        grid_y=_BH_Y,
-        grid_z=_BH_Z,
+        grid_y=grid_y,
+        grid_z=grid_z,
     )
 
     if skip:
@@ -791,6 +913,7 @@ def plot_shot_angular_heatmap(
     # getAngularHeatmap interpolates over Y∈[-5,5] Z∈[0,6] instead of
     # the narrower SpacesHockey defaults.
     heatmap = np.asarray(value_map)
+    grid_y, grid_z = _infer_bhawks_grid_yz(heatmap)
 
     (
         dirs, elevations,
@@ -805,7 +928,7 @@ def plot_shot_angular_heatmap(
         _,
     ) = getAngularHeatmap(
         heatmap, np.asarray(player_location), np.asarray(executed_action),
-        grid_y=_BH_Y, grid_z=_BH_Z,
+        grid_y=grid_y, grid_z=grid_z,
     )
 
     if skip:
@@ -813,7 +936,7 @@ def plot_shot_angular_heatmap(
         return None
 
     # Build Cartesian target grid matching the native BH heatmap.
-    tY, tZ = np.meshgrid(_BH_Y, _BH_Z)
+    tY, tZ = np.meshgrid(grid_y, grid_z)
     cartesian_targets = np.stack((tY, tZ), axis=-1).reshape(-1, 2)
 
     cmap = _make_custom_cmap()
