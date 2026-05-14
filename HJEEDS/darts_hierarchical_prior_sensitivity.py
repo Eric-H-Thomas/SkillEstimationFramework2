@@ -1,3 +1,4 @@
+# This file was written or edited by AI and still requires human review. Delete this comment when done.
 # This file has been fully verified by a human researcher as of 05/08/2026 at 11:49 AM MT.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
@@ -95,6 +96,18 @@ class PriorSensitivityCondition:
         """Return a filename-safe identifier for this sensitivity condition."""
 
         return f"{self.confidence_slug}__{self.bias_slug}"
+
+
+@dataclass(frozen=True)
+class PriorSensitivityGridResult:
+    """Combined rows produced by one prior-sensitivity grid run."""
+
+    output_dir: Path
+    conditions: tuple[PriorSensitivityCondition, ...]
+    condition_rows: list[dict[str, Any]]
+    agent_rows: list[dict[str, Any]]
+    bucket_rows: list[dict[str, Any]]
+    overall_rows: list[dict[str, Any]]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -474,6 +487,61 @@ def run_condition(
     return combined_agent_rows, combined_bucket_rows, combined_overall_rows, prefix
 
 
+def run_sensitivity_grid(
+    config: base_experiment.ExperimentConfig,
+    conditions: Sequence[PriorSensitivityCondition],
+) -> PriorSensitivityGridResult:
+    """Run a prior-sensitivity grid and write its combined artifacts.
+
+    This is the reusable core used both by the standalone 3x3 hyperprior
+    sensitivity script and by larger ablations that need to nest a full
+    hyperprior grid inside another experimental factor.
+    """
+
+    condition_tuple = tuple(conditions)
+    all_agent_rows: list[dict[str, Any]] = []
+    all_bucket_rows: list[dict[str, Any]] = []
+    all_overall_rows: list[dict[str, Any]] = []
+    condition_rows: list[dict[str, Any]] = []
+
+    for condition in condition_tuple:
+        agent_rows, bucket_rows, overall_rows, metadata_row = run_condition(config, condition)
+        all_agent_rows.extend(agent_rows)
+        all_bucket_rows.extend(bucket_rows)
+        all_overall_rows.extend(overall_rows)
+        condition_rows.append(metadata_row)
+
+    output_dir = config.output_dir
+    condition_columns = CONDITION_METADATA_HEADER
+    _write_dict_rows(output_dir / CONDITION_METADATA_FILENAME, condition_columns, condition_rows)
+    _write_dict_rows(
+        output_dir / COMBINED_AGENT_LEVEL_FILENAME,
+        condition_columns + base_experiment.AGENT_LEVEL_CSV_HEADER,
+        all_agent_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
+        condition_columns + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
+        all_bucket_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
+        condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
+        all_overall_rows,
+    )
+    plot_lowest_bucket_heatmap(output_dir / LOWEST_BUCKET_HEATMAP_FILENAME, all_bucket_rows, condition_tuple)
+
+    print(f"[prior-sensitivity] Wrote combined results to {output_dir.resolve()}", flush=True)
+    return PriorSensitivityGridResult(
+        output_dir=output_dir,
+        conditions=condition_tuple,
+        condition_rows=condition_rows,
+        agent_rows=all_agent_rows,
+        bucket_rows=all_bucket_rows,
+        overall_rows=all_overall_rows,
+    )
+
+
 def plot_lowest_bucket_heatmap(
     output_path: Path,
     summary_by_bucket_rows: Sequence[dict[str, Any]],
@@ -617,41 +685,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print_dry_run_summary(config, conditions)
         return 0
 
-    # These lists accumulate rows from all nine conditions into one set of
-    # combined CSVs that are easier to analyze in a spreadsheet or notebook.
-    all_agent_rows: list[dict[str, Any]] = []
-    all_bucket_rows: list[dict[str, Any]] = []
-    all_overall_rows: list[dict[str, Any]] = []
-    condition_rows: list[dict[str, Any]] = []
-
-    for condition in conditions:
-        agent_rows, bucket_rows, overall_rows, metadata_row = run_condition(config, condition)
-        all_agent_rows.extend(agent_rows)
-        all_bucket_rows.extend(bucket_rows)
-        all_overall_rows.extend(overall_rows)
-        condition_rows.append(metadata_row)
-
-    output_dir = config.output_dir
-    condition_columns = CONDITION_METADATA_HEADER
-    _write_dict_rows(output_dir / CONDITION_METADATA_FILENAME, condition_columns, condition_rows)
-    _write_dict_rows(
-        output_dir / COMBINED_AGENT_LEVEL_FILENAME,
-        condition_columns + base_experiment.AGENT_LEVEL_CSV_HEADER,
-        all_agent_rows,
-    )
-    _write_dict_rows(
-        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
-        condition_columns + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
-        all_bucket_rows,
-    )
-    _write_dict_rows(
-        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
-        condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
-        all_overall_rows,
-    )
-    plot_lowest_bucket_heatmap(output_dir / LOWEST_BUCKET_HEATMAP_FILENAME, all_bucket_rows, conditions)
-
-    print(f"[prior-sensitivity] Wrote combined results to {output_dir.resolve()}", flush=True)
+    run_sensitivity_grid(config, conditions)
     return 0
 
 
