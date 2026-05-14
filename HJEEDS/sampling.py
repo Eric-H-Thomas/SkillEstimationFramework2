@@ -1,8 +1,9 @@
-# This file has been fully verified by a human researcher as of 04/23/26 at 9:49 AM MT.
+# This file has been fully verified by a human researcher as of 05/09/26 at 6:51 PM MT.
 
 from __future__ import annotations
 import math
 import numpy as np
+from . import darts_environment as darts
 from .models import AgentDataset, AgentTruth, ExperimentConfig
 
 
@@ -20,24 +21,19 @@ def sample_reward_surface(rng: np.random.Generator, config: ExperimentConfig) ->
     variability.
     """
 
-    # Import lazily so ``--dry-run`` can validate the experiment structure even
-    # when the local Python environment is missing the heavier scientific
-    # dependencies required by the full darts environment module.
-    from Environments.Darts.RandomDarts import darts
-
-    # The darts helper returns a list because the original environment code can
+    # The darts helper returns a list because the environment code can
     # generate multiple random boards at once.  Here we always request exactly
     # one board and then freeze it for the whole seed.
-    states = darts.generate_random_states(
-        rng,
-        config.min_success_regions,
-        config.max_success_regions,
-        1,
-        min_width=config.min_region_width,
+    reward_surfaces = darts.generate_random_states(
+        rng=rng,
+        min_success_region_count=config.min_success_regions,
+        max_success_region_count=config.max_success_regions,
+        num_reward_surfaces=1,
+        min_boundary_spacing=config.min_region_width,
     )
-    if not states:
+    if not reward_surfaces:
         raise RuntimeError("Failed to sample a 1D darts reward surface.")
-    return tuple(float(boundary) for boundary in states[0])
+    return tuple(float(boundary) for boundary in reward_surfaces[0])
 
 
 def build_skill_grids(config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]:
@@ -158,17 +154,13 @@ def simulate_agent_dataset(
 
     The intended targets are sampled from a softmax policy over the 1D darts
     target grid, where expected values are computed under the demonstrator's
-    true execution skill. Each intended target is then perturbed by wrapped
-    Gaussian execution noise to produce the observed action.
+    true execution skill. Each intended target is then perturbed by Gaussian
+    execution noise to produce the observed action.
 
     The simulator follows the same broad modeling assumptions used by the
     likelihood path so the generated data and estimators are matched in this
     first experiment.
     """
-
-    # Import lazily so dry-run and helper tests can still run in lightweight
-    # environments where the full darts/scipy stack is not installed.
-    from Environments.Darts.RandomDarts import darts
 
     if num_observations <= 0:
         raise ValueError(f"num_observations must be positive. Received {num_observations}.")
@@ -219,14 +211,16 @@ def simulate_agent_dataset(
     intended_targets = rng.choice(actions, size=num_observations, p=target_probabilities)
 
     # This is the execution-skill part of the model: after a target is chosen,
-    # the observed action is a noisy perturbation of that intended target.
-    #
-    # Each intended target is executed with wrapped Gaussian noise using the
-    # existing domain helper so the simulation matches the board geometry the
-    # estimator will later assume.
+    # the observed action is a noisy perturbation of that intended target.  The
+    # final-paper 1D darts model does not wrap executions at the board edge, so
+    # noisy actions can land outside [-BOARD_LIMIT, BOARD_LIMIT].
     executed_actions = np.array(
         [
-            darts.sample_noisy_action(rng, reward_surface, agent_truth.sigma_true, float(target))
+            darts.sample_noisy_action(
+                rng=rng,
+                execution_noise_sd=agent_truth.sigma_true,
+                intended_target=float(target),
+            )
             for target in intended_targets
         ],
         dtype=float,
@@ -242,6 +236,6 @@ def simulate_agent_dataset(
         executed_actions=executed_actions,
         notes=(
             "Simulated with a JEEDS-style softmax policy over the 1D darts target grid "
-            "and wrapped Gaussian execution noise."
+            "and non-wrapped Gaussian execution noise."
         ),
     )

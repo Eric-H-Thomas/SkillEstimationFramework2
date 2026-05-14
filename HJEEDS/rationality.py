@@ -1,9 +1,11 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file has been fully verified by a human researcher as of 05/09/26 at 6:51 PM MT.
 from __future__ import annotations
 
 import math
 
 import numpy as np
+
+from . import darts_environment as darts
 
 
 # Helpers for the JEEDS rationality-percentage metric.  The value reported here
@@ -71,11 +73,7 @@ def compute_expected_values_for_rationality(
 ) -> np.ndarray:
     """Return the expected-value curve used to evaluate rationality percentage."""
 
-    # Import lazily for the same reason as the simulation and likelihood paths:
-    # dry-run/config code should not need to import the full darts environment.
-    from Environments.Darts.RandomDarts import darts
-
-    # Use the same environment helper as the generator and likelihood so the
-    # rationality metric is evaluated on the same wrapped 1D aiming grid.
+    # Use the same environment helper as the generator and likelihood so this
+    # metric is evaluated on the same non-wrapped 1D aiming grid.
     expected_values, _actions = darts.compute_expected_value_curve(reward_surface, sigma, delta)
     return np.asarray(expected_values, dtype=float)

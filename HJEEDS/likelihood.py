@@ -1,8 +1,9 @@
-# This file has been fully verified by a human researcher as of 04/23/26 at 1:15 PM MT.
+# This file has been fully verified by a human researcher as of 05/09/26 at 6:51 PM MT.
 
 from __future__ import annotations
 import math
 import numpy as np
+from . import darts_environment as darts
 from .models import AgentDataset, ExperimentConfig
 
 # This module converts one demonstrator's observed actions into the JEEDS
@@ -32,10 +33,6 @@ def compute_agent_log_likelihood_grid(
     needs the corresponding raw lambda values.
     """
 
-    # Import lazily so the module remains lightweight to import in dry-run
-    # mode. The full likelihood path depends on the darts environment helpers.
-    from Environments.Darts.RandomDarts import darts
-
     if agent_dataset.executed_actions is None:
         raise ValueError("Agent dataset must contain executed_actions before likelihood evaluation.")
     if agent_dataset.executed_actions.shape[0] != agent_dataset.num_observations:
@@ -55,7 +52,7 @@ def compute_agent_log_likelihood_grid(
 
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
         # First hold execution skill fixed. Under that sigma hypothesis we can
-        # compute the target grid and wrapped Gaussian noise model once, then
+        # compute the target grid and Gaussian noise model once, then
         # reuse those pieces across all log-lambda grid cells.
         expected_values, target_actions = darts.compute_expected_value_curve(
             reward_surface,
@@ -80,24 +77,11 @@ def compute_agent_log_likelihood_grid(
         elif not np.allclose(reference_targets, target_actions):
             raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
 
-        # The simulator wraps executed actions back onto the 1D board, so the
-        # likelihood must measure the shortest wrapped distance between each
-        # executed action and candidate target. For example, on [-10, 10], an
-        # executed action near -10 can be close to a target near +10 because the
-        # board edge wraps around.
-        raw_action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
-        board_limit = float(darts.BOARD_LIMIT)
-        board_width = 2.0 * board_limit
-        action_differences = np.where(
-            raw_action_differences > board_limit,
-            raw_action_differences - board_width,
-            raw_action_differences,
-        )  # shape: (N, T)
-        action_differences = np.where(
-            action_differences < -board_limit,
-            action_differences + board_width,
-            action_differences,
-        )  # shape: (N, T)
+        # Under the final-paper non-wrapped 1D darts model, observed executions
+        # live on the real line.  Actions that overshoot the board remain
+        # outside the board rather than wrapping to the opposite edge, so the
+        # Gaussian likelihood uses the ordinary target-to-execution difference.
+        action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
         gaussian_scale = float(sigma_hypothesis)
         gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
         pdf_matrix = gaussian_coeff * np.exp(-0.5 * np.square(action_differences / gaussian_scale))  # shape: (N, T)
