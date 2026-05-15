@@ -61,13 +61,14 @@ def _abs_difference_or_blank(left: float | None, right: float | None) -> Any:
     return abs(left - right)
 
 
-def _agent_result_to_row(result: AgentResult) -> dict[str, Any]:
+def _agent_result_to_row(result: AgentResult, environment: str = "1d") -> dict[str, Any]:
     """Flatten an ``AgentResult`` into the agent-level CSV schema."""
 
     # Flatten the nested dataclass structure into the exact CSV column layout.
     # Using one helper avoids duplicating this mapping in multiple writers.
     return {
         "seed": result.seed,
+        "environment": environment,
         "agent_id": result.agent_id,
         "count_bucket": result.count_bucket,
         "num_observations": result.num_observations,
@@ -98,7 +99,11 @@ def _agent_result_to_row(result: AgentResult) -> dict[str, Any]:
     }
 
 
-def write_agent_level_csv(output_path: Path, agent_results: Sequence[AgentResult]) -> None:
+def write_agent_level_csv(
+    output_path: Path,
+    agent_results: Sequence[AgentResult],
+    environment: str = "1d",
+) -> None:
     """Write the agent-level CSV schema."""
 
     # Writers create parent directories on demand so the caller only needs to
@@ -108,7 +113,7 @@ def write_agent_level_csv(output_path: Path, agent_results: Sequence[AgentResult
         writer = csv.DictWriter(handle, fieldnames=AGENT_LEVEL_CSV_HEADER)
         writer.writeheader()
         for result in agent_results:
-            writer.writerow(_agent_result_to_row(result))
+            writer.writerow(_agent_result_to_row(result, environment))
 
 
 def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[dict[str, Any]]) -> None:

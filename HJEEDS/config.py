@@ -8,7 +8,7 @@ from typing import Sequence
 
 import numpy as np
 
-from .models import ExperimentConfig, HyperpriorConfig, TruePopulationConfig
+from .models import EnvironmentGridConfig, ExperimentConfig, HyperpriorConfig, TruePopulationConfig
 
 
 # This module exists to answer one question: "What study are we about to run?"
@@ -16,7 +16,7 @@ from .models import ExperimentConfig, HyperpriorConfig, TruePopulationConfig
 # the conversion from raw CLI strings into a validated ``ExperimentConfig``.
 
 
-CLI_DESCRIPTION = """Initial 1D darts hierarchical-vs-JEEDS experiments.
+CLI_DESCRIPTION = """Initial darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
 independent JEEDS against a hierarchical empirical-Bayes extension. In
@@ -74,6 +74,7 @@ DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 DEFAULT_AGENTS_PER_BUCKET = 5
 DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
+DEFAULT_DELTA_2D = 5.0
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts")
 
 # These values refer to the number of high-reward "success" regions, not the
@@ -113,6 +114,7 @@ RATIONALITY_ERROR_PLOT_FILENAME = "rationality_percent_error_by_count_bucket.png
 # CSV headers all declared in one place
 AGENT_LEVEL_CSV_HEADER = [
     "seed",
+    "environment",
     "agent_id",
     "count_bucket",
     "num_observations",
@@ -223,6 +225,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Target-grid resolution used by the darts environment and later likelihood code.",
     )
     parser.add_argument(
+        "--environment",
+        type=str,
+        choices=["1d", "2d"],
+        default="1d",
+        help="Darts environment: '1d' or '2d'.",
+    )
+    parser.add_argument(
         "--num-sigma-grid",
         type=int,
         default=DEFAULT_NUM_SIGMA_GRID,
@@ -303,14 +312,18 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     # Parse the structured fields once here so the rest of the code only needs
     # to reason about typed values, not raw CLI strings.
     count_buckets = _parse_count_buckets(args.count_buckets)
+    delta = args.delta
+    if args.environment == "2d" and args.delta == DEFAULT_DELTA:
+        delta = DEFAULT_DELTA_2D
 
     config = ExperimentConfig(
+        environment=args.environment,
         seed=args.seed,
         num_seeds=args.num_seeds,
         num_agents=args.num_agents,
         count_buckets=count_buckets,
         agents_per_bucket=args.agents_per_bucket,
-        delta=args.delta,
+        delta=delta,
         num_sigma_grid=args.num_sigma_grid,
         num_lambda_grid=args.num_lambda_grid,
         sigma_min=args.sigma_min,
@@ -318,6 +331,7 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         lambda_min=args.lambda_min,
         lambda_max=args.lambda_max,
         output_dir=Path(args.output_dir),
+        environment_grids={},
         dry_run=args.dry_run,
         min_success_regions=args.min_success_regions,
         max_success_regions=args.max_success_regions,
@@ -355,10 +369,11 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
     # or optimization begins.
     paths = planned_output_paths(config.output_dir)
 
-    print("=== DRY RUN: 1D Hierarchical Darts vs JEEDS ===")
+    print("=== DRY RUN: Hierarchical Darts vs JEEDS ===")
     print("This dry run validates parser/config wiring and reports the intended workload.")
     print("No simulation or inference functions will be executed.")
     print()
+    print(f"Environment: {config.environment}")
     print(f"Seeds: {config.seed_values}")
     print(f"Agents: {config.num_agents}")
     print(f"Count buckets: {config.count_buckets}")
@@ -372,7 +387,7 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
         print(f"  - {label}: {path}")
     print()
     print("Planned pipeline:")
-    print("  1. Sample one fixed 1D darts reward surface per seed.")
+    print(f"  1. Sample one fixed {config.environment.upper()} darts reward surface per seed.")
     print("  2. Sample demonstrator true skills from the hierarchical population.")
     print("  3. Assign uneven observation counts across demonstrators.")
     print("  4. Simulate agent datasets from the JEEDS-consistent generative model.")

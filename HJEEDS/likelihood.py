@@ -32,9 +32,11 @@ def compute_agent_log_likelihood_grid(
     needs the corresponding raw lambda values.
     """
 
+    from HJEEDS.environment_adapters import get_environment_domain
+
     # Import lazily so the module remains lightweight to import in dry-run
     # mode. The full likelihood path depends on the darts environment helpers.
-    from Environments.Darts.RandomDarts import darts
+    domain = get_environment_domain(config.environment)
 
     if agent_dataset.executed_actions is None:
         raise ValueError("Agent dataset must contain executed_actions before likelihood evaluation.")
@@ -44,7 +46,7 @@ def compute_agent_log_likelihood_grid(
             f"{agent_dataset.executed_actions.shape[0]} vs {agent_dataset.num_observations}."
         )
 
-    executed_actions = np.asarray(agent_dataset.executed_actions, dtype=float)
+    executed_actions = np.asarray(agent_dataset.executed_actions, dtype=object if config.environment == "2d" else float)
     # Start with ``-inf`` everywhere so impossible parameter pairs naturally
     # remain excluded unless a later calculation supplies a valid likelihood.
     log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
@@ -52,18 +54,19 @@ def compute_agent_log_likelihood_grid(
     log_likelihood_grid = np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
 
     reference_targets: np.ndarray | None = None
+    cached_action_differences: np.ndarray | None = None
 
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
         # First hold execution skill fixed. Under that sigma hypothesis we can
         # compute the target grid and wrapped Gaussian noise model once, then
         # reuse those pieces across all log-lambda grid cells.
-        expected_values, target_actions = darts.compute_expected_value_curve(
+        expected_values, target_actions = domain.compute_expected_value_curve(
             reward_surface,
             float(sigma_hypothesis),
             config.delta,
         )
         expected_values = np.asarray(expected_values, dtype=float)  # shape: (T,)
-        target_actions = np.asarray(target_actions, dtype=float)  # shape: (T,)
+        target_actions = np.asarray(target_actions, dtype=object if config.environment == "2d" else float)  # shape: (T,)
 
         if expected_values.shape != target_actions.shape:
             raise RuntimeError(
@@ -77,27 +80,48 @@ def compute_agent_log_likelihood_grid(
         # We verify that explicitly so later code can safely assume a common grid.
         if reference_targets is None:
             reference_targets = target_actions
-        elif not np.allclose(reference_targets, target_actions):
-            raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
+        elif config.environment == "1d":
+            if not np.allclose(reference_targets, target_actions):
+                raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
+        elif not np.array_equal(reference_targets, target_actions):
+            raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 2D darts grid.")
 
-        # The simulator wraps executed actions back onto the 1D board, so the
-        # likelihood must measure the shortest wrapped distance between each
-        # executed action and candidate target. For example, on [-10, 10], an
-        # executed action near -10 can be close to a target near +10 because the
-        # board edge wraps around.
-        raw_action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
-        board_limit = float(darts.BOARD_LIMIT)
-        board_width = 2.0 * board_limit
-        action_differences = np.where(
-            raw_action_differences > board_limit,
-            raw_action_differences - board_width,
-            raw_action_differences,
-        )  # shape: (N, T)
-        action_differences = np.where(
-            action_differences < -board_limit,
-            action_differences + board_width,
-            action_differences,
-        )  # shape: (N, T)
+        if config.environment == "1d":
+            # The simulator wraps executed actions back onto the 1D board, so the
+            # likelihood must measure the shortest wrapped distance between each
+            # executed action and candidate target. For example, on [-10, 10], an
+            # executed action near -10 can be close to a target near +10 because the
+            # board edge wraps around.
+            raw_action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
+            from Environments.Darts.RandomDarts import darts
+
+            board_limit = float(darts.BOARD_LIMIT)
+            board_width = 2.0 * board_limit
+            action_differences = np.where(
+                raw_action_differences > board_limit,
+                raw_action_differences - board_width,
+                raw_action_differences,
+            )  # shape: (N, T)
+            action_differences = np.where(
+                action_differences < -board_limit,
+                action_differences + board_width,
+                action_differences,
+            )  # shape: (N, T)
+        elif config.environment == "2d":
+            if cached_action_differences is None:
+                cached_action_differences = np.array(
+                    [
+                        [
+                            domain.compute_action_difference(exec_action, target_action)
+                            for target_action in reference_targets
+                        ]
+                        for exec_action in executed_actions
+                    ],
+                    dtype=float,
+                )
+            action_differences = cached_action_differences
+        else:
+            raise ValueError(f"Unknown environment: {config.environment}")
         gaussian_scale = float(sigma_hypothesis)
         gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
         pdf_matrix = gaussian_coeff * np.exp(-0.5 * np.square(action_differences / gaussian_scale))  # shape: (N, T)

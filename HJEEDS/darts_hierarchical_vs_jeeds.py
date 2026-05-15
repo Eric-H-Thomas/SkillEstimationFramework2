@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from dataclasses import replace
 from typing import Sequence
 
 
@@ -118,6 +119,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     config = build_config_from_args(args)
 
+    if config.environment != "1d":
+        config = replace(config, output_dir=config.output_dir.with_name(f"{config.output_dir.name}_{config.environment}"))
+
     # Dry-run is the safest way to confirm paths and workload before paying the
     # cost of simulation, likelihood evaluation, and optimizer calls.
     if config.dry_run:
@@ -139,7 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Keep CSV writing and plotting here in the entry module so the seed-level
     # pipeline stays focused on modeling rather than file I/O.
-    write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+    write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results, config.environment)
     write_summary_csvs(config.output_dir, summary_by_bucket_rows, summary_overall_rows)
     plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
     print(f"[hier-darts] Wrote results to {config.output_dir.resolve()}", flush=True)

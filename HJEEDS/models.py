@@ -65,6 +65,18 @@ class TruePopulationConfig:
 
 
 @dataclass(frozen=True)
+class EnvironmentGridConfig:
+    """Optional environment-specific JEEDS grid overrides."""
+
+    sigma_min: float | None = None
+    sigma_max: float | None = None
+    num_sigma_grid: int | None = None
+    lambda_min: float | None = None
+    lambda_max: float | None = None
+    num_lambda_grid: int | None = None
+
+
+@dataclass(frozen=True)
 class ExperimentConfig:
     """All configuration needed to define one sweep of the experiment."""
 
@@ -72,6 +84,7 @@ class ExperimentConfig:
     # (number of seeds, count buckets, grid size) and the modeling assumptions
     # (true population and hyperpriors).  Keeping them together means every
     # function downstream can operate on a single immutable config object.
+    environment: str
     seed: int
     num_seeds: int
     num_agents: int
@@ -85,12 +98,13 @@ class ExperimentConfig:
     lambda_min: float
     lambda_max: float
     output_dir: Path
-    dry_run: bool
-    min_success_regions: int
-    max_success_regions: int
-    min_region_width: float
-    hyperpriors: HyperpriorConfig
-    true_population: TruePopulationConfig
+    environment_grids: dict[str, EnvironmentGridConfig] = field(default_factory=dict)
+    dry_run: bool = False
+    min_success_regions: int = 0
+    max_success_regions: int = 0
+    min_region_width: float = 0.0
+    hyperpriors: HyperpriorConfig = field(default_factory=lambda: HyperpriorConfig((0.0, 0.0), (1.0, 1.0), 0.0, 1.0, 0.0, 1.0, 0.0, 1.0))
+    true_population: TruePopulationConfig = field(default_factory=lambda: TruePopulationConfig(0.0, 0.0, 1.0, 1.0, 0.0))
 
     @property
     def expected_agent_count(self) -> int:
