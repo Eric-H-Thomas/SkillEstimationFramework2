@@ -1,9 +1,8 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# This file has been fully verified by a human researcher as of 05/16/2026 at 9:21 AM MT.
 """Run agents-per-bucket ablations crossed with hyperprior sensitivity.
 
-This script is the May 14 ablation driver. It repeats the existing 3x3
-hyperprior-sensitivity analysis for several population sizes, where population
-size is controlled by the number of agents assigned to each observation-count
+This script repeats the existing 3x3 hyperprior-sensitivity analysis for several population sizes,
+where population size is controlled by the number of agents assigned to each observation-count
 bucket.
 
 Default sweep:
@@ -398,43 +397,60 @@ def aggregate_existing_results(
 ) -> None:
     """Collect precomputed scenario folders into the combined sweep artifacts."""
 
-    run_rows: list[dict[str, Any]] = []
-    scenario_rows: list[dict[str, Any]] = []
-    all_agent_rows: list[dict[str, Any]] = []
-    all_bucket_rows: list[dict[str, Any]] = []
-    all_overall_rows: list[dict[str, Any]] = []
+    # Root-level rows--written to the top-level output direction for the whole 45-scenario sweep
+    run_rows: list[dict[str, Any]] = [] # One row per agents-per-bucket setting
+    scenario_rows: list[dict[str, Any]] = [] # One row per agents-per-bucket x hyperprior scenario
+    all_agent_rows: list[dict[str, Any]] = [] # Agent-level results from every scenario
+    all_bucket_rows: list[dict[str, Any]] = [] # Bucket summary rows from every scenario
+    all_overall_rows: list[dict[str, Any]] = [] # Overall summary rows from every scenario
 
+    # Loop over each population size (agents-per-bucket) setting, e.g. 1, 2, 5, 10, 25
     for config in configs:
+
+        # Add agents-per-bucket-specific metadata shared by all hyperprior conditions to the root-level run rows
         run_metadata = agents_per_bucket_metadata_row(config)
         run_rows.append(run_metadata)
 
-        per_agents_condition_rows: list[dict[str, Any]] = []
-        per_agents_agent_rows: list[dict[str, Any]] = []
-        per_agents_bucket_rows: list[dict[str, Any]] = []
-        per_agents_overall_rows: list[dict[str, Any]] = []
+        # Per-population-size rows
+        per_agents_condition_rows: list[dict[str, Any]] = [] # The concrete hyperprior settings used here
+        per_agents_agent_rows: list[dict[str, Any]] = [] # Agent-level result rows for this agents-per-bucket value
+        per_agents_bucket_rows: list[dict[str, Any]] = [] # Bucket summary rows for this agents-per-bucket value
+        per_agents_overall_rows: list[dict[str, Any]] = [] # Overall summary rows for this agents-per-bucket value
 
+        # Loop over the hyperprior sensitivity grid for the current population size
         for condition in conditions:
+
+            # Get numeric hyperprior metadata for the condition and paths/labels/slug for the scenario
             condition_metadata = _condition_metadata_row(config, condition)
             scenario_metadata = scenario_metadata_row(config, condition.condition_slug)
             scenario_slug = str(scenario_metadata["scenario_slug"])
+
+            # Compute the standard artifact paths for this scenario
             scenario_output_dir = Path(str(scenario_metadata["scenario_output_dir"]))
             output_paths = base_experiment.planned_output_paths(scenario_output_dir)
 
+            # Read the agent-level, bucket-level, and overal summary CSVs produced by the scenario task
             agent_rows = _read_dict_rows(output_paths["agent_level_csv"], scenario_slug)
             bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], scenario_slug)
             overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], scenario_slug)
 
+            # Save this condition's hyperprior metadata for the per-population-size conditions CSV
             per_agents_condition_rows.append(condition_metadata)
+            # Save this scenario's full metadata for the root scenario index CSV
             scenario_rows.append({**run_metadata, **scenario_metadata, **condition_metadata})
 
+            # Prefix every agent-level, bucket-level, and overall row with the hyperprior metadata for per-population-size CSVs
             condition_agent_rows = [{**condition_metadata, **row} for row in agent_rows]
             condition_bucket_rows = [{**condition_metadata, **row} for row in bucket_rows]
             condition_overall_rows = [{**condition_metadata, **row} for row in overall_rows]
 
+            # Add this condition's agent, bucket, and overall rows to the per-population-size combined table.
             per_agents_agent_rows.extend(condition_agent_rows)
             per_agents_bucket_rows.extend(condition_bucket_rows)
             per_agents_overall_rows.extend(condition_overall_rows)
 
+            # Add globally unique provenance to each agent-level, bucket-level, and overall row, and append
+            # it to the root table
             all_agent_rows.extend(
                 {**run_metadata, **scenario_metadata, **condition_metadata, **row}
                 for row in agent_rows
@@ -447,65 +463,81 @@ def aggregate_existing_results(
                 {**run_metadata, **scenario_metadata, **condition_metadata, **row}
                 for row in overall_rows
             )
+        # End of loop over the hyperprior sensitivity grid for the current population size
 
+        # Reuse the prior-sensitivity metadata header for per-population-size combined CSVs.
         condition_columns = prior_sensitivity.CONDITION_METADATA_HEADER
+        # Write the nine hyperprior condition metadata rows for this agents-per-bucket value.
         _write_dict_rows(
             config.output_dir / prior_sensitivity.CONDITION_METADATA_FILENAME,
             condition_columns,
             per_agents_condition_rows,
         )
+        # Write the per-population-size combined agent-level CSV across all hyperprior conditions.
         _write_dict_rows(
             config.output_dir / prior_sensitivity.COMBINED_AGENT_LEVEL_FILENAME,
             condition_columns + base_experiment.AGENT_LEVEL_CSV_HEADER,
             per_agents_agent_rows,
         )
+        # Write the per-population-size combined bucket summary CSV across all hyperprior conditions.
         _write_dict_rows(
             config.output_dir / prior_sensitivity.COMBINED_SUMMARY_BY_BUCKET_FILENAME,
             condition_columns + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
             per_agents_bucket_rows,
         )
+        # Write the per-population-size combined overall summary CSV across all hyperprior conditions.
         _write_dict_rows(
             config.output_dir / prior_sensitivity.COMBINED_SUMMARY_OVERALL_FILENAME,
             condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
             per_agents_overall_rows,
         )
+        # Regenerate the per-population-size heatmap from the aggregated bucket summary rows.
         prior_sensitivity.plot_lowest_bucket_heatmap(
             config.output_dir / prior_sensitivity.LOWEST_BUCKET_HEATMAP_FILENAME,
             per_agents_bucket_rows,
             conditions,
         )
 
+    # End of loop over population sizes
+
+    # Root combined CSVs need agents-per-bucket, scenario, and hyperprior columns before result columns.
     combined_prefix_header = (
-        AGENTS_PER_BUCKET_METADATA_HEADER
-        + SCENARIO_METADATA_HEADER
-        + prior_sensitivity.CONDITION_METADATA_HEADER
+        AGENTS_PER_BUCKET_METADATA_HEADER               # Columns describing the agents-per-bucket condition
+        + SCENARIO_METADATA_HEADER                      # Columns describing the exact scenario folder/path
+        + prior_sensitivity.CONDITION_METADATA_HEADER   # Columns describing the hyperprior condition
     )
+    # Write one row per agents-per-bucket setting.
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_RUNS_FILENAME,
         AGENTS_PER_BUCKET_METADATA_HEADER,
         run_rows,
     )
+    # Write one row per agents-per-bucket x hyperprior scenario.
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_SCENARIOS_FILENAME,
         combined_prefix_header,
         scenario_rows,
     )
+    # Write the full root agent-level CSV across all scenarios.
     _write_dict_rows(
         output_dir / COMBINED_AGENT_LEVEL_FILENAME,
         combined_prefix_header + base_experiment.AGENT_LEVEL_CSV_HEADER,
         all_agent_rows,
     )
+    # Write the full root bucket summary CSV across all scenarios.
     _write_dict_rows(
         output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
         all_bucket_rows,
     )
+    # Write the full root overall summary CSV across all scenarios.
     _write_dict_rows(
         output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
 
+    # Print the final output location so Slurm logs show where aggregation landed.
     print(f"[agents-per-bucket] Aggregated results into {output_dir.resolve()}", flush=True)
 
 
@@ -550,101 +582,146 @@ def print_dry_run_summary(
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the agents-per-bucket sensitivity sweep."""
 
+    # PARSE AND VALIDATE INPUTS ------------------------------------------------------------
+
+    # Parse CLI arguments; ``argv`` is only supplied by tests or programmatic callers
     args = parse_args(argv)
+
+    # A run cannot both compute one scenario and aggregate already-computed scenarios
+    if args.scenario_index is not None and args.aggregate_results:
+        # Fail early if mutually exclusive cluster modes were requested together.
+        raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
+
+    # Convert the comma-separated agents-per-bucket CLI string into a tuple of ints
     agents_per_bucket_values = _parse_positive_ints(
         args.agents_per_bucket_values,
         field_name="agents_per_bucket",
     )
+
+    # BUILD SCENARIOS FOR EACH POPULATION-SIZE-HYPERPRIORS COMBO ---------------------------
+
+    # Build the hyperprior sensitivity conditions grid
     conditions = prior_sensitivity.build_sensitivity_conditions(args)
-    output_dir = Path(args.output_dir)
+
+    # Build one ExperimentConfig for each requested agents-per-bucket value
     configs = [
+        # This config fixes the population size while sharing the other CLI settings
         build_config_for_agents_per_bucket(args, agents_per_bucket)
         for agents_per_bucket in agents_per_bucket_values
     ]
+
+    # Flatten the configs x conditions grid into indexed scenarios for Slurm arrays
     scenarios = build_scenarios(configs, conditions)
 
-    if args.scenario_index is not None and args.aggregate_results:
-        raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
+    # RUN THE SINGLE REQUESTED SCENARIO OR THE AGGREGATOR, IF APPROPRIATE ------------------
 
+    # Normalize the output directory string into a pathlib Path
+    output_dir = Path(args.output_dir)
+
+    # Dry-run reports the planned workload and exits before simulation/inference
     if args.dry_run:
         print_dry_run_summary(configs, conditions, output_dir)
         return 0
 
+    # Scenario-index mode is used by one Slurm array task to compute one scenario
     if args.scenario_index is not None:
+        # Validate that the requested index exists in the flattened scenario list
         if args.scenario_index < 0 or args.scenario_index >= len(scenarios):
             raise ValueError(
                 f"scenario_index must be between 0 and {len(scenarios) - 1}. "
                 f"Received {args.scenario_index}."
             )
+        # Run exactly the requested scenario and write its scenario-level artifacts
         run_single_scenario(scenarios[args.scenario_index])
         return 0
 
+    # Aggregation mode is the final Slurm dependency task after scenario tasks finish
     if args.aggregate_results:
+        # Read completed scenario folders and collect them into combined CSVs/plots
         aggregate_existing_results(configs, conditions, output_dir)
         return 0
 
-    run_rows: list[dict[str, Any]] = []
-    scenario_rows: list[dict[str, Any]] = []
-    all_agent_rows: list[dict[str, Any]] = []
-    all_bucket_rows: list[dict[str, Any]] = []
-    all_overall_rows: list[dict[str, Any]] = []
+    # OTHERWISE, RUN ENTIRE EXPERIMENT LOCALLY ---------------------------------------------
 
+    # All-in-one local run rows
+    run_rows: list[dict[str, Any]] = []         # One row per agents-per-bucket setting
+    scenario_rows: list[dict[str, Any]] = []    # One row per agents-per-bucket x hyperprior scenario
+    all_agent_rows: list[dict[str, Any]] = []   # Every agent-level result from every scenario
+    all_bucket_rows: list[dict[str, Any]] = []  # Every bucket summary row from every scenario
+    all_overall_rows: list[dict[str, Any]] = [] # Every overall summary row from every scenario
+
+    # In all-in-one mode, run each agents-per-bucket value sequentially
     for config_index, config in enumerate(configs, start=1):
+        # Log which population-size condition is currently running
         print(
             "[agents-per-bucket] "
             f"Running value {config_index}/{len(configs)}: "
             f"{config.agents_per_bucket} agents per bucket ({config.num_agents} agents/seed)",
             flush=True,
         )
+
+        # Run the full hyperprior sensitivity grid for this population size
         grid_result = prior_sensitivity.run_sensitivity_grid(config, conditions)
+
+        # Record metadata for the current agents-per-bucket setting in the whole-sweep runs table
         run_metadata = agents_per_bucket_metadata_row(config)
         run_rows.append(run_metadata)
 
+        # Convert each condition metadata row into a whole-sweep scenario metadata row
         for condition_row in grid_result.condition_rows:
             condition_slug = str(condition_row["condition_slug"])
             scenario_rows.append(
                 {
-                    **run_metadata,
-                    **scenario_metadata_row(config, condition_slug),
-                    **condition_row,
+                    **run_metadata, # agents-per-bucket metadata
+                    **scenario_metadata_row(config, condition_slug), # scenario path metadata
+                    **condition_row, # hyperprior metadata
                 }
             )
 
+        # Add agents-per-bucket/scenario provenance to every agent-level, bucket summary, and overall summary row
         all_agent_rows.extend(_prefix_result_row(row, config) for row in grid_result.agent_rows)
         all_bucket_rows.extend(_prefix_result_row(row, config) for row in grid_result.bucket_rows)
         all_overall_rows.extend(_prefix_result_row(row, config) for row in grid_result.overall_rows)
 
+    # Root combined CSVs include agents-per-bucket, scenario, and hyperprior metadata columns
     combined_prefix_header = (
-        AGENTS_PER_BUCKET_METADATA_HEADER
-        + SCENARIO_METADATA_HEADER
-        + prior_sensitivity.CONDITION_METADATA_HEADER
+        AGENTS_PER_BUCKET_METADATA_HEADER # Columns for the population-size condition
+        + SCENARIO_METADATA_HEADER # Columns for scenario slug and output paths
+        + prior_sensitivity.CONDITION_METADATA_HEADER # Columns for concrete hyperprior values
     )
+
+    # Write one row per agents-per-bucket value
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_RUNS_FILENAME,
         AGENTS_PER_BUCKET_METADATA_HEADER,
         run_rows,
     )
+    # Write one row per agents-per-bucket x hyperprior scenario
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_SCENARIOS_FILENAME,
         combined_prefix_header,
         scenario_rows,
     )
+    # Write every agent-level result from the whole sweep
     _write_dict_rows(
         output_dir / COMBINED_AGENT_LEVEL_FILENAME,
         combined_prefix_header + base_experiment.AGENT_LEVEL_CSV_HEADER,
         all_agent_rows,
     )
+    # Write every bucket summary row from the whole sweep
     _write_dict_rows(
         output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
         all_bucket_rows,
     )
+    # Write every overall summary row from the whole sweep
     _write_dict_rows(
         output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
 
+    # Log the final output root so local/Slurm logs show where artifacts landed
     print(f"[agents-per-bucket] Wrote combined results to {output_dir.resolve()}", flush=True)
     return 0
 

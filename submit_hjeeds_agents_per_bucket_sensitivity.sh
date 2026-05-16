@@ -11,7 +11,7 @@ usage() {
   cat <<'USAGE'
 Usage: submit_hjeeds_agents_per_bucket_sensitivity.sh [options]
 
-Submit the H-JEEDS May 14 agents-per-bucket ablation to Slurm. By default this
+Submit the H-JEEDS agents-per-bucket ablation to Slurm. By default this
 launches 45 scenario tasks:
 
   agents per bucket: 1,2,5,10,25

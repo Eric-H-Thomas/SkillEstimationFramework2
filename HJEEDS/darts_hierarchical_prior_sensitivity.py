@@ -1,5 +1,4 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-# This file has been fully verified by a human researcher as of 05/08/2026 at 11:49 AM MT.
+# This file has been fully verified by a human researcher as of 05/16/2026 at 9:36 AM MT.
 """Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
