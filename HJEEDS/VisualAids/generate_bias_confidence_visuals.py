@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Generate the 3x3 H-JEEDS bias-confidence prior visual aids."""
+"""Generate H-JEEDS hyperprior-robustness prior visual aids."""
 
 # TODO: This file still requires human verification. Do not use in research until it has been verified. Remove this
-#   comment when done.
+#   comment when done
 
 from __future__ import annotations
 
@@ -11,8 +11,9 @@ import math
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "BiasConfidenceVisuals"
+OUTPUT_DIR = Path(__file__).resolve().parent / "HyperpriorRobustnessVisuals"
 REPO_ROOT = OUTPUT_DIR.parents[2]
 MATPLOTLIB_CACHE_DIR = Path("/private/tmp/hjeeds_visualaids_matplotlib_cache")
 
@@ -31,12 +32,10 @@ from matplotlib.lines import Line2D
 
 from HJEEDS.config import DEFAULT_HYPERPRIORS, DEFAULT_TRUE_POPULATION
 from HJEEDS.darts_hierarchical_prior_sensitivity import (
-    DEFAULT_SIGNIFICANT_BIAS_SD_UNITS,
-    DEFAULT_SLIGHT_BIAS_SD_UNITS,
-    DEFAULT_STRONG_STD_MULTIPLIER,
-    DEFAULT_WEAK_STD_MULTIPLIER,
+    CONDITION_PRESET_FULL_60,
     PriorSensitivityCondition,
     build_condition_hyperpriors,
+    build_sensitivity_conditions,
 )
 from HJEEDS.VisualAids.generate_log_skill_visuals import (
     MEAN_PRIOR_COLOR,
@@ -53,35 +52,10 @@ METADATA_FILENAME = "bias_confidence_visuals_metadata.csv"
 
 
 def build_visual_conditions() -> tuple[PriorSensitivityCondition, ...]:
-    """Return the paper's nine confidence x bias combinations."""
+    """Return the current full hyperprior-robustness condition set."""
 
-    confidence_levels = [
-        ("weak", "weak", DEFAULT_WEAK_STD_MULTIPLIER),
-        ("default", "default", 1.0),
-        ("strong", "strong", DEFAULT_STRONG_STD_MULTIPLIER),
-    ]
-    bias_levels = [
-        ("unbiased", "unbiased", 0.0),
-        ("slightly biased", "slightly_biased", DEFAULT_SLIGHT_BIAS_SD_UNITS),
-        (
-            "significantly biased",
-            "significantly_biased",
-            DEFAULT_SIGNIFICANT_BIAS_SD_UNITS,
-        ),
-    ]
-
-    return tuple(
-        PriorSensitivityCondition(
-            confidence_label=confidence_label,
-            confidence_slug=confidence_slug,
-            bias_label=bias_label,
-            bias_slug=bias_slug,
-            confidence_std_multiplier=float(confidence_multiplier),
-            bias_sd_units=float(bias_sd_units),
-        )
-        for confidence_label, confidence_slug, confidence_multiplier in confidence_levels
-        for bias_label, bias_slug, bias_sd_units in bias_levels
-    )
+    args = SimpleNamespace(condition_preset=CONDITION_PRESET_FULL_60)
+    return build_sensitivity_conditions(args)
 
 
 def save_figure(fig: plt.Figure, stem: str) -> None:
@@ -142,7 +116,7 @@ def plot_condition_overlay(
 
     configure_axis(ax, 1.0, "relative density height")
     ax.set_title(
-        f"{condition.confidence_label.title()} confidence, {condition.bias_label} prior mean",
+        condition.condition_label,
         pad=16,
         fontsize=15,
     )
@@ -204,10 +178,20 @@ def main() -> None:
         metadata_rows.append(
             {
                 "condition_slug": condition.condition_slug,
-                "confidence_level": condition.confidence_label,
-                "bias_level": condition.bias_label,
+                "condition_label": condition.condition_label,
+                "focus_slug": condition.focus_slug,
+                "focus_label": condition.focus_label,
+                "confidence_slug": condition.confidence_slug,
+                "confidence_label": condition.confidence_label,
+                "bias_slug": condition.bias_slug,
+                "bias_label": condition.bias_label,
                 "confidence_std_multiplier": condition.confidence_std_multiplier,
-                "bias_sd_units": condition.bias_sd_units,
+                "average_skill_bias_sd_units": condition.average_skill_bias_sd_units,
+                "population_spread_bias_sd_units": condition.population_spread_bias_sd_units,
+                "correlation_r_center": condition.correlation_r_center,
+                "scale_average_skill_confidence": condition.scale_average_skill_confidence,
+                "scale_population_spread_confidence": condition.scale_population_spread_confidence,
+                "scale_correlation_confidence": condition.scale_correlation_confidence,
                 "mean_prior_log_sigma_center": mean_prior_center[0],
                 "mean_prior_log_lambda_center": mean_prior_center[1],
                 "mean_prior_sigma_center": math.exp(float(mean_prior_center[0])),

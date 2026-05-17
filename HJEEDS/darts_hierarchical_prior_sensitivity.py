@@ -1,17 +1,19 @@
-# This file has been fully verified by a human researcher as of 05/16/2026 at 9:36 AM MT.
-"""Run a 3x3 hyperprior-sensitivity sweep for hierarchical 1D darts.
+# This file has been fully verified by a human researcher as of 05/16/2026 at 7:21 PM MT
+"""Run hyperprior-robustness sweeps for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
-same simulated experiment under nine empirical-Bayes hyperprior conditions:
+same simulated experiment under misspecified empirical-Bayes hyperpriors. The
+default standalone study is a 60-condition robustness grid:
 
+- focus area: average skill, population spread, correlation, combined
+- bias: strong reverse, moderate reverse, unbiased, moderate adverse, strong adverse
 - confidence: weak, default, strong
-- bias: unbiased, slightly biased, significantly biased
 
-The goal is to answer a simple paper question: does the hierarchical method
-still help when the population-level hyperpriors are weaker, stronger, or
-miscentered?  Each condition gets its own normal experiment output directory,
-and this script also writes combined CSVs plus a compact 3x3 heatmap for the
-lowest-count bucket, where prior sensitivity should be easiest to see.
+Downstream ablations can request a smaller representative preset containing
+the default, moderate combined misspecification, and strong combined
+misspecification conditions. Each condition gets its own ordinary experiment
+output directory, and this script also writes combined CSVs plus a compact plot
+for the lowest-count bucket, where prior sensitivity should be easiest to see.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from typing import Any, Sequence
 import numpy as np
 
 
-# Ensure the repository root is importable when this file is executed directly.
+# Ensure the repository root is importable when this file is executed directly
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -36,26 +38,47 @@ from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
 
 
 # This script answers the paper's robustness question: if H-JEEDS benefits from
-# a shared prior in low-data settings, how sensitive is that benefit to the
-# hyperprior being too weak, too strong, or miscentered?
-#
-# The implementation works by reusing the main experiment pipeline and swapping
-# in nine alternative hyperprior settings arranged in a 3x3 grid.
+# a shared prior in low-data settings, how sensitive is that benefit to
+# misspecification in the mean skill, population spread, and correlation
+# hyperpriors?
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_prior_sensitivity")
 DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
+
+CONDITION_PRESET_FULL_60 = "full_60"
+CONDITION_PRESET_REPRESENTATIVE = "representative"
+CONDITION_PRESETS = (CONDITION_PRESET_FULL_60, CONDITION_PRESET_REPRESENTATIVE)
+DEFAULT_PRIOR_SENSITIVITY_CONDITION_PRESET = CONDITION_PRESET_FULL_60
+
 DEFAULT_WEAK_STD_MULTIPLIER = 3.0
 DEFAULT_STRONG_STD_MULTIPLIER = 1.0 / 3.0
-DEFAULT_SLIGHT_BIAS_SD_UNITS = 0.5
-DEFAULT_SIGNIFICANT_BIAS_SD_UNITS = 1.5
+DEFAULT_MODERATE_BIAS_SD_UNITS = 0.5
+DEFAULT_STRONG_BIAS_SD_UNITS = 1.5
+
+DEFAULT_STRONG_REVERSE_CORRELATION_R_CENTER = -0.9
+DEFAULT_MODERATE_REVERSE_CORRELATION_R_CENTER = -0.75
+DEFAULT_UNBIASED_CORRELATION_R_CENTER = -0.5
+DEFAULT_MODERATE_ADVERSE_CORRELATION_R_CENTER = 0.0
+DEFAULT_STRONG_ADVERSE_CORRELATION_R_CENTER = 0.5
 
 CONDITION_METADATA_HEADER = [
+    "condition_preset",
     "condition_slug",
-    "confidence_level",
-    "bias_level",
+    "condition_label",
+    "focus_slug",
+    "focus_label",
+    "bias_slug",
+    "bias_label",
+    "confidence_slug",
+    "confidence_label",
     "confidence_std_multiplier",
-    "bias_sd_units",
+    "average_skill_bias_sd_units",
+    "population_spread_bias_sd_units",
+    "correlation_r_center",
+    "scale_average_skill_confidence",
+    "scale_population_spread_confidence",
+    "scale_correlation_confidence",
     "hyperprior_mu_eta",
     "hyperprior_mu_rho",
     "hyperprior_mu_sigma",
@@ -80,21 +103,68 @@ LOWEST_BUCKET_HEATMAP_FILENAME = "prior_sensitivity_lowest_bucket_heatmap.png"
 
 
 @dataclass(frozen=True)
-class PriorSensitivityCondition:
-    """One cell in the prior confidence x prior bias sensitivity grid."""
+class _ConfidenceLevel:
+    """One confidence level used to scale a scoped set of prior SDs."""
 
-    confidence_label: str
-    confidence_slug: str
+    label: str
+    slug: str
+    std_multiplier: float
+
+
+@dataclass(frozen=True)
+class _BiasLevel:
+    """One signed bias level shared by the robustness grid."""
+
+    label: str
+    slug: str
+    signed_bias_sd_units: float
+    correlation_r_center: float
+
+
+@dataclass(frozen=True)
+class _FocusArea:
+    """One group of hyperprior components being stressed."""
+
+    label: str
+    slug: str
+
+
+@dataclass(frozen=True)
+class PriorSensitivityCondition:
+    """One concrete hyperprior-robustness condition."""
+
+    condition_preset: str
+    focus_label: str
+    focus_slug: str
     bias_label: str
     bias_slug: str
+    confidence_label: str
+    confidence_slug: str
     confidence_std_multiplier: float
-    bias_sd_units: float
+    average_skill_bias_sd_units: float
+    population_spread_bias_sd_units: float
+    correlation_r_center: float
+    scale_average_skill_confidence: bool
+    scale_population_spread_confidence: bool
+    scale_correlation_confidence: bool
+    condition_slug_override: str | None = None
+    condition_label_override: str | None = None
 
     @property
     def condition_slug(self) -> str:
         """Return a filename-safe identifier for this sensitivity condition."""
 
-        return f"{self.confidence_slug}__{self.bias_slug}"
+        if self.condition_slug_override is not None:
+            return self.condition_slug_override
+        return f"{self.focus_slug}__{self.bias_slug}__{self.confidence_slug}"
+
+    @property
+    def condition_label(self) -> str:
+        """Return a compact human-facing condition label."""
+
+        if self.condition_label_override is not None:
+            return self.condition_label_override
+        return f"{self.focus_label}: {self.bias_label}, {self.confidence_label} confidence"
 
 
 @dataclass(frozen=True)
@@ -110,10 +180,8 @@ class PriorSensitivityGridResult:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI options for the 3x3 sensitivity sweep."""
+    """Parse CLI options for the hyperprior-robustness sweep."""
 
-    # Most arguments simply forward through to the base experiment so the
-    # sensitivity runner stays aligned with the main H-JEEDS script.
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument("--seed", type=int, default=12345, help="Base seed used to derive per-run seeds.")
@@ -141,7 +209,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help=(
             "Total number of demonstrators. Defaults to len(count_buckets) * "
-            "agents_per_bucket so the 3x3 runner can use a five-bucket setup."
+            "agents_per_bucket so the runner can use a five-bucket setup."
         ),
     )
     parser.add_argument(
@@ -188,46 +256,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Root output directory for combined sensitivity artifacts and condition subdirectories.",
     )
     parser.add_argument(
-        "--weak-std-multiplier",
-        type=float,
-        default=DEFAULT_WEAK_STD_MULTIPLIER,
+        "--condition-preset",
+        choices=CONDITION_PRESETS,
+        default=DEFAULT_PRIOR_SENSITIVITY_CONDITION_PRESET,
         help=(
-            "Multiplier applied to hyperprior standard deviations for the weak/underconfident condition."
-        ),
-    )
-    parser.add_argument(
-        "--strong-std-multiplier",
-        type=float,
-        default=DEFAULT_STRONG_STD_MULTIPLIER,
-        help=(
-            "Multiplier applied to hyperprior standard deviations for the strong/overconfident condition."
-        ),
-    )
-    parser.add_argument(
-        "--slight-bias-sd-units",
-        type=float,
-        default=DEFAULT_SLIGHT_BIAS_SD_UNITS,
-        help="Mean shift for the slightly biased condition, measured in default prior-SD units.",
-    )
-    parser.add_argument(
-        "--significant-bias-sd-units",
-        type=float,
-        default=DEFAULT_SIGNIFICANT_BIAS_SD_UNITS,
-        help="Mean shift for the significantly biased condition, measured in default prior-SD units.",
-    )
-    parser.add_argument(
-        "--condition-slugs",
-        type=str,
-        default="",
-        help=(
-            "Optional comma-separated subset of condition slugs to run, for smoke tests. "
-            "Leave blank to run the full 3x3 grid."
+            "Condition set to run. full_60 is the standalone robustness study; "
+            "representative is the three-condition downstream-ablation preset."
         ),
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned 3x3 workload and stop before simulation/inference.",
+        help="Report the planned robustness workload and stop before simulation/inference.",
     )
 
     return parser.parse_args(argv)
@@ -249,8 +289,6 @@ def _parse_count_buckets(raw_value: str) -> tuple[int, ...]:
 def build_base_config_from_args(args: argparse.Namespace) -> base_experiment.ExperimentConfig:
     """Build the underlying darts experiment config shared by all conditions."""
 
-    # The sensitivity sweep shares one common experimental design; only the
-    # hyperpriors change from condition to condition.
     count_buckets = _parse_count_buckets(args.count_buckets)
     num_agents = args.num_agents
     if num_agents is None:
@@ -278,78 +316,246 @@ def build_base_config_from_args(args: argparse.Namespace) -> base_experiment.Exp
     return base_experiment.build_config_from_args(base_args)
 
 
-def build_sensitivity_conditions(args: argparse.Namespace) -> tuple[PriorSensitivityCondition, ...]:
-    """Return the full 3x3 grid, optionally filtered to requested slugs."""
+def _confidence_levels() -> tuple[_ConfidenceLevel, ...]:
+    """Return weak/default/strong confidence settings."""
 
-    # The 3x3 grid is generated mechanically from one set of confidence levels
-    # crossed with one set of bias levels.
-    if args.weak_std_multiplier <= 0.0:
-        raise ValueError("weak_std_multiplier must be positive.")
-    if args.strong_std_multiplier <= 0.0:
-        raise ValueError("strong_std_multiplier must be positive.")
-    if args.slight_bias_sd_units < 0.0:
-        raise ValueError("slight_bias_sd_units must be non-negative.")
-    if args.significant_bias_sd_units < 0.0:
-        raise ValueError("significant_bias_sd_units must be non-negative.")
-
-    confidence_levels = [
-        ("weak", "weak", float(args.weak_std_multiplier)),
-        ("default", "default", 1.0),
-        ("strong", "strong", float(args.strong_std_multiplier)),
-    ]
-    bias_levels = [
-        ("unbiased", "unbiased", 0.0),
-        ("slightly biased", "slightly_biased", float(args.slight_bias_sd_units)),
-        ("significantly biased", "significantly_biased", float(args.significant_bias_sd_units)),
-    ]
-
-    conditions = tuple(
-        PriorSensitivityCondition(
-            confidence_label=confidence_label,
-            confidence_slug=confidence_slug,
-            bias_label=bias_label,
-            bias_slug=bias_slug,
-            confidence_std_multiplier=confidence_std_multiplier,
-            bias_sd_units=bias_sd_units,
-        )
-        for confidence_label, confidence_slug, confidence_std_multiplier in confidence_levels
-        for bias_label, bias_slug, bias_sd_units in bias_levels
+    return (
+        _ConfidenceLevel("weak", "weak", DEFAULT_WEAK_STD_MULTIPLIER),
+        _ConfidenceLevel("default", "default", 1.0),
+        _ConfidenceLevel("strong", "strong", DEFAULT_STRONG_STD_MULTIPLIER),
     )
 
-    # Optional filtering makes smoke tests cheap without changing the logic of
-    # how conditions are defined.
-    requested_slugs = {piece.strip() for piece in args.condition_slugs.split(",") if piece.strip()}
-    if not requested_slugs:
-        return conditions
 
-    known_slugs = {condition.condition_slug for condition in conditions}
-    unknown_slugs = sorted(requested_slugs - known_slugs)
-    if unknown_slugs:
-        raise ValueError(
-            f"Unknown condition slugs {unknown_slugs}. Known slugs are: {sorted(known_slugs)}"
-        )
+def _bias_levels() -> tuple[_BiasLevel, ...]:
+    """Return the signed five-level bias grid."""
 
-    return tuple(condition for condition in conditions if condition.condition_slug in requested_slugs)
+    moderate_bias = DEFAULT_MODERATE_BIAS_SD_UNITS
+    strong_bias = DEFAULT_STRONG_BIAS_SD_UNITS
+    return (
+        _BiasLevel(
+            "strong reverse misspecification",
+            "strong_reverse_misspecification",
+            -strong_bias,
+            DEFAULT_STRONG_REVERSE_CORRELATION_R_CENTER,
+        ),
+        _BiasLevel(
+            "moderate reverse misspecification",
+            "moderate_reverse_misspecification",
+            -moderate_bias,
+            DEFAULT_MODERATE_REVERSE_CORRELATION_R_CENTER,
+        ),
+        _BiasLevel(
+            "unbiased",
+            "unbiased",
+            0.0,
+            DEFAULT_UNBIASED_CORRELATION_R_CENTER,
+        ),
+        _BiasLevel(
+            "moderate adverse misspecification",
+            "moderate_adverse_misspecification",
+            moderate_bias,
+            DEFAULT_MODERATE_ADVERSE_CORRELATION_R_CENTER,
+        ),
+        _BiasLevel(
+            "strong adverse misspecification",
+            "strong_adverse_misspecification",
+            strong_bias,
+            DEFAULT_STRONG_ADVERSE_CORRELATION_R_CENTER,
+        ),
+    )
+
+
+def _focus_areas() -> tuple[_FocusArea, ...]:
+    """Return the four hyperprior component groups used by the full study."""
+
+    return (
+        _FocusArea("average skill", "average_skill"),
+        _FocusArea("population spread", "population_spread"),
+        _FocusArea("correlation", "correlation"),
+        _FocusArea("combined", "combined"),
+    )
+
+
+def _validate_correlation_center(field_name: str, value: float) -> None:
+    """Fail early when a requested correlation center cannot be transformed."""
+
+    if not -1.0 < value < 1.0:
+        raise ValueError(f"{field_name} must be strictly between -1 and 1. Received: {value}.")
+
+
+def _condition_for_focus(
+    *,
+    preset: str,
+    focus: _FocusArea,
+    bias: _BiasLevel,
+    confidence: _ConfidenceLevel,
+    unbiased_correlation_r_center: float,
+) -> PriorSensitivityCondition:
+    """Build one full-grid condition from focus, bias, and confidence levels."""
+
+    if focus.slug == "average_skill":
+        average_skill_bias = bias.signed_bias_sd_units
+        population_spread_bias = 0.0
+        correlation_r_center = unbiased_correlation_r_center
+        scale_average_skill_confidence = True
+        scale_population_spread_confidence = False
+        scale_correlation_confidence = False
+    elif focus.slug == "population_spread":
+        average_skill_bias = 0.0
+        population_spread_bias = bias.signed_bias_sd_units
+        correlation_r_center = unbiased_correlation_r_center
+        scale_average_skill_confidence = False
+        scale_population_spread_confidence = True
+        scale_correlation_confidence = False
+    elif focus.slug == "correlation":
+        average_skill_bias = 0.0
+        population_spread_bias = 0.0
+        correlation_r_center = bias.correlation_r_center
+        scale_average_skill_confidence = False
+        scale_population_spread_confidence = False
+        scale_correlation_confidence = True
+    elif focus.slug == "combined":
+        average_skill_bias = bias.signed_bias_sd_units
+        population_spread_bias = bias.signed_bias_sd_units
+        correlation_r_center = bias.correlation_r_center
+        scale_average_skill_confidence = True
+        scale_population_spread_confidence = True
+        scale_correlation_confidence = True
+    else:
+        raise ValueError(f"Unknown focus area: {focus.slug}")
+
+    return PriorSensitivityCondition(
+        condition_preset=preset,
+        focus_label=focus.label,
+        focus_slug=focus.slug,
+        bias_label=bias.label,
+        bias_slug=bias.slug,
+        confidence_label=confidence.label,
+        confidence_slug=confidence.slug,
+        confidence_std_multiplier=confidence.std_multiplier,
+        average_skill_bias_sd_units=average_skill_bias,
+        population_spread_bias_sd_units=population_spread_bias,
+        correlation_r_center=correlation_r_center,
+        scale_average_skill_confidence=scale_average_skill_confidence,
+        scale_population_spread_confidence=scale_population_spread_confidence,
+        scale_correlation_confidence=scale_correlation_confidence,
+    )
+
+
+def build_full_60_conditions() -> tuple[PriorSensitivityCondition, ...]:
+    """Return the full 4 x 5 x 3 robustness grid."""
+
+    conditions: list[PriorSensitivityCondition] = []
+    unbiased_correlation_r_center = DEFAULT_UNBIASED_CORRELATION_R_CENTER
+    for focus in _focus_areas():
+        for bias in _bias_levels():
+            for confidence in _confidence_levels():
+                conditions.append(
+                    _condition_for_focus(
+                        preset=CONDITION_PRESET_FULL_60,
+                        focus=focus,
+                        bias=bias,
+                        confidence=confidence,
+                        unbiased_correlation_r_center=unbiased_correlation_r_center,
+                    )
+                )
+    return tuple(conditions)
+
+
+def build_representative_conditions() -> tuple[PriorSensitivityCondition, ...]:
+    """Return the three-condition preset used by downstream ablations."""
+
+    focus = _FocusArea("combined", "combined")
+    default_confidence = _ConfidenceLevel("default", "default", 1.0)
+    strong_confidence = _ConfidenceLevel("strong", "strong", DEFAULT_STRONG_STD_MULTIPLIER)
+    moderate_bias = DEFAULT_MODERATE_BIAS_SD_UNITS
+    strong_bias = DEFAULT_STRONG_BIAS_SD_UNITS
+
+    return (
+        PriorSensitivityCondition(
+            condition_preset=CONDITION_PRESET_REPRESENTATIVE,
+            focus_label=focus.label,
+            focus_slug=focus.slug,
+            bias_label="unbiased",
+            bias_slug="unbiased",
+            confidence_label=default_confidence.label,
+            confidence_slug=default_confidence.slug,
+            confidence_std_multiplier=default_confidence.std_multiplier,
+            average_skill_bias_sd_units=0.0,
+            population_spread_bias_sd_units=0.0,
+            correlation_r_center=DEFAULT_UNBIASED_CORRELATION_R_CENTER,
+            scale_average_skill_confidence=True,
+            scale_population_spread_confidence=True,
+            scale_correlation_confidence=True,
+            condition_slug_override="default",
+            condition_label_override="default",
+        ),
+        PriorSensitivityCondition(
+            condition_preset=CONDITION_PRESET_REPRESENTATIVE,
+            focus_label=focus.label,
+            focus_slug=focus.slug,
+            bias_label="moderate adverse misspecification",
+            bias_slug="moderate_adverse_misspecification",
+            confidence_label=default_confidence.label,
+            confidence_slug=default_confidence.slug,
+            confidence_std_multiplier=default_confidence.std_multiplier,
+            average_skill_bias_sd_units=moderate_bias,
+            population_spread_bias_sd_units=moderate_bias,
+            correlation_r_center=DEFAULT_MODERATE_ADVERSE_CORRELATION_R_CENTER,
+            scale_average_skill_confidence=True,
+            scale_population_spread_confidence=True,
+            scale_correlation_confidence=True,
+            condition_slug_override="moderate_combined_misspecification",
+            condition_label_override="moderate combined misspecification",
+        ),
+        PriorSensitivityCondition(
+            condition_preset=CONDITION_PRESET_REPRESENTATIVE,
+            focus_label=focus.label,
+            focus_slug=focus.slug,
+            bias_label="strong adverse misspecification",
+            bias_slug="strong_adverse_misspecification",
+            confidence_label=strong_confidence.label,
+            confidence_slug=strong_confidence.slug,
+            confidence_std_multiplier=strong_confidence.std_multiplier,
+            average_skill_bias_sd_units=strong_bias,
+            population_spread_bias_sd_units=strong_bias,
+            correlation_r_center=DEFAULT_STRONG_ADVERSE_CORRELATION_R_CENTER,
+            scale_average_skill_confidence=True,
+            scale_population_spread_confidence=True,
+            scale_correlation_confidence=True,
+            condition_slug_override="strong_combined_misspecification",
+            condition_label_override="strong combined misspecification",
+        ),
+    )
+
+
+def build_sensitivity_conditions(args: argparse.Namespace) -> tuple[PriorSensitivityCondition, ...]:
+    """Return the requested condition preset."""
+
+    preset = getattr(args, "condition_preset", DEFAULT_PRIOR_SENSITIVITY_CONDITION_PRESET)
+    if preset == CONDITION_PRESET_FULL_60:
+        conditions = build_full_60_conditions()
+    elif preset == CONDITION_PRESET_REPRESENTATIVE:
+        return build_representative_conditions()
+    else:
+        raise ValueError(f"Unknown condition preset: {preset}")
+    return conditions
 
 
 def build_condition_hyperpriors(
     base_hyperpriors: base_experiment.HyperpriorConfig,
     condition: PriorSensitivityCondition,
 ) -> base_experiment.HyperpriorConfig:
-    """Create the hyperprior settings for one sensitivity condition.
+    """Create the hyperprior settings for one robustness condition.
 
-    Confidence is represented by scaling hyperprior standard deviations while
-    leaving their centers fixed. Bias is represented by shifting the hyperprior
-    centers. For the population mean, biased conditions expect weaker agents:
-    larger log-sigma and smaller log-lambda. For the population spread,
-    biased conditions expect too much between-demonstrator variation by
-    shifting the log-tau prior means upward.
+    Average-skill bias shifts the population mean prior toward worse or better
+    average skill. Population-spread bias shifts the log-tau prior centers
+    toward more or less between-agent variation. Correlation bias directly
+    moves the prior center for the execution/decision-skill correlation. The
+    confidence multiplier is scoped to the focus area instead of always scaling
+    every hyperprior SD.
     """
 
-    # Start from the base hyperpriors used in the main experiment and then
-    # perturb them along two interpretable axes:
-    # - confidence: scale the prior standard deviations
-    # - bias: shift the centers of the priors
     base_mu_eta, base_mu_rho = base_hyperpriors.mean_vector
     base_mu_eta_sd = math.sqrt(float(base_hyperpriors.covariance_diagonal[0]))
     base_mu_rho_sd = math.sqrt(float(base_hyperpriors.covariance_diagonal[1]))
@@ -358,27 +564,45 @@ def build_condition_hyperpriors(
     base_log_tau_eta_sd = float(base_hyperpriors.log_tau_eta_sd)
     base_log_tau_rho_sd = float(base_hyperpriors.log_tau_rho_sd)
 
-    # The biased conditions intentionally assume weaker demonstrators on
-    # average: higher sigma (worse execution) and lower log-lambda centers
-    # (less rational decision-making).
-    mean_shift_eta = condition.bias_sd_units * base_mu_eta_sd
-    mean_shift_rho = -condition.bias_sd_units * base_mu_rho_sd
-    log_tau_eta_shift = condition.bias_sd_units * base_log_tau_eta_sd
-    log_tau_rho_shift = condition.bias_sd_units * base_log_tau_rho_sd
-    scaled_mu_eta_sd = max(base_mu_eta_sd * condition.confidence_std_multiplier, 1e-9)
-    scaled_mu_rho_sd = max(base_mu_rho_sd * condition.confidence_std_multiplier, 1e-9)
-    scaled_log_tau_eta_sd = max(base_log_tau_eta_sd * condition.confidence_std_multiplier, 1e-9)
-    scaled_log_tau_rho_sd = max(base_log_tau_rho_sd * condition.confidence_std_multiplier, 1e-9)
+    average_skill_bias = condition.average_skill_bias_sd_units
+    population_spread_bias = condition.population_spread_bias_sd_units
+    confidence_multiplier = condition.confidence_std_multiplier
+
+    mean_shift_eta = average_skill_bias * base_mu_eta_sd
+    mean_shift_rho = -average_skill_bias * base_mu_rho_sd
+    log_tau_eta_shift = population_spread_bias * base_log_tau_eta_sd
+    log_tau_rho_shift = population_spread_bias * base_log_tau_rho_sd
+
+    if condition.scale_average_skill_confidence:
+        mu_eta_sd = base_mu_eta_sd * confidence_multiplier
+        mu_rho_sd = base_mu_rho_sd * confidence_multiplier
+    else:
+        mu_eta_sd = base_mu_eta_sd
+        mu_rho_sd = base_mu_rho_sd
+
+    if condition.scale_population_spread_confidence:
+        log_tau_eta_sd = base_log_tau_eta_sd * confidence_multiplier
+        log_tau_rho_sd = base_log_tau_rho_sd * confidence_multiplier
+    else:
+        log_tau_eta_sd = base_log_tau_eta_sd
+        log_tau_rho_sd = base_log_tau_rho_sd
+
+    if condition.scale_correlation_confidence:
+        s_r = base_hyperpriors.s_r * confidence_multiplier
+    else:
+        s_r = base_hyperpriors.s_r
+
+    _validate_correlation_center("condition.correlation_r_center", condition.correlation_r_center)
 
     return base_experiment.HyperpriorConfig(
         mean_vector=(base_mu_eta + mean_shift_eta, base_mu_rho + mean_shift_rho),
-        covariance_diagonal=(scaled_mu_eta_sd**2, scaled_mu_rho_sd**2),
+        covariance_diagonal=(max(mu_eta_sd, 1e-9) ** 2, max(mu_rho_sd, 1e-9) ** 2),
         log_tau_eta_mean=base_log_tau_eta_mean + log_tau_eta_shift,
-        log_tau_eta_sd=scaled_log_tau_eta_sd,
+        log_tau_eta_sd=max(log_tau_eta_sd, 1e-9),
         log_tau_rho_mean=base_log_tau_rho_mean + log_tau_rho_shift,
-        log_tau_rho_sd=scaled_log_tau_rho_sd,
-        m_r=base_hyperpriors.m_r,
-        s_r=max(base_hyperpriors.s_r * condition.confidence_std_multiplier, 1e-9),
+        log_tau_rho_sd=max(log_tau_rho_sd, 1e-9),
+        m_r=math.atanh(condition.correlation_r_center),
+        s_r=max(s_r, 1e-9),
     )
 
 
@@ -392,14 +616,23 @@ def condition_metadata_row(
     mu_eta_sd = math.sqrt(float(hyperpriors.covariance_diagonal[0]))
     mu_rho_sd = math.sqrt(float(hyperpriors.covariance_diagonal[1]))
 
-    # This row records the actual numeric hyperpriors used for the condition so
-    # later CSVs/plots can be traced back to concrete assumptions.
     return {
+        "condition_preset": condition.condition_preset,
         "condition_slug": condition.condition_slug,
-        "confidence_level": condition.confidence_label,
-        "bias_level": condition.bias_label,
+        "condition_label": condition.condition_label,
+        "focus_slug": condition.focus_slug,
+        "focus_label": condition.focus_label,
+        "bias_slug": condition.bias_slug,
+        "bias_label": condition.bias_label,
+        "confidence_slug": condition.confidence_slug,
+        "confidence_label": condition.confidence_label,
         "confidence_std_multiplier": condition.confidence_std_multiplier,
-        "bias_sd_units": condition.bias_sd_units,
+        "average_skill_bias_sd_units": condition.average_skill_bias_sd_units,
+        "population_spread_bias_sd_units": condition.population_spread_bias_sd_units,
+        "correlation_r_center": condition.correlation_r_center,
+        "scale_average_skill_confidence": condition.scale_average_skill_confidence,
+        "scale_population_spread_confidence": condition.scale_population_spread_confidence,
+        "scale_correlation_confidence": condition.scale_correlation_confidence,
         "hyperprior_mu_eta": mu_eta,
         "hyperprior_mu_rho": mu_rho,
         "hyperprior_mu_sigma": math.exp(mu_eta),
@@ -420,8 +653,6 @@ def condition_metadata_row(
 def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[dict[str, Any]]) -> None:
     """Write dictionaries with a fixed header, leaving missing fields blank."""
 
-    # This local writer mirrors the base experiment helper but keeps the
-    # sensitivity script self-contained for its combined artifacts.
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(header))
@@ -436,8 +667,6 @@ def run_condition(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Run all seeds for one sensitivity condition and write per-condition artifacts."""
 
-    # Clone the shared experiment config and swap in this condition's concrete
-    # hyperprior settings.  Everything else about the experiment remains fixed.
     hyperpriors = build_condition_hyperpriors(base_config.hyperpriors, condition)
     condition_config = replace(
         base_config,
@@ -455,8 +684,6 @@ def run_condition(
         )
         seed_results.append(base_experiment.run_single_seed(condition_config, seed))
 
-    # Each condition gets its own normal per-condition artifact directory in
-    # addition to contributing rows to the combined CSVs.
     output_paths = base_experiment.planned_output_paths(condition_config.output_dir)
     all_agent_results = [
         result
@@ -473,8 +700,6 @@ def run_condition(
     )
     base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
 
-    # Combined output files prepend each result row with the condition metadata
-    # so one CSV can hold the full sweep without losing provenance.
     prefix = condition_metadata_row(condition, hyperpriors)
     combined_agent_rows = [
         {**prefix, **base_experiment._agent_result_to_row(result)}
@@ -490,12 +715,7 @@ def run_sensitivity_grid(
     config: base_experiment.ExperimentConfig,
     conditions: Sequence[PriorSensitivityCondition],
 ) -> PriorSensitivityGridResult:
-    """Run a prior-sensitivity grid and write its combined artifacts.
-
-    This is the reusable core used both by the standalone 3x3 hyperprior
-    sensitivity script and by larger ablations that need to nest a full
-    hyperprior grid inside another experimental factor.
-    """
+    """Run a prior-sensitivity grid and write its combined artifacts."""
 
     condition_tuple = tuple(conditions)
     all_agent_rows: list[dict[str, Any]] = []
@@ -541,23 +761,42 @@ def run_sensitivity_grid(
     )
 
 
+def _unique_in_order(values: Sequence[str]) -> list[str]:
+    """Return unique strings in first-seen order."""
+
+    unique_values: list[str] = []
+    for value in values:
+        if value not in unique_values:
+            unique_values.append(value)
+    return unique_values
+
+
+def _condition_lookup_by_slug(
+    conditions: Sequence[PriorSensitivityCondition],
+) -> dict[str, PriorSensitivityCondition]:
+    """Return a condition lookup for plot labels and ordering."""
+
+    return {condition.condition_slug: condition for condition in conditions}
+
+
 def plot_lowest_bucket_heatmap(
     output_path: Path,
     summary_by_bucket_rows: Sequence[dict[str, Any]],
     conditions: Sequence[PriorSensitivityCondition],
 ) -> None:
-    """Plot hierarchical error as a 3x3 grid for the lowest observation bucket."""
+    """Plot hierarchical error by focus, bias, and confidence for the lowest bucket."""
 
     import matplotlib
 
+    # Force noninteractive backend; Import pyplot only after the backend has been set
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
-    # The heatmap focuses on the lowest-count bucket because that is where the
-    # hierarchical prior should matter most according to the paper's claim.
+    # If there are no summary rows, there is nothing to plot
     if not summary_by_bucket_rows:
         return
 
+    # Collect all count buckets that have hierarchical rows and valid bucket labels
     bucket_values = sorted(
         {
             int(row["count_bucket"])
@@ -565,69 +804,168 @@ def plot_lowest_bucket_heatmap(
             if row.get("method") == "hierarchical" and row.get("count_bucket") not in (None, "")
         }
     )
+    # If no hierarchical bucket rows were found, there is nothing useful to plot
     if not bucket_values:
         return
+
+    # Choose the smallest observation-count bucket because prior sensitivity should be most visible there
     selected_bucket = bucket_values[0]
 
-    confidence_labels = []
-    bias_labels = []
-    for condition in conditions:
-        if condition.confidence_label not in confidence_labels:
-            confidence_labels.append(condition.confidence_label)
-        if condition.bias_label not in bias_labels:
-            bias_labels.append(condition.bias_label)
+    # Build a dictionary so a CSV row's condition slug can recover the original condition object
+    condition_by_slug = _condition_lookup_by_slug(conditions)
 
-    confidence_positions = {label: index for index, label in enumerate(confidence_labels)}
-    bias_positions = {label: index for index, label in enumerate(bias_labels)}
+    # Preserve the first-seen order of focus areas so subplot rows follow the condition definition order
+    focus_slugs = _unique_in_order([condition.focus_slug for condition in conditions])
 
+    # Map focus slugs such as "average_skill" to display labels such as "average skill"
+    focus_labels = {
+        condition.focus_slug: condition.focus_label
+        for condition in conditions
+    }
+
+    # Define the two error metrics shown as columns in the figure
     metric_panels = [
         ("abs_sigma_error", "Execution Skill Error"),
         ("abs_log_lambda_error", "Log-Decision Skill Error"),
     ]
 
-    figure, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+    # Create a subplot grid with one row per focus area and one column per metric
+    figure, axes = plt.subplots(
+        len(focus_slugs), # One row per focus area
+        len(metric_panels), # One column per metric
+        figsize=(14, max(3.8, 3.2 * len(focus_slugs))),
+        squeeze=False, # Always return a 2D axes array, even if there is only one row or one column
+        constrained_layout=True, # Automatically reduce label/title overlap
+    )
 
-    for axis, (metric_name, title) in zip(axes, metric_panels):
-        heatmap = np.full((len(confidence_labels), len(bias_labels)), np.nan, dtype=float)
-        for row in summary_by_bucket_rows:
-            if row.get("method") != "hierarchical":
-                continue
-            if row.get("metric") != metric_name:
-                continue
-            if int(row["count_bucket"]) != selected_bucket:
-                continue
+    # Iterate through focus areas; focus_index selects the subplot row
+    for focus_index, focus_slug in enumerate(focus_slugs):
 
-            confidence = str(row["confidence_level"])
-            bias = str(row["bias_level"])
-            heatmap[confidence_positions[confidence], bias_positions[bias]] = float(row["mean"])
+        # Keep only the conditions belonging to this focus area
+        focus_conditions = [
+            condition
+            for condition in conditions
+            if condition.focus_slug == focus_slug
+        ]
 
-        image = axis.imshow(heatmap, cmap="viridis")
-        axis.set_title(f"{title}\nBucket {selected_bucket}")
-        axis.set_xticks(range(len(bias_labels)))
-        axis.set_xticklabels(bias_labels, rotation=25, ha="right")
-        axis.set_yticks(range(len(confidence_labels)))
-        axis.set_yticklabels(confidence_labels)
-        axis.set_xlabel("Prior bias")
-        axis.set_ylabel("Prior confidence")
+        # Preserve confidence-label order for the heatmap's y-axis
+        confidence_labels = _unique_in_order([condition.confidence_label for condition in focus_conditions])
 
-        for row_index in range(heatmap.shape[0]):
-            for col_index in range(heatmap.shape[1]):
-                value = heatmap[row_index, col_index]
-                if np.isfinite(value):
-                    axis.text(
-                        col_index,
-                        row_index,
-                        f"{value:.3f}",
-                        ha="center",
-                        va="center",
-                        color="white" if value > np.nanmean(heatmap) else "black",
-                    )
+        # Preserve bias-label order for the heatmap's x-axis
+        bias_labels = _unique_in_order([condition.bias_label for condition in focus_conditions])
 
-        figure.colorbar(image, ax=axis, shrink=0.85)
+        # Map each confidence label to its row index in the heatmap array
+        confidence_positions = {label: index for index, label in enumerate(confidence_labels)}
 
+        # Map each bias label to its column index in the heatmap array
+        bias_positions = {label: index for index, label in enumerate(bias_labels)}
+
+        # Iterate through metrics; metric_index selects the subplot column
+        for metric_index, (metric_name, title) in enumerate(metric_panels):
+
+            # Select the axis for this focus x metric panel
+            axis = axes[focus_index][metric_index]
+
+            # Allocate the heatmap matrix; NaN marks cells that have not received data
+            heatmap = np.full((len(confidence_labels), len(bias_labels)), np.nan, dtype=float)
+
+            # Scan the combined summary rows and place matching means into the heatmap
+            for row in summary_by_bucket_rows:
+                # Ignore independent-JEEDS rows; this plot is about hierarchical prior robustness
+                if row.get("method") != "hierarchical":
+                    continue
+                # Ignore rows for the other metric
+                if row.get("metric") != metric_name:
+                    continue
+                # Ignore rows for count buckets other than the lowest bucket selected above
+                if int(row["count_bucket"]) != selected_bucket:
+                    continue
+
+                # Read the condition slug from the row; missing slugs become an empty string
+                condition_slug = str(row.get("condition_slug", ""))
+                # Recover the condition object for label fallback and focus checking
+                condition = condition_by_slug.get(condition_slug)
+                # Prefer the row's focus slug, but fall back to the condition object if needed
+                row_focus_slug = str(row.get("focus_slug", condition.focus_slug if condition else ""))
+                # Skip rows that belong to another focus area
+                if row_focus_slug != focus_slug:
+                    continue
+
+                # Prefer the row's confidence label, but fall back to the condition object if needed
+                confidence = str(row.get("confidence_label", condition.confidence_label if condition else ""))
+                # Prefer the row's bias label, but fall back to the condition object if needed
+                bias = str(row.get("bias_label", condition.bias_label if condition else ""))
+                # Skip rows whose labels are not part of this focus area's heatmap layout
+                if confidence not in confidence_positions or bias not in bias_positions:
+                    continue
+
+                # Place the mean error into the correct confidence x bias heatmap cell
+                heatmap[confidence_positions[confidence], bias_positions[bias]] = float(row["mean"])
+
+            # Render the numeric heatmap as an image
+            image = axis.imshow(heatmap, cmap="viridis")
+            # Title the panel with focus area, metric name, and selected bucket
+            axis.set_title(f"{focus_labels[focus_slug].title()} - {title}\nBucket {selected_bucket}")
+            # Put x-axis ticks at each bias column
+            axis.set_xticks(range(len(bias_labels)))
+            # Label x-axis ticks with bias labels and rotate them so long labels fit
+            axis.set_xticklabels(bias_labels, rotation=30, ha="right", fontsize=8)
+            # Put y-axis ticks at each confidence row
+            axis.set_yticks(range(len(confidence_labels)))
+            # Label y-axis ticks with confidence labels
+            axis.set_yticklabels(confidence_labels)
+            # Label the x-axis as the prior-bias dimension
+            axis.set_xlabel("Prior bias")
+            # Label the y-axis as the prior-confidence dimension
+            axis.set_ylabel("Prior confidence")
+
+            # Extract only real values so empty NaN cells do not affect text color
+            finite_values = heatmap[np.isfinite(heatmap)]
+            # Use the mean finite value as a simple threshold for light/dark annotation text
+            text_threshold = float(np.mean(finite_values)) if finite_values.size else 0.0
+            # Iterate over heatmap row indices
+            for row_index in range(heatmap.shape[0]):
+                # Iterate over heatmap column indices
+                for col_index in range(heatmap.shape[1]):
+                    # Read the plotted value for this heatmap cell
+                    value = heatmap[row_index, col_index]
+                    # Only annotate cells that contain real data
+                    if np.isfinite(value):
+                        # Write the mean error value into the center of the heatmap cell
+                        axis.text(
+                            # x-position is the column index
+                            col_index,
+                            # y-position is the row index
+                            row_index,
+                            # Format the number to three decimal places
+                            f"{value:.3f}",
+                            # Center the text horizontally in the cell
+                            ha="center",
+                            # Center the text vertically in the cell
+                            va="center",
+                            # Use white text on darker/higher cells and black text otherwise
+                            color="white" if value > text_threshold else "black",
+                            # Keep the annotation small enough for dense condition labels
+                            fontsize=8,
+                        )
+
+            # Add a colorbar for this panel so colors can be read quantitatively
+            figure.colorbar(image, ax=axis, shrink=0.85)
+
+    # Ensure the output directory exists before saving the figure
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Write the final heatmap image to disk
     figure.savefig(output_path, dpi=300)
+    # Close the figure so batch runs do not accumulate Matplotlib state
     plt.close(figure)
+
+
+def _seed_values_label(seed_values: Sequence[int]) -> str:
+    """Return a readable seed description for dry-run output."""
+
+    if len(seed_values) <= 10:
+        return str(tuple(seed_values))
+    return f"{len(seed_values)} seeds ({seed_values[0]} through {seed_values[-1]})"
 
 
 def print_dry_run_summary(
@@ -636,13 +974,10 @@ def print_dry_run_summary(
 ) -> None:
     """Report the planned sensitivity workload without running inference."""
 
-    # This summary is intentionally rich because a full 3x3 x many-seed sweep
-    # can be expensive to run; the user should be able to inspect the planned
-    # hyperprior shifts before launching it.
-    print("=== DRY RUN: 1D Darts Prior Sensitivity ===")
+    print("=== DRY RUN: 1D Darts Hyperprior Robustness ===")
     print("No simulation or inference functions will be executed.")
     print()
-    print(f"Seeds per condition: {config.seed_values}")
+    print(f"Seeds per condition: {_seed_values_label(config.seed_values)}")
     print(f"Agents per seed: {config.num_agents}")
     print(f"Count buckets: {config.count_buckets}")
     print(f"Agents per bucket: {config.agents_per_bucket}")
@@ -653,14 +988,18 @@ def print_dry_run_summary(
         metadata = condition_metadata_row(condition, hyperpriors)
         print(
             "  - "
-            f"{condition.condition_slug}: confidence={condition.confidence_label}, "
-            f"bias={condition.bias_label}, "
+            f"{condition.condition_slug}: focus={condition.focus_label}, "
+            f"bias={condition.bias_label}, confidence={condition.confidence_label}, "
+            f"avg_bias_sd={condition.average_skill_bias_sd_units:g}, "
+            f"spread_bias_sd={condition.population_spread_bias_sd_units:g}, "
+            f"r_center={condition.correlation_r_center:g}, "
             f"mu=({metadata['hyperprior_mu_eta']:.3f}, {metadata['hyperprior_mu_rho']:.3f}), "
             f"mu_sd=({metadata['hyperprior_mu_eta_sd']:.3f}, {metadata['hyperprior_mu_rho_sd']:.3f}), "
             f"tau_median=({metadata['hyperprior_tau_eta_median']:.3f}, "
             f"{metadata['hyperprior_tau_rho_median']:.3f}), "
             f"log_tau_sd=({metadata['hyperprior_log_tau_eta_sd']:.3f}, "
-            f"{metadata['hyperprior_log_tau_rho_sd']:.3f})"
+            f"{metadata['hyperprior_log_tau_rho_sd']:.3f}), "
+            f"s_r={metadata['hyperprior_s_r']:.3f}"
         )
     print()
     print("Planned combined artifacts:")
@@ -672,10 +1011,8 @@ def print_dry_run_summary(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the 3x3 prior-sensitivity sweep."""
+    """Run the requested prior-sensitivity sweep."""
 
-    # Parse and build the shared experiment design once.  The loop below only
-    # varies the hyperprior assumptions, not the underlying darts setup.
     args = parse_args(argv)
     config = build_base_config_from_args(args)
     conditions = build_sensitivity_conditions(args)

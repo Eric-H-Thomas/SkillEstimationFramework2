@@ -1,5 +1,5 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# This file was written or edited by AI and still requires human review. Delete this comment when done
 #SBATCH --job-name=hjeeds-agents-bucket
 #SBATCH --qos=normal
 #SBATCH --time=23:00:00
@@ -8,10 +8,10 @@
 
 set -euo pipefail
 
-# Make sure Python can import the repository packages from the Slurm working directory.
+# Make sure Python can import the repository packages from the Slurm working directory
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
-# Render plots in headless mode and keep Matplotlib cache files off read-only homes.
+# Render plots in headless mode and keep Matplotlib cache files off read-only homes
 export MPLBACKEND=Agg
 if [[ -n "${SLURM_TMPDIR:-}" ]]; then
   export MPLCONFIGDIR="${MPLCONFIGDIR:-${SLURM_TMPDIR}/matplotlib}"
@@ -31,6 +31,7 @@ python_args=(
   --seed "${BASE_SEED:-12345}"
   --count-buckets "${COUNT_BUCKETS:-5,10,25,100,1000}"
   --agents-per-bucket-values "${AGENTS_PER_BUCKET_VALUES:-1,2,5,10,25}"
+  --condition-preset "${CONDITION_PRESET:-representative}"
   --output-dir "${OUTPUT_DIR:-HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity}"
   --delta "${DELTA:-0.1}"
   --num-sigma-grid "${NUM_SIGMA_GRID:-21}"
@@ -42,15 +43,7 @@ python_args=(
   --min-success-regions "${MIN_SUCCESS_REGIONS:-2}"
   --max-success-regions "${MAX_SUCCESS_REGIONS:-6}"
   --min-region-width "${MIN_REGION_WIDTH:-0.25}"
-  --weak-std-multiplier "${WEAK_STD_MULTIPLIER:-3.0}"
-  --strong-std-multiplier "${STRONG_STD_MULTIPLIER:-0.3333333333333333}"
-  --slight-bias-sd-units "${SLIGHT_BIAS_SD_UNITS:-0.5}"
-  --significant-bias-sd-units "${SIGNIFICANT_BIAS_SD_UNITS:-1.5}"
 )
-
-if [[ -n "${CONDITION_SLUGS:-}" ]]; then
-  python_args+=(--condition-slugs "${CONDITION_SLUGS}")
-fi
 
 if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
   python_args+=(--aggregate-results)
@@ -60,3 +53,35 @@ else
 fi
 
 "${python_bin}" "${python_args[@]}"
+
+if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
+  output_dir="${OUTPUT_DIR:-HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity}"
+  zip_path="${RESULTS_ZIP_PATH:-${output_dir%/}.zip}"
+  "${python_bin}" - "${output_dir}" "${zip_path}" <<'PY'
+from __future__ import annotations
+
+import sys
+import zipfile
+from pathlib import Path
+
+
+source_dir = Path(sys.argv[1]).resolve()
+zip_path = Path(sys.argv[2]).resolve()
+
+if not source_dir.exists():
+    raise FileNotFoundError(f"Cannot zip missing output directory: {source_dir}")
+
+zip_path.parent.mkdir(parents=True, exist_ok=True)
+if zip_path.exists():
+    zip_path.unlink()
+
+with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for path in sorted(source_dir.rglob("*")):
+        if path.resolve() == zip_path:
+            continue
+        if path.is_file():
+            archive.write(path, Path(source_dir.name) / path.relative_to(source_dir))
+
+print(f"[agents-per-bucket] Zipped results to {zip_path}", flush=True)
+PY
+fi

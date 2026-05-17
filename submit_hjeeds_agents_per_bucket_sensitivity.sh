@@ -1,9 +1,9 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# This file was written or edited by AI and still requires human review. Delete this comment when done
 #
-# Submit the H-JEEDS agents-per-bucket sensitivity sweep as a Slurm array.
+# Submit the H-JEEDS agents-per-bucket sensitivity sweep as a Slurm array
 # Each array task computes one agents-per-bucket x hyperprior scenario, and a
-# final dependent job aggregates the 45 scenario folders into combined CSVs.
+# final dependent job aggregates the scenario folders and zips the output root
 
 set -euo pipefail
 
@@ -12,19 +12,21 @@ usage() {
 Usage: submit_hjeeds_agents_per_bucket_sensitivity.sh [options]
 
 Submit the H-JEEDS agents-per-bucket ablation to Slurm. By default this
-launches 45 scenario tasks:
+launches 15 scenario tasks:
 
   agents per bucket: 1,2,5,10,25
-  prior conditions: 9 hyperprior sensitivity cells
+  prior conditions: 3 representative hyperprior robustness conditions
 
-Then it submits one afterok aggregation task that collects the scenario outputs.
+Use --condition-preset full_60 to launch 300 scenario tasks instead. Then the
+helper submits one afterok aggregation task that collects the scenario outputs
+and writes OUTPUT_DIR.zip for export.
 
 Experiment options:
   --num-seeds N                  Seeds per scenario (default: 250).
   --seed N                       Base seed (default: 12345).
   --count-buckets LIST           Observation buckets (default: 5,10,25,100,1000).
   --agents-per-bucket-values L   Population-size sweep (default: 1,2,5,10,25).
-  --condition-slugs LIST         Optional comma-separated subset of prior conditions.
+  --condition-preset PRESET      representative or full_60 (default: representative).
   --output-dir PATH              Output root for all results.
   --python-bin PATH              Python executable on the cluster.
 
@@ -59,6 +61,21 @@ count_csv_values() {
   echo "${#values[@]}"
 }
 
+condition_count_for_preset() {
+  case "$1" in
+    representative)
+      echo "3"
+      ;;
+    full_60)
+      echo "60"
+      ;;
+    *)
+      echo "Error: --condition-preset must be representative or full_60." >&2
+      exit 1
+      ;;
+  esac
+}
+
 format_command() {
   local quoted=()
   local part
@@ -73,7 +90,7 @@ num_seeds="250"
 base_seed="12345"
 count_buckets="5,10,25,100,1000"
 agents_per_bucket_values="1,2,5,10,25"
-condition_slugs=""
+condition_preset="representative"
 output_dir="HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity"
 python_bin=""
 
@@ -109,8 +126,8 @@ while [[ $# -gt 0 ]]; do
       agents_per_bucket_values="$2"
       shift 2
       ;;
-    --condition-slugs)
-      condition_slugs="$2"
+    --condition-preset)
+      condition_preset="$2"
       shift 2
       ;;
     --output-dir)
@@ -171,7 +188,7 @@ if ! [[ "${num_seeds}" =~ ^[0-9]+$ ]] || (( num_seeds < 1 )); then
 fi
 
 agents_count="$(count_csv_values "${agents_per_bucket_values}" 0)"
-condition_count="$(count_csv_values "${condition_slugs}" 9)"
+condition_count="$(condition_count_for_preset "${condition_preset}")"
 total_tasks=$(( agents_count * condition_count ))
 if (( total_tasks < 1 )); then
   echo "Error: no scenario tasks requested." >&2
@@ -207,7 +224,7 @@ experiment_env=(
   "BASE_SEED=${base_seed}"
   "COUNT_BUCKETS=${count_buckets}"
   "AGENTS_PER_BUCKET_VALUES=${agents_per_bucket_values}"
-  "CONDITION_SLUGS=${condition_slugs}"
+  "CONDITION_PRESET=${condition_preset}"
   "OUTPUT_DIR=${output_dir}"
 )
 if [[ -n "${python_bin}" ]]; then
@@ -224,6 +241,7 @@ array_cmd=(
 )
 
 echo "Submitting ${total_tasks} scenario tasks."
+echo "Condition preset: ${condition_preset}"
 echo "Scenario array command:"
 echo "  $(format_command "${array_cmd[@]}")"
 
