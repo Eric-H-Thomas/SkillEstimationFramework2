@@ -1,5 +1,7 @@
 # Environment Setup
 
+<!-- This file was written or edited by AI and still requires human review. Delete this comment when done -->
+
 Follow these steps to prepare a working environment for the Skill Estimation Framework.
 
 ## Python version
@@ -25,3 +27,8 @@ Follow these steps to prepare a working environment for the Skill Estimation Fra
 ## Repository checkout
 1. Clone the `skill-estimation-framework` repository from GitHub.
 2. Navigate into the cloned `skill-estimation-framework` directory.
+
+## H-JEEDS notes
+- H-JEEDS uses the same core scientific Python stack: `numpy`, `scipy`, and `matplotlib`.
+- Cluster runs should set `MPLBACKEND=Agg`; the provided H-JEEDS Slurm helper does this automatically.
+- Run H-JEEDS commands from the repository root so package imports such as `HJEEDS.darts_hierarchical_vs_jeeds` resolve correctly.

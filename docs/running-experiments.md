@@ -1,5 +1,7 @@
 # Running experiments
 
+<!-- This file was written or edited by AI and still requires human review. Delete this comment when done -->
+
 This repository provides several entry points for launching experiments across the darts, billiards, baseball, soccer, and hockey domains. Each script sets sensible defaults for its target workflow and writes outputs under `Experiments/<domain>/<resultsFolder>/`.
 
 The commands below assume you have followed the environment setup instructions in `docs/environment-setup.md` and that you run them from the repository root.
@@ -9,6 +11,21 @@ The commands below assume you have followed the environment setup instructions i
 - Use `-resultsFolder <name>` to separate runs. Many scripts also hard-code or prepend the domain to this folder internally.
 - `-seed` controls deterministic random number generation. Some scripts additionally save seeds to disk for reproducibility.
 - Baseball, soccer, and hockey runs often load and cache external data. When reusing IDs/types, keep `-maxRows` and `-dataBy` consistent across reruns to avoid mismatched checkpoints.
+
+## H-JEEDS
+
+The hierarchical darts experiments use package-style entry points under `HJEEDS/` and write outputs under `HJEEDS/results/`.
+
+See [H-JEEDS Experiments](hjeeds.md) for the maintained workflow. The most common commands are:
+
+```bash
+python3 -m HJEEDS.darts_hierarchical_vs_jeeds --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --dry-run
+./submit_hjeeds_agents_per_bucket_sensitivity.sh --num-seeds 250 --seed 12345
+```
+
+The current hyperprior robustness study defaults to 60 conditions. Downstream ablations default to the three representative robustness conditions unless `--condition-preset full_60` is supplied.
 
 ## `runExpDynamic.py`
 Runs darts-style experiments where agent execution skill changes over time. Defaults are tuned for cluster runs (500 iterations, 100 observations, particle filters enabled).
