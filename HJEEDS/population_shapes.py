@@ -171,6 +171,7 @@ def _sample_outlier_heavy(
     outlier_scale = OUTLIER_HEAVY_OUTLIER_SD_MULTIPLIER
 
     # Solve (1 - w) * a^2 + w * k^2 = 1 so the mixture covariance still equals covariance
+    # (The weighted average variance scaling factor needs to be 1)
     inlier_scale_squared = (1.0 - outlier_weight * outlier_scale**2) / (1.0 - outlier_weight)
 
     # Fail early if w and k imply an impossible negative inlier variance
