@@ -1,4 +1,4 @@
-<!-- This file was written or edited by AI and still requires human review. Delete this comment when done -->
+<!-- This file was written or edited by AI and still requires human review. Delete this comment when done. -->
 
 # H-JEEDS Experiments
 
@@ -33,7 +33,6 @@ Primary outputs:
 - `summary_by_bucket.csv`
 - `summary_overall.csv`
 - `error_by_count_bucket.png`
-- `rationality_percent_error_by_count_bucket.png`
 
 ## Hyperprior Robustness Study
 
@@ -154,6 +153,57 @@ Primary root outputs:
 
 Each agents-per-bucket folder also contains prior-sensitivity combined CSVs and one subfolder per hyperprior condition.
 
+## Population-Shape Ablation
+
+Use `HJEEDS.darts_population_shape_sensitivity` to test how sensitive H-JEEDS is when the true simulator population does not match the estimator's unimodal Gaussian population model.
+
+The default sweep crosses five agents-per-bucket values with four true population shapes:
+
+```text
+5 agents-per-bucket values x 4 population shapes = 20 scenarios
+```
+
+Population shapes:
+
+- `default`
+- `uniform`
+- `bimodal`
+- `outlier_heavy`
+
+Dry run:
+
+```bash
+python3 -m HJEEDS.darts_population_shape_sensitivity --num-seeds 1 --dry-run
+```
+
+Run locally:
+
+```bash
+python3 -m HJEEDS.darts_population_shape_sensitivity \
+  --num-seeds 250 \
+  --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
+```
+
+Primary root outputs:
+
+- `population_shape_sensitivity_scenarios.csv`
+- `population_shape_sensitivity_agent_level_results.csv`
+- `population_shape_sensitivity_summary_by_bucket.csv`
+- `population_shape_sensitivity_summary_overall.csv`
+- `population_shape_lowest_bucket_abs_sigma_error.png`
+- `population_shape_lowest_bucket_abs_log_lambda_error.png`
+- `population_shape_lowest_bucket_abs_rationality_percent_error.png`
+
+Use the Slurm submit helper to launch one array task per scenario and one dependent aggregation task:
+
+```bash
+./submit_hjeeds_population_shape_sensitivity.sh \
+  --num-seeds 250 \
+  --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
+```
+
+After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
+
 ## Slurm Agents-Per-Bucket Workflow
 
 Use the submit helper to launch one Slurm array task per scenario and one dependent aggregation task.
@@ -225,6 +275,9 @@ python3 -m HJEEDS.darts_hierarchical_vs_jeeds --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --condition-preset full_60 --dry-run
+python3 -m HJEEDS.darts_population_shape_sensitivity --num-seeds 1 --dry-run
 bash -n run_hjeeds_agents_per_bucket_sensitivity.sbatch
 bash -n submit_hjeeds_agents_per_bucket_sensitivity.sh
+bash -n run_hjeeds_population_shape_sensitivity.sbatch
+bash -n submit_hjeeds_population_shape_sensitivity.sh
 ```

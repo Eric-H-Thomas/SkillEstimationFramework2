@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file has been fully verified by a human researcher as of 05/18/26 at 12:05 PM MT.
 from __future__ import annotations
 
 import math
@@ -43,6 +43,7 @@ class TruePopulationConfig:
     tau_eta: float
     tau_rho: float
     correlation: float
+    population_shape_slug: str = "default"
 
     @property
     def mean_vector(self) -> np.ndarray:

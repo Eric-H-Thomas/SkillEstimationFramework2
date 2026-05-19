@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file has been fully verified by a human researcher as of 05/18/26 at 12:19 PM MT.
 from __future__ import annotations
 
 import argparse
@@ -108,7 +108,6 @@ AGENT_LEVEL_FILENAME = "agent_level_results.csv"
 SUMMARY_BY_BUCKET_FILENAME = "summary_by_bucket.csv"
 SUMMARY_OVERALL_FILENAME = "summary_overall.csv"
 ERROR_PLOT_FILENAME = "error_by_count_bucket.png"
-RATIONALITY_ERROR_PLOT_FILENAME = "rationality_percent_error_by_count_bucket.png"
 
 # CSV headers all declared in one place
 AGENT_LEVEL_CSV_HEADER = [
@@ -182,7 +181,6 @@ def planned_output_paths(output_dir: Path) -> dict[str, Path]:
         "summary_by_bucket_csv": output_dir / SUMMARY_BY_BUCKET_FILENAME,
         "summary_overall_csv": output_dir / SUMMARY_OVERALL_FILENAME,
         "error_plot": output_dir / ERROR_PLOT_FILENAME,
-        "rationality_error_plot": output_dir / RATIONALITY_ERROR_PLOT_FILENAME,
     }
 
 

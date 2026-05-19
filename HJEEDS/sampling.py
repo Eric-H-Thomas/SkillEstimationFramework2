@@ -1,10 +1,11 @@
-# This file has been fully verified by a human researcher as of 05/09/26 at 6:51 PM MT.
+# This file has been fully verified by a human researcher as of 05/18/26 at 12:11 PM MT.
 
 from __future__ import annotations
 import math
 import numpy as np
 from . import darts_environment as darts
 from .models import AgentDataset, AgentTruth, ExperimentConfig
+from .population_shapes import sample_log_skill_profile
 
 
 # This module is responsible for the synthetic-data side of the experiment:
@@ -89,14 +90,11 @@ def sample_true_population_params(
     log_lambda_max = float(np.max(log_lambda_grid))
 
     truths: list[AgentTruth] = []
-    covariance = config.true_population.covariance_matrix
-    mean_vector = config.true_population.mean_vector
-
     for agent_id in range(config.num_agents):
         # We keep the simulated truth inside the estimator support so later
         # comparisons do not get dominated by pure grid truncation artifacts.
         for _attempt in range(10_000):
-            eta, rho = rng.multivariate_normal(mean_vector, covariance)
+            eta, rho = sample_log_skill_profile(rng, config.true_population)
 
             if log_sigma_min <= float(eta) <= log_sigma_max and log_lambda_min <= float(rho) <= log_lambda_max:
                 truths.append(
