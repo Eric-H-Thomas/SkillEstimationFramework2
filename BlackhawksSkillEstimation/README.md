@@ -90,3 +90,21 @@ player_{id}/
 Use these functions directly in notebooks or scripts when you already have a
 `DataFrame` of shot rows or want to integrate the estimator into a larger
 pipeline.
+
+## Legacy vs new xG correlation
+
+To compare legacy vs new xG runs (per-player final estimates) and compute
+per-season correlations, use:
+
+```bash
+conda run -n skill-estimation python -m BlackhawksSkillEstimation.compare_legacy_new_xg_correlations \
+  --players-file Data/Hockey/forwards23-25.txt \
+  --seasons 20212022 20222023 20232024 20242025 \
+  --shot-group wristshot_snapshot \
+  --data-root-legacy Data/Hockey \
+  --data-root-new Data/Hockey_xg_new \
+  --metric execution_skill \
+  --output-dir Data/Hockey_xg_new/compare_legacy_new_xg
+```
+
+Outputs include a summary CSV and scatter plots (per-season, multipanel, and overall).

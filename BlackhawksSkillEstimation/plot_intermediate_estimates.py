@@ -50,17 +50,39 @@ def load_intermediate_estimates(csv_path: Path | str) -> dict[str, list[float]]:
         "log10_expected_rationality": [],
         "log10_map_rationality": [],
     }
+    def _to_float(val: str) -> float:
+        if val is None:
+            return float("nan")
+        v = val.strip()
+        if v == "":
+            return float("nan")
+        try:
+            return float(v)
+        except ValueError:
+            return float("nan")
+
+    def _to_int(val: str) -> int:
+        if val is None:
+            return 0
+        v = val.strip()
+        if v == "":
+            return 0
+        try:
+            return int(v)
+        except ValueError:
+            return 0
+
     with open(csv_path, newline="") as f:
         for row in csv.DictReader(f):
-            data["shot_count"].append(int(row["shot_count"]))
-            data["expected_execution_skill"].append(float(row["expected_execution_skill"]))
-            data["map_execution_skill"].append(float(row["map_execution_skill"]))
-            er = float(row["expected_rationality"])
-            mr = float(row["map_rationality"])
+            data["shot_count"].append(_to_int(row.get("shot_count")))
+            data["expected_execution_skill"].append(_to_float(row.get("expected_execution_skill")))
+            data["map_execution_skill"].append(_to_float(row.get("map_execution_skill")))
+            er = _to_float(row.get("expected_rationality"))
+            mr = _to_float(row.get("map_rationality"))
             data["expected_rationality"].append(er)
             data["map_rationality"].append(mr)
-            data["log10_expected_rationality"].append(float(row["log10_expected_rationality"]))
-            data["log10_map_rationality"].append(float(row["log10_map_rationality"]))
+            data["log10_expected_rationality"].append(_to_float(row.get("log10_expected_rationality")))
+            data["log10_map_rationality"].append(_to_float(row.get("log10_map_rationality")))
     return data
 
 

@@ -113,11 +113,15 @@ def _build_shot_map_dict_from_grid_df(
 
         # Match legacy convention: reverse Y axis so positive-y is to the right.
         grid = grid[:, ::-1]
+        grid_y = y_vals[::-1]
+        grid_z = z_vals
 
         shot_maps[int(event_id_hawks)] = {
             "value_map": grid,
             "net_cov": _extract_covariance_matrix(shot_df.iloc[0]),
             "net_coords": shot_df.iloc[0][["goalline_y_model", "goalline_z_model"]].values,
+            "grid_y": grid_y,
+            "grid_z": grid_z,
         }
     return shot_maps
 
@@ -503,6 +507,66 @@ def query_season_shots(
               SELECT 1
               FROM hawks_analytics.post_shot_xg_value_maps p
               WHERE p.event_id_hawks = e.event_id_hawks
+          );
+    """
+
+    df = db.get_df(query).rename(columns=str.lower)
+
+    if df.empty:
+        return df
+
+    # Flip Y-coordinate to match the positive-y-right convention.
+    df["location_y"] = -df["location_y"]
+    return df
+
+
+def query_season_shots_new_xg(
+    seasons: list[int],
+    shot_types: set[str] | None = None,
+    include_null_shot_type: bool = True,
+) -> pd.DataFrame:
+    """Fetch shot-level metadata for seasons, filtered to new xG map coverage.
+
+    Mirrors :func:`query_season_shots` but requires rows in
+    ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
+    """
+    if not seasons:
+        return pd.DataFrame()
+
+    seasons_str = ",".join(str(s) for s in seasons)
+    shot_type_clause = ""
+    if shot_types:
+        shot_types_sql = ",".join(f"'{t}'" for t in sorted(shot_types))
+        if include_null_shot_type:
+            shot_type_clause = (
+                f"AND (e.SHOT_TYPE IN ({shot_types_sql}) OR e.SHOT_TYPE IS NULL)"
+            )
+        else:
+            shot_type_clause = f"AND e.SHOT_TYPE IN ({shot_types_sql})"
+
+    query = f"""
+        SELECT
+            e.PLAYER_ID_HAWKS        AS player_id,
+            e.GAME_ID_HAWKS          AS game_id,
+            e.EVENT_ID_HAWKS         AS event_id,
+            g.SEASON                 AS season,
+            e.SHOT_TYPE              AS shot_type,
+            e.X_ADJ_COORD            AS start_x,
+            e.Y_ADJ_COORD            AS start_y,
+            st.GOALLINE_Y_MODEL      AS location_y,
+            st.GOALLINE_Z_MODEL      AS location_z
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        JOIN HAWKS_HOCKEY.PUBLIC.GAME AS g
+          ON g.GAME_ID_HAWKS = e.GAME_ID_HAWKS
+        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE g.SEASON IN ({seasons_str})
+          AND e.EVENT_NAME = 'shot'
+          {shot_type_clause}
+          AND EXISTS (
+              SELECT 1
+              FROM hawks_analytics.expected_goal_values_post_shot_net_grid n
+              WHERE n.event_id_hawks = e.event_id_hawks
           );
     """
 

@@ -98,6 +98,8 @@ def build_angular_cache(
             raise RuntimeError(f"Missing shot map for event_id {event_id}")
 
         base_ev = shot_maps[event_id]["value_map"]
+        grid_y = shot_maps[event_id].get("grid_y")
+        grid_z = shot_maps[event_id].get("grid_z")
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
 
@@ -105,8 +107,8 @@ def build_angular_cache(
             base_ev,
             player_location,
             executed_action,
-            grid_y=_BH_Y,
-            grid_z=_BH_Z,
+            grid_y=_BH_Y if grid_y is None else grid_y,
+            grid_z=_BH_Z if grid_z is None else grid_z,
         )
 
         dirs = np.array(angular_out[0])

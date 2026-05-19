@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from BlackhawksAPI import get_shot_maps_by_event_ids, query_season_shots
+from BlackhawksAPI import queries as api_queries
 from BlackhawksSkillEstimation.BlackhawksJEEDS import (
     MIN_DISTANCE_FROM_NET_FT,
     SHOT_TYPE_GROUPS,
@@ -33,6 +33,7 @@ class BenchmarkConfig:
     tag: str
     output_dir: Path
     oversample_factor: int = 3
+    use_new_xg: bool = False
 
 
 @dataclass
@@ -93,24 +94,33 @@ def _is_angular_skip(
     base_ev: np.ndarray,
     player_location: np.ndarray,
     executed_action: np.ndarray,
+    grid_y: np.ndarray | None = None,
+    grid_z: np.ndarray | None = None,
 ) -> bool:
     angular_out = angular_heatmaps.getAngularHeatmap(
         base_ev,
         player_location,
         executed_action,
-        grid_y=_BH_Y,
-        grid_z=_BH_Z,
+        grid_y=_BH_Y if grid_y is None else grid_y,
+        grid_z=_BH_Z if grid_z is None else grid_z,
     )
     return bool(angular_out[9])
 
 
 def _build_pool(config: BenchmarkConfig, stats: BenchmarkStats) -> pd.DataFrame:
     _, allowed_types, include_null = SHOT_TYPE_GROUPS[config.shot_group]
-    pool = query_season_shots(
-        seasons=config.seasons,
-        shot_types=allowed_types,
-        include_null_shot_type=include_null,
-    )
+    if config.use_new_xg:
+        pool = api_queries.query_season_shots_new_xg(
+            seasons=config.seasons,
+            shot_types=allowed_types,
+            include_null_shot_type=include_null,
+        )
+    else:
+        pool = api_queries.query_season_shots(
+            seasons=config.seasons,
+            shot_types=allowed_types,
+            include_null_shot_type=include_null,
+        )
     if pool.empty:
         raise RuntimeError("No shots returned for the requested seasons")
 
@@ -176,7 +186,10 @@ def _sample_benchmark(
             idx += batch_size
 
             event_ids = [int(eid) for eid in batch["event_id"].tolist()]
-            maps = get_shot_maps_by_event_ids(event_ids)
+            if config.use_new_xg:
+                maps = api_queries.get_shot_maps_by_event_ids_new_xg(event_ids)
+            else:
+                maps = api_queries.get_shot_maps_by_event_ids(event_ids)
 
             for record in batch.to_dict("records"):
                 event_id = int(record["event_id"])
@@ -192,9 +205,11 @@ def _sample_benchmark(
                     continue
 
                 base_ev = maps[event_id]["value_map"]
+                grid_y = maps[event_id].get("grid_y")
+                grid_z = maps[event_id].get("grid_z")
                 player_location = np.array([float(record["start_x"]), float(record["start_y"])])
                 executed_action = np.array([float(record["location_y"]), float(record["location_z"])])
-                if _is_angular_skip(base_ev, player_location, executed_action):
+                if _is_angular_skip(base_ev, player_location, executed_action, grid_y, grid_z):
                     stats.rejected_angular_skip += 1
                     continue
 
@@ -315,6 +330,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=3,
         help="Oversample factor per stratum to offset rejection filtering.",
     )
+    parser.add_argument(
+        "--use-new-xg",
+        action="store_true",
+        help="Use the new expected_goal_values_post_shot_net_grid table for maps.",
+    )
     return parser
 
 
@@ -332,6 +352,7 @@ def main() -> None:
         tag=args.tag,
         output_dir=args.output_dir,
         oversample_factor=args.oversample_factor,
+        use_new_xg=args.use_new_xg,
     )
 
     paths = generate_benchmark(config)

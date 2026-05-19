@@ -695,8 +695,8 @@ def _save_shot_maps_npz(
     Parameters
     ----------
     shot_maps : dict[int, dict[str, object]]
-        Mapping of event_id_hawks -> shot data containing 
-        'value_map' (72x120 array), 'net_cov' (2x2), 'net_coords' (2,).
+        Mapping of event_id_hawks -> shot data containing
+        'value_map', 'net_cov', 'net_coords', and optional 'grid_y'/'grid_z'.
     path : Path | str
         Output .npz file path.
     """
@@ -718,13 +718,28 @@ def _save_shot_maps_npz(
         dtype=np.float64
     )
     
-    np.savez_compressed(
-        str(path),
-        event_ids=np.array(event_ids, dtype=np.int64),
-        value_maps=value_maps,
-        net_covs=net_covs,
-        net_coords=net_coords,
+    save_kwargs = {
+        "event_ids": np.array(event_ids, dtype=np.int64),
+        "value_maps": value_maps,
+        "net_covs": net_covs,
+        "net_coords": net_coords,
+    }
+
+    has_grid = all(
+        ("grid_y" in shot_maps[eid]) and ("grid_z" in shot_maps[eid])
+        for eid in event_ids
     )
+    if has_grid:
+        save_kwargs["grid_ys"] = np.array(
+            [shot_maps[eid]["grid_y"] for eid in event_ids],
+            dtype=np.float64,
+        )
+        save_kwargs["grid_zs"] = np.array(
+            [shot_maps[eid]["grid_z"] for eid in event_ids],
+            dtype=np.float64,
+        )
+
+    np.savez_compressed(str(path), **save_kwargs)
 
 
 def _load_shot_maps_npz(
@@ -752,12 +767,17 @@ def _load_shot_maps_npz(
         return {}
     
     shot_maps = {}
+    has_grid = ("grid_ys" in data) and ("grid_zs" in data)
     for i, eid in enumerate(event_ids):
-        shot_maps[int(eid)] = {
+        entry = {
             "value_map": data["value_maps"][i].astype(np.float64),
             "net_cov": data["net_covs"][i],
             "net_coords": data["net_coords"][i],
         }
+        if has_grid:
+            entry["grid_y"] = data["grid_ys"][i]
+            entry["grid_z"] = data["grid_zs"][i]
+        shot_maps[int(eid)] = entry
     return shot_maps
 
 
