@@ -22,6 +22,7 @@ outputs and writes OUTPUT_DIR.zip for export.
 
 Experiment options:
   --num-seeds N                  Seeds per scenario (default: 250).
+  --seed N|default               Required base seed. Use default for 12345.
   --output-dir PATH              Output root for all results.
   --python-bin PATH              Python executable on the cluster.
 
@@ -50,6 +51,7 @@ format_command() {
 }
 
 num_seeds="250"
+base_seed=""
 output_dir="HJEEDS/results/hierarchical_darts_population_shape_sensitivity"
 python_bin=""
 
@@ -73,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --num-seeds)
       num_seeds="$2"
+      shift 2
+      ;;
+    --seed)
+      base_seed="$2"
       shift 2
       ;;
     --output-dir)
@@ -131,6 +137,16 @@ if ! [[ "${num_seeds}" =~ ^[0-9]+$ ]] || (( num_seeds < 1 )); then
   echo "Error: --num-seeds must be a positive integer." >&2
   exit 1
 fi
+if [[ -z "${base_seed}" ]]; then
+  echo "Error: --seed is required. Use an integer seed or 'default'." >&2
+  exit 1
+fi
+if [[ "${base_seed}" =~ ^[Dd][Ee][Ff][Aa][Uu][Ll][Tt]$ ]]; then
+  base_seed="default"
+elif ! [[ "${base_seed}" =~ ^[0-9]+$ ]]; then
+  echo "Error: --seed must be a nonnegative integer or 'default'." >&2
+  exit 1
+fi
 
 total_tasks=$(( agents_per_bucket_count * population_shape_count ))
 if (( total_tasks < 1 )); then
@@ -164,6 +180,7 @@ fi
 
 experiment_env=(
   "NUM_SEEDS=${num_seeds}"
+  "BASE_SEED=${base_seed}"
   "OUTPUT_DIR=${output_dir}"
 )
 if [[ -n "${python_bin}" ]]; then

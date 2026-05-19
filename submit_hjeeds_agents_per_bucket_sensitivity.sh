@@ -1,5 +1,5 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done
+# This file was written or edited by AI and still requires human review. Delete this comment when done.
 #
 # Submit the H-JEEDS agents-per-bucket sensitivity sweep as a Slurm array
 # Each array task computes one agents-per-bucket x hyperprior scenario, and a
@@ -23,7 +23,7 @@ and writes OUTPUT_DIR.zip for export.
 
 Experiment options:
   --num-seeds N                  Seeds per scenario (default: 250).
-  --seed N                       Base seed (default: 12345).
+  --seed N|default               Required base seed. Use default for 12345.
   --count-buckets LIST           Observation buckets (default: 5,10,25,100,1000).
   --agents-per-bucket-values L   Population-size sweep (default: 1,2,5,10,25).
   --condition-preset PRESET      representative or full_60 (default: representative).
@@ -87,7 +87,7 @@ format_command() {
 }
 
 num_seeds="250"
-base_seed="12345"
+base_seed=""
 count_buckets="5,10,25,100,1000"
 agents_per_bucket_values="1,2,5,10,25"
 condition_preset="representative"
@@ -184,6 +184,16 @@ done
 
 if ! [[ "${num_seeds}" =~ ^[0-9]+$ ]] || (( num_seeds < 1 )); then
   echo "Error: --num-seeds must be a positive integer." >&2
+  exit 1
+fi
+if [[ -z "${base_seed}" ]]; then
+  echo "Error: --seed is required. Use an integer seed or 'default'." >&2
+  exit 1
+fi
+if [[ "${base_seed}" =~ ^[Dd][Ee][Ff][Aa][Uu][Ll][Tt]$ ]]; then
+  base_seed="default"
+elif ! [[ "${base_seed}" =~ ^[0-9]+$ ]]; then
+  echo "Error: --seed must be a nonnegative integer or 'default'." >&2
   exit 1
 fi
 

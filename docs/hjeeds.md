@@ -6,6 +6,8 @@ H-JEEDS is the hierarchical empirical-Bayes extension of JEEDS used for the 1D d
 
 Run all commands from the repository root so Python can import the `HJEEDS` package.
 
+All H-JEEDS experiment entry points require `--seed`. Use an integer seed or `--seed default`, which resolves to `12345`.
+
 ## Main Hierarchical Darts Experiment
 
 Use `HJEEDS.darts_hierarchical_vs_jeeds` to compare independent JEEDS against the hierarchical empirical-Bayes estimator under uneven observation counts.
@@ -13,7 +15,7 @@ Use `HJEEDS.darts_hierarchical_vs_jeeds` to compare independent JEEDS against th
 Dry run:
 
 ```bash
-python3 -m HJEEDS.darts_hierarchical_vs_jeeds --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_hierarchical_vs_jeeds --seed default --num-seeds 1 --dry-run
 ```
 
 Full-style run:
@@ -66,7 +68,7 @@ Confidence levels:
 Dry run:
 
 ```bash
-python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --seed default --num-seeds 1 --dry-run
 ```
 
 Run:
@@ -117,7 +119,7 @@ Representative conditions:
 Dry run:
 
 ```bash
-python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --dry-run
 ```
 
 Run locally:
@@ -173,13 +175,14 @@ Population shapes:
 Dry run:
 
 ```bash
-python3 -m HJEEDS.darts_population_shape_sensitivity --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_population_shape_sensitivity --seed default --num-seeds 1 --dry-run
 ```
 
 Run locally:
 
 ```bash
 python3 -m HJEEDS.darts_population_shape_sensitivity \
+  --seed 12345 \
   --num-seeds 250 \
   --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
 ```
@@ -198,6 +201,7 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 
 ```bash
 ./submit_hjeeds_population_shape_sensitivity.sh \
+  --seed 12345 \
   --num-seeds 250 \
   --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
 ```
@@ -271,11 +275,11 @@ Before launching a large run, use:
 
 ```bash
 python3 -m compileall -q HJEEDS
-python3 -m HJEEDS.darts_hierarchical_vs_jeeds --num-seeds 1 --dry-run
-python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --num-seeds 1 --dry-run
-python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --dry-run
-python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --num-seeds 1 --condition-preset full_60 --dry-run
-python3 -m HJEEDS.darts_population_shape_sensitivity --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_hierarchical_vs_jeeds --seed default --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --seed default --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --condition-preset full_60 --dry-run
+python3 -m HJEEDS.darts_population_shape_sensitivity --seed default --num-seeds 1 --dry-run
 bash -n run_hjeeds_agents_per_bucket_sensitivity.sbatch
 bash -n submit_hjeeds_agents_per_bucket_sensitivity.sh
 bash -n run_hjeeds_population_shape_sensitivity.sbatch

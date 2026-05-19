@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/18/26 at 12:19 PM MT.
+# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
 from __future__ import annotations
 
 import argparse
@@ -74,6 +74,7 @@ DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 DEFAULT_AGENTS_PER_BUCKET = 5
 DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
+DEFAULT_SEED = 12345
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts")
 
 # These values refer to the number of high-reward "success" regions, not the
@@ -171,6 +172,23 @@ def _parse_count_buckets(raw_value: str) -> tuple[int, ...]:
     return buckets
 
 
+def parse_seed_argument(raw_value: str) -> int:
+    """Parse a required seed argument, accepting integers or ``default``."""
+
+    normalized_value = raw_value.strip()
+    if normalized_value.lower() == "default":
+        return DEFAULT_SEED
+    try:
+        seed = int(normalized_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Seed must be an integer or 'default'. Received: {raw_value}."
+        ) from exc
+    if seed < 0:
+        raise argparse.ArgumentTypeError(f"Seed must be nonnegative. Received: {seed}.")
+    return seed
+
+
 def planned_output_paths(output_dir: Path) -> dict[str, Path]:
     """Return the artifact locations for this experiment family."""
 
@@ -189,7 +207,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=CLI_DESCRIPTION)
 
-    parser.add_argument("--seed", type=int, default=12345, help="Base seed used to derive per-run seeds.")
+    parser.add_argument(
+        "--seed",
+        type=parse_seed_argument,
+        required=True,
+        help="Base seed used to derive per-run seeds. Use 'default' for 12345.",
+    )
     parser.add_argument(
         "--num-seeds",
         type=int,
@@ -329,6 +352,8 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     # cluster, where a bad CLI should fail fast rather than after scheduling.
     if config.num_seeds <= 0:
         raise ValueError(f"num_seeds must be positive. Received {config.num_seeds}.")
+    if config.seed < 0:
+        raise ValueError(f"seed must be nonnegative. Received {config.seed}.")
     if config.agents_per_bucket <= 0:
         raise ValueError(f"agents_per_bucket must be positive. Received {config.agents_per_bucket}.")
     if config.num_agents <= 0:

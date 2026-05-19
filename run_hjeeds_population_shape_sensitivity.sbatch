@@ -27,6 +27,7 @@ fi
 
 python_args=(
   -m HJEEDS.darts_population_shape_sensitivity
+  --seed "${BASE_SEED:-default}"
   --num-seeds "${NUM_SEEDS:-250}"
   --output-dir "${OUTPUT_DIR:-HJEEDS/results/hierarchical_darts_population_shape_sensitivity}"
 )

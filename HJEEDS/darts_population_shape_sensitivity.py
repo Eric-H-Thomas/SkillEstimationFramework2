@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/18/26 at 12:04 PM MT.
+# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
 """Run H-JEEDS agents-per-bucket ablations across true population shapes.
 
 This script varies the simulator's true population shape while keeping the
@@ -35,7 +35,6 @@ from HJEEDS.population_shapes import (
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_population_shape_sensitivity")
-DEFAULT_SEED = 12345
 DEFAULT_AGENTS_PER_BUCKET_VALUES = (1, 2, 5, 10, 25)
 DEFAULT_COUNT_BUCKETS = base_experiment.DEFAULT_COUNT_BUCKETS
 
@@ -92,6 +91,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
 
+    parser.add_argument(
+        "--seed",
+        type=base_experiment.parse_seed_argument,
+        required=True,
+        help="Base seed used to derive per-run seeds. Use 'default' for 12345.",
+    )
     parser.add_argument(
         "--num-seeds",
         type=int,
@@ -151,7 +156,7 @@ def build_config_for_scenario(
         / _agents_per_bucket_slug(agents_per_bucket)
     )
     base_args = argparse.Namespace(
-        seed=DEFAULT_SEED,
+        seed=args.seed,
         num_seeds=args.num_seeds,
         count_buckets=",".join(str(bucket) for bucket in DEFAULT_COUNT_BUCKETS),
         agents_per_bucket=agents_per_bucket,
