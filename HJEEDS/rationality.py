@@ -68,14 +68,14 @@ def compute_expected_values_for_rationality(
     reward_surface: tuple[float, ...],
     sigma: float,
     delta: float,
+    environment: str = "1d",
 ) -> np.ndarray:
     """Return the expected-value curve used to evaluate rationality percentage."""
 
     # Import lazily for the same reason as the simulation and likelihood paths:
     # dry-run/config code should not need to import the full darts environment.
-    from Environments.Darts.RandomDarts import darts
+    from HJEEDS.environment_adapters import get_environment_domain
 
-    # Use the same environment helper as the generator and likelihood so the
-    # rationality metric is evaluated on the same wrapped 1D aiming grid.
-    expected_values, _actions = darts.compute_expected_value_curve(reward_surface, sigma, delta)
+    domain = get_environment_domain(environment)
+    expected_values, _actions = domain.compute_expected_value_curve(reward_surface, sigma, delta)
     return np.asarray(expected_values, dtype=float)

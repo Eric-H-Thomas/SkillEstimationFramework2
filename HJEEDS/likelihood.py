@@ -123,7 +123,10 @@ def compute_agent_log_likelihood_grid(
         else:
             raise ValueError(f"Unknown environment: {config.environment}")
         gaussian_scale = float(sigma_hypothesis)
-        gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
+        if config.environment == "2d":
+            gaussian_coeff = 1.0 / (2.0 * math.pi * gaussian_scale**2)
+        else:
+            gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
         pdf_matrix = gaussian_coeff * np.exp(-0.5 * np.square(action_differences / gaussian_scale))  # shape: (N, T)
 
         # If any observation receives zero density for every possible target

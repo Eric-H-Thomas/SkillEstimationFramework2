@@ -56,6 +56,9 @@ added without reorganizing the file.
 DEFAULT_SIGMA_MIN = 0.5
 DEFAULT_SIGMA_MAX = 4.5
 DEFAULT_NUM_SIGMA_GRID = 21
+# 2D defaults focus on the good-to-moderate xskill band used in legacy setups.
+DEFAULT_SIGMA_MIN_2D = 8.0
+DEFAULT_SIGMA_MAX_2D = 60.0
 
 DEFAULT_LAMBDA_MIN = 1e-3
 DEFAULT_LAMBDA_MAX = 1e2
@@ -90,6 +93,13 @@ DEFAULT_TRUE_POPULATION = TruePopulationConfig(
     tau_rho=1.0,
     correlation=-0.5,
 )
+DEFAULT_TRUE_POPULATION_2D = TruePopulationConfig(
+    mean_log_sigma=math.log(math.sqrt(DEFAULT_SIGMA_MIN_2D * DEFAULT_SIGMA_MAX_2D)),
+    mean_log_lambda=math.log(1.0),
+    tau_eta=0.35,
+    tau_rho=1.0,
+    correlation=-0.5,
+)
 DEFAULT_HYPERPRIORS = HyperpriorConfig(
     # For simulation studies, the default hyperprior centers are aligned with
     # the true data-generating population so the "unbiased" sensitivity condition
@@ -102,6 +112,16 @@ DEFAULT_HYPERPRIORS = HyperpriorConfig(
     log_tau_rho_mean=math.log(DEFAULT_TRUE_POPULATION.tau_rho),
     log_tau_rho_sd=0.5,
     m_r=math.atanh(DEFAULT_TRUE_POPULATION.correlation),
+    s_r=0.75,
+)
+DEFAULT_HYPERPRIORS_2D = HyperpriorConfig(
+    mean_vector=(DEFAULT_TRUE_POPULATION_2D.mean_log_sigma, DEFAULT_TRUE_POPULATION_2D.mean_log_lambda),
+    covariance_diagonal=(0.6**2, 3.0**2),
+    log_tau_eta_mean=math.log(DEFAULT_TRUE_POPULATION_2D.tau_eta),
+    log_tau_eta_sd=0.5,
+    log_tau_rho_mean=math.log(DEFAULT_TRUE_POPULATION_2D.tau_rho),
+    log_tau_rho_sd=0.5,
+    m_r=math.atanh(DEFAULT_TRUE_POPULATION_2D.correlation),
     s_r=0.75,
 )
 
@@ -313,8 +333,19 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     # to reason about typed values, not raw CLI strings.
     count_buckets = _parse_count_buckets(args.count_buckets)
     delta = args.delta
-    if args.environment == "2d" and args.delta == DEFAULT_DELTA:
-        delta = DEFAULT_DELTA_2D
+    sigma_min = args.sigma_min
+    sigma_max = args.sigma_max
+    true_population = DEFAULT_TRUE_POPULATION
+    hyperpriors = DEFAULT_HYPERPRIORS
+    if args.environment == "2d":
+        if args.delta == DEFAULT_DELTA:
+            delta = DEFAULT_DELTA_2D
+        if args.sigma_min == DEFAULT_SIGMA_MIN:
+            sigma_min = DEFAULT_SIGMA_MIN_2D
+        if args.sigma_max == DEFAULT_SIGMA_MAX:
+            sigma_max = DEFAULT_SIGMA_MAX_2D
+        true_population = DEFAULT_TRUE_POPULATION_2D
+        hyperpriors = DEFAULT_HYPERPRIORS_2D
 
     config = ExperimentConfig(
         environment=args.environment,
@@ -326,8 +357,8 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         delta=delta,
         num_sigma_grid=args.num_sigma_grid,
         num_lambda_grid=args.num_lambda_grid,
-        sigma_min=args.sigma_min,
-        sigma_max=args.sigma_max,
+        sigma_min=sigma_min,
+        sigma_max=sigma_max,
         lambda_min=args.lambda_min,
         lambda_max=args.lambda_max,
         output_dir=Path(args.output_dir),
@@ -336,8 +367,8 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         min_success_regions=args.min_success_regions,
         max_success_regions=args.max_success_regions,
         min_region_width=args.min_region_width,
-        hyperpriors=DEFAULT_HYPERPRIORS,
-        true_population=DEFAULT_TRUE_POPULATION,
+        hyperpriors=hyperpriors,
+        true_population=true_population,
     )
 
     # The checks below catch design mistakes early, including in dry-run mode.
