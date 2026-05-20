@@ -21,7 +21,7 @@ The helper submits one afterok aggregation task that collects the scenario
 outputs and writes OUTPUT_DIR.zip for export.
 
 Experiment options:
-  --num-seeds N                  Seeds per scenario (default: 250).
+  --num-seeds N                  Seeds per scenario (default: 500).
   --seed N|default               Required base seed. Use default for 12345.
   --output-dir PATH              Output root for all results.
   --python-bin PATH              Python executable on the cluster.
@@ -50,7 +50,7 @@ format_command() {
   printf "%s" "${quoted[*]}"
 }
 
-num_seeds="250"
+num_seeds="500"
 base_seed=""
 output_dir="HJEEDS/results/hierarchical_darts_population_shape_sensitivity"
 python_bin=""

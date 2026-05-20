@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
+# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
 from __future__ import annotations
 
 import argparse
@@ -75,6 +75,7 @@ DEFAULT_AGENTS_PER_BUCKET = 5
 DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
 DEFAULT_SEED = 12345
+DEFAULT_NUM_SEEDS = 500
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts")
 
 # These values refer to the number of high-reward "success" regions, not the
@@ -216,8 +217,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--num-seeds",
         type=int,
-        required=True,
-        help="Number of random seeds to run. This argument is required so seed counts are always intentional.",
+        default=DEFAULT_NUM_SEEDS,
+        help=f"Number of random seeds to run (default: {DEFAULT_NUM_SEEDS}).",
     )
     parser.add_argument(
         "--num-agents",

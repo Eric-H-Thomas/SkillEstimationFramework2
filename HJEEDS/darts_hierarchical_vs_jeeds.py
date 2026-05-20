@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
+# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
 """Initial 1D darts hierarchical-vs-JEEDS experiments.
 
 This module implements the first end-to-end synthetic experiment for comparing
@@ -66,6 +66,7 @@ from HJEEDS.config import (
     DEFAULT_MIN_SUCCESS_REGIONS,
     DEFAULT_NUM_AGENTS,
     DEFAULT_NUM_LAMBDA_GRID,
+    DEFAULT_NUM_SEEDS,
     DEFAULT_NUM_SIGMA_GRID,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SEED,

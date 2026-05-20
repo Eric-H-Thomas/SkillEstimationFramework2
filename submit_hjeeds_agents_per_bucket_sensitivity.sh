@@ -22,7 +22,7 @@ helper submits one afterok aggregation task that collects the scenario outputs
 and writes OUTPUT_DIR.zip for export.
 
 Experiment options:
-  --num-seeds N                  Seeds per scenario (default: 250).
+  --num-seeds N                  Seeds per scenario (default: 500).
   --seed N|default               Required base seed. Use default for 12345.
   --count-buckets LIST           Observation buckets (default: 5,10,25,100,1000).
   --agents-per-bucket-values L   Population-size sweep (default: 1,2,5,10,25).
@@ -86,7 +86,7 @@ format_command() {
   printf "%s" "${quoted[*]}"
 }
 
-num_seeds="250"
+num_seeds="500"
 base_seed=""
 count_buckets="5,10,25,100,1000"
 agents_per_bucket_values="1,2,5,10,25"

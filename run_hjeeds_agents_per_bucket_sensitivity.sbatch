@@ -27,7 +27,7 @@ fi
 
 python_args=(
   -m HJEEDS.darts_agents_per_bucket_sensitivity
-  --num-seeds "${NUM_SEEDS:-250}"
+  --num-seeds "${NUM_SEEDS:-500}"
   --seed "${BASE_SEED:-default}"
   --count-buckets "${COUNT_BUCKETS:-5,10,25,100,1000}"
   --agents-per-bucket-values "${AGENTS_PER_BUCKET_VALUES:-1,2,5,10,25}"

@@ -22,7 +22,7 @@ Full-style run:
 
 ```bash
 python3 -m HJEEDS.darts_hierarchical_vs_jeeds \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --count-buckets 5,10,25,100,1000 \
   --agents-per-bucket 5 \
@@ -75,7 +75,7 @@ Run:
 
 ```bash
 python3 -m HJEEDS.darts_hierarchical_prior_sensitivity \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --count-buckets 5,10,25,100,1000 \
   --agents-per-bucket 5 \
@@ -126,7 +126,7 @@ Run locally:
 
 ```bash
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --count-buckets 5,10,25,100,1000 \
   --agents-per-bucket-values 1,2,5,10,25 \
@@ -137,7 +137,7 @@ To explicitly cross every agents-per-bucket value with the full 60-condition rob
 
 ```bash
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --condition-preset full_60 \
   --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity_full_60
@@ -183,7 +183,7 @@ Run locally:
 ```bash
 python3 -m HJEEDS.darts_population_shape_sensitivity \
   --seed 12345 \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
 ```
 
@@ -202,7 +202,7 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 ```bash
 ./submit_hjeeds_population_shape_sensitivity.sh \
   --seed 12345 \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --output-dir HJEEDS/results/hierarchical_darts_population_shape_sensitivity
 ```
 
@@ -216,7 +216,7 @@ Default 15-scenario run:
 
 ```bash
 ./submit_hjeeds_agents_per_bucket_sensitivity.sh \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity
 ```
@@ -225,7 +225,7 @@ Full 300-scenario run:
 
 ```bash
 ./submit_hjeeds_agents_per_bucket_sensitivity.sh \
-  --num-seeds 250 \
+  --num-seeds 500 \
   --seed 12345 \
   --condition-preset full_60 \
   --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity_full_60

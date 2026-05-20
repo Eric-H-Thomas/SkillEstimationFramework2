@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
+# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
 """Run hyperprior-robustness sweeps for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
@@ -193,8 +193,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--num-seeds",
         type=int,
-        required=True,
-        help="Number of random seeds to run for each prior condition. This argument is required.",
+        default=base_experiment.DEFAULT_NUM_SEEDS,
+        help=f"Number of random seeds to run for each prior condition (default: {base_experiment.DEFAULT_NUM_SEEDS}).",
     )
     parser.add_argument(
         "--count-buckets",

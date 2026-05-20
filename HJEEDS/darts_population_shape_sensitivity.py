@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/19/26 at 11:58 AM MT.
+# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
 """Run H-JEEDS agents-per-bucket ablations across true population shapes.
 
 This script varies the simulator's true population shape while keeping the
@@ -100,8 +100,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--num-seeds",
         type=int,
-        required=True,
-        help="Number of random seeds to run for each scenario.",
+        default=base_experiment.DEFAULT_NUM_SEEDS,
+        help=f"Number of random seeds to run for each scenario (default: {base_experiment.DEFAULT_NUM_SEEDS}).",
     )
     parser.add_argument(
         "--output-dir",
