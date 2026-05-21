@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 11:40 AM MDT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 12:07 PM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
@@ -116,6 +116,48 @@ def _optimal_actions(actions: np.ndarray, expected_values: np.ndarray) -> np.nda
     return optimal_actions
 
 
+# Find deceptive actions that are acceptable but as far from optimal actions as possible
+def _deceptive_actions(
+    actions: np.ndarray,
+    expected_values: np.ndarray,
+    rationality_probability: float,
+) -> np.ndarray:
+    """Return acceptable actions farthest from the rational target set."""
+
+    # At full rationality, the acceptable set should only contain optimal actions
+    if rationality_probability >= 1.0:
+        return _optimal_actions(actions, expected_values)
+    # Compute the mean expected reward over uniformly random target selection
+    mean_expected_value = float(np.mean(expected_values))
+    # Compute the best expected reward available on the target grid
+    best_expected_value = float(np.max(expected_values))
+    # Interpolate between mean reward and best reward using the rationality-percent scale
+    minimum_acceptable_value = mean_expected_value + rationality_probability * (
+        best_expected_value - mean_expected_value
+    )
+    # Keep actions whose expected reward is acceptable under the deceptive threshold
+    acceptable_mask = expected_values >= minimum_acceptable_value
+    # Fail clearly if the thresholding logic produces no acceptable actions
+    if not np.any(acceptable_mask):
+        raise RuntimeError(
+            "Deceptive decision model found no acceptable actions for "
+            f"rationality_probability={rationality_probability} and "
+            f"minimum_acceptable_value={minimum_acceptable_value}."
+        )
+    # Extract the actions that satisfy the acceptable reward threshold
+    acceptable_actions = actions[acceptable_mask]
+    # Extract the rational target set used as the distance reference
+    optimal_actions = _optimal_actions(actions, expected_values)
+    # Compute every acceptable action's distance to its nearest rational action
+    distances_to_optimal = np.min(np.abs(acceptable_actions[:, None] - optimal_actions[None, :]), axis=1)
+    # Find the largest distance among acceptable actions
+    farthest_distance = float(np.max(distances_to_optimal))
+    # Mark every acceptable action tied for farthest distance up to floating-point noise
+    farthest_mask = np.isclose(distances_to_optimal, farthest_distance, rtol=1e-12, atol=1e-12)
+    # Return all tied deceptive choices so the caller can sample among them
+    return acceptable_actions[farthest_mask]
+
+
 def sample_intended_targets_for_decision_model(
     *,
     rng: np.random.Generator,
@@ -176,8 +218,15 @@ def sample_intended_targets_for_decision_model(
         # Select the rational target where the draw is True, otherwise select the random target
         return np.where(rational_draws, rational_targets, random_targets)
 
-    # TODO: Implement deceptive policy with definitions matching the JEEDS paper
-    # TODO: Decide whether deceptive uses lambda_true directly or a calibrated transform of log-lambda
+    # Deceptive agent: choose acceptable-reward actions far from rational targets
+    if decision_model.slug == DECEPTIVE_DECISION_MODEL_SLUG:
+        # Convert lambda into the paper's rationality-percent value for the acceptable-reward threshold
+        rationality_probability = _lambda_to_rationality_probability(expected_values, float(lambda_true))
+        # Find acceptable actions farthest from the rational target set
+        deceptive_actions = _deceptive_actions(actions, expected_values, rationality_probability)
+        # Sample uniformly among tied deceptive actions
+        return rng.choice(deceptive_actions, size=num_observations)
+
     raise NotImplementedError(
         "Decision-model sampling is scaffolded but not implemented yet. "
         f"Requested true model: {decision_model.slug}."
