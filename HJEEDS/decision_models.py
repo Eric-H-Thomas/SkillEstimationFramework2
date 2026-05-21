@@ -1,11 +1,14 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 11:05 AM MDT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 11:40 AM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
+
+from .rationality import rationality_percent_from_expected_values
 
 
 SOFTMAX_DECISION_MODEL_SLUG = "softmax"
@@ -80,6 +83,39 @@ def decision_model_metadata_row(decision_model_slug: str) -> dict[str, str]:
     }
 
 
+# Convert the positive H-JEEDS lambda scale into the probability scale used by Flip
+def _lambda_to_rationality_probability(expected_values: np.ndarray, lambda_true: float) -> float:
+    """Map raw lambda to a paper-aligned rational-action probability."""
+
+    # Treat lambda=0 as the uniform-random policy endpoint
+    if lambda_true == 0.0:
+        return 0.0
+    # Reuse the paper's rationality-percent metric, which expects log(lambda)
+    rationality_percent = rationality_percent_from_expected_values(expected_values, math.log(lambda_true))
+    # If the reward gap is zero, rationality is not identifiable and P does not affect reward quality
+    if rationality_percent is None:
+        return 0.0
+    # Convert percentage points into a unit-interval probability and guard against tiny numerical spillover
+    return float(np.clip(rationality_percent / 100.0, 0.0, 1.0))
+
+
+# Find the target actions that are tied for maximal expected reward
+def _optimal_actions(actions: np.ndarray, expected_values: np.ndarray) -> np.ndarray:
+    """Return actions tied for maximal expected value."""
+
+    # Compute the highest expected reward available on the target grid
+    best_expected_value = np.max(expected_values)
+    # Mark every grid action whose expected reward is tied with the maximum up to floating-point noise
+    optimal_mask = np.isclose(expected_values, best_expected_value, rtol=1e-12, atol=1e-12)
+    # Keep only the actions whose corresponding mask value is True
+    optimal_actions = actions[optimal_mask]
+    # Fail loudly if numerical weirdness somehow produced no optimal action
+    if optimal_actions.size == 0:
+        raise RuntimeError("No optimal actions found.")
+    # Return the possibly multi-action set of rational choices
+    return optimal_actions
+
+
 def sample_intended_targets_for_decision_model(
     *,
     rng: np.random.Generator,
@@ -125,15 +161,23 @@ def sample_intended_targets_for_decision_model(
         return rng.choice(actions, size=num_observations, p=target_probabilities)
 
     if decision_model.slug == RATIONAL_DECISION_MODEL_SLUG:
-        best_expected_value = np.max(expected_values)
-        optimal_mask = np.isclose(expected_values, best_expected_value, rtol=1e-12, atol=1e-12)
-        optimal_actions = actions[optimal_mask]
-        if optimal_actions.size == 0:
-            raise RuntimeError("Rational decision model found no optimal actions.")
-        return rng.choice(optimal_actions, size=num_observations)
+        return rng.choice(_optimal_actions(actions, expected_values), size=num_observations)
 
-    # TODO: Implement flip and deceptive policies with definitions matching the JEEDS paper
-    # TODO: Decide whether flip/deceptive use lambda_true directly or a calibrated transform of log-lambda
+    # FlipAgent: rational with probability P, otherwise random
+    if decision_model.slug == FLIP_DECISION_MODEL_SLUG:
+        # Convert lambda into the paper's rationality-percent value and use that as the Flip probability P
+        probability_rational = _lambda_to_rationality_probability(expected_values, float(lambda_true))
+        # Pre-sample the rational target for every observation
+        rational_targets = rng.choice(_optimal_actions(actions, expected_values), size=num_observations)
+        # Pre-sample the random target for every observation
+        random_targets = rng.choice(actions, size=num_observations)
+        # Draw one Bernoulli-style decision per observation to choose rational vs random behavior
+        rational_draws = rng.random(num_observations) < probability_rational
+        # Select the rational target where the draw is True, otherwise select the random target
+        return np.where(rational_draws, rational_targets, random_targets)
+
+    # TODO: Implement deceptive policy with definitions matching the JEEDS paper
+    # TODO: Decide whether deceptive uses lambda_true directly or a calibrated transform of log-lambda
     raise NotImplementedError(
         "Decision-model sampling is scaffolded but not implemented yet. "
         f"Requested true model: {decision_model.slug}."
