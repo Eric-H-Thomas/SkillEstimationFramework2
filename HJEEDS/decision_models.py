@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 10:51 AM MDT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 11:05 AM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
@@ -124,7 +124,15 @@ def sample_intended_targets_for_decision_model(
         target_probabilities /= np.sum(target_probabilities)
         return rng.choice(actions, size=num_observations, p=target_probabilities)
 
-    # TODO: Implement rational, flip, and deceptive policies with definitions matching the JEEDS paper
+    if decision_model.slug == RATIONAL_DECISION_MODEL_SLUG:
+        best_expected_value = np.max(expected_values)
+        optimal_mask = np.isclose(expected_values, best_expected_value, rtol=1e-12, atol=1e-12)
+        optimal_actions = actions[optimal_mask]
+        if optimal_actions.size == 0:
+            raise RuntimeError("Rational decision model found no optimal actions.")
+        return rng.choice(optimal_actions, size=num_observations)
+
+    # TODO: Implement flip and deceptive policies with definitions matching the JEEDS paper
     # TODO: Decide whether flip/deceptive use lambda_true directly or a calibrated transform of log-lambda
     raise NotImplementedError(
         "Decision-model sampling is scaffolded but not implemented yet. "
