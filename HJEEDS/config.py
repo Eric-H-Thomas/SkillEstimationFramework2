@@ -347,6 +347,10 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         true_population = DEFAULT_TRUE_POPULATION_2D
         hyperpriors = DEFAULT_HYPERPRIORS_2D
 
+    output_dir = Path(args.output_dir)
+    if args.output_dir == str(DEFAULT_OUTPUT_DIR):
+        output_dir = output_dir.with_name(f"{output_dir.name}_{args.environment}")
+
     config = ExperimentConfig(
         environment=args.environment,
         seed=args.seed,
@@ -361,7 +365,7 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         sigma_max=sigma_max,
         lambda_min=args.lambda_min,
         lambda_max=args.lambda_max,
-        output_dir=Path(args.output_dir),
+        output_dir=output_dir,
         environment_grids={},
         dry_run=args.dry_run,
         min_success_regions=args.min_success_regions,

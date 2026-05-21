@@ -119,9 +119,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     config = build_config_from_args(args)
 
-    if config.environment != "1d":
-        config = replace(config, output_dir=config.output_dir.with_name(f"{config.output_dir.name}_{config.environment}"))
-
     # Dry-run is the safest way to confirm paths and workload before paying the
     # cost of simulation, likelihood evaluation, and optimizer calls.
     if config.dry_run:
