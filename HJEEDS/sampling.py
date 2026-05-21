@@ -1,9 +1,10 @@
-# This file has been fully verified by a human researcher as of 05/18/26 at 12:11 PM MT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 10:51 AM MDT.
 
 from __future__ import annotations
 import math
 import numpy as np
 from . import darts_environment as darts
+from .decision_models import SOFTMAX_DECISION_MODEL_SLUG, sample_intended_targets_for_decision_model
 from .models import AgentDataset, AgentTruth, ExperimentConfig
 from .population_shapes import sample_log_skill_profile
 
@@ -195,18 +196,14 @@ def simulate_agent_dataset(
     if expected_values.size == 0:
         raise RuntimeError("Expected-value computation returned an empty target grid.")
 
-    # This is the decision-making part of the generative model from the paper:
-    # convert expected values into probabilities over intended targets using a
-    # lambda-controlled softmax.
-    #
-    # We subtract the maximum before exponentiating to keep the probabilities
-    # numerically stable for large lambda values.
-    scaled_values = agent_truth.lambda_true * expected_values
-    scaled_values -= np.max(scaled_values)
-    target_probabilities = np.exp(scaled_values)
-    target_probabilities /= np.sum(target_probabilities)
-
-    intended_targets = rng.choice(actions, size=num_observations, p=target_probabilities)
+    intended_targets = sample_intended_targets_for_decision_model(
+        rng=rng,
+        decision_model_slug=SOFTMAX_DECISION_MODEL_SLUG,
+        actions=actions,
+        expected_values=expected_values,
+        lambda_true=agent_truth.lambda_true,
+        num_observations=num_observations,
+    )
 
     # This is the execution-skill part of the model: after a target is chosen,
     # the observed action is a noisy perturbation of that intended target.  The

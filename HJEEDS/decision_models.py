@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 05/20/26 at 1:36 PM MT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 10:51 AM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
@@ -91,12 +91,41 @@ def sample_intended_targets_for_decision_model(
 ) -> np.ndarray:
     """Sample intended targets from one true decision-making model."""
 
-    # TODO: Move the current softmax sampling code out of sampling.py and into this dispatcher
+    decision_model = get_decision_model_spec(decision_model_slug)
+    actions = np.asarray(actions, dtype=float)
+    expected_values = np.asarray(expected_values, dtype=float)
+
+    if num_observations <= 0:
+        raise ValueError(f"num_observations must be positive. Received {num_observations}.")
+    if actions.shape != expected_values.shape:
+        raise ValueError(
+            "actions and expected_values must have the same shape. "
+            f"Received {actions.shape} and {expected_values.shape}."
+        )
+    if actions.size == 0:
+        raise ValueError("actions and expected_values must be nonempty.")
+    if not np.all(np.isfinite(actions)):
+        raise ValueError("actions must contain only finite values.")
+    if not np.all(np.isfinite(expected_values)):
+        raise ValueError("expected_values must contain only finite values.")
+    if not np.isfinite(lambda_true) or lambda_true < 0.0:
+        raise ValueError(f"lambda_true must be finite and nonnegative. Received {lambda_true}.")
+
+    if decision_model.slug == SOFTMAX_DECISION_MODEL_SLUG:
+        # This is the decision-making part of the generative model from the paper:
+        # convert expected values into probabilities over intended targets using a
+        # lambda-controlled softmax.
+        #
+        # We subtract the maximum before exponentiating to keep the probabilities
+        # numerically stable for large lambda values.
+        scaled_values = float(lambda_true) * expected_values
+        scaled_values -= np.max(scaled_values)
+        target_probabilities = np.exp(scaled_values)
+        target_probabilities /= np.sum(target_probabilities)
+        return rng.choice(actions, size=num_observations, p=target_probabilities)
+
     # TODO: Implement rational, flip, and deceptive policies with definitions matching the JEEDS paper
     # TODO: Decide whether flip/deceptive use lambda_true directly or a calibrated transform of log-lambda
-    # TODO: Add tests showing softmax reproduces the current simulator exactly before changing callers
-    _ = (rng, actions, expected_values, lambda_true, num_observations)
-    decision_model = get_decision_model_spec(decision_model_slug)
     raise NotImplementedError(
         "Decision-model sampling is scaffolded but not implemented yet. "
         f"Requested true model: {decision_model.slug}."
