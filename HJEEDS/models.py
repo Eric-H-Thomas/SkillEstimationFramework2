@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/18/26 at 12:05 PM MT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
 from __future__ import annotations
 
 import math
@@ -92,6 +92,7 @@ class ExperimentConfig:
     min_region_width: float
     hyperpriors: HyperpriorConfig
     true_population: TruePopulationConfig
+    true_decision_model_slug: str = "softmax"
 
     @property
     def expected_agent_count(self) -> int:

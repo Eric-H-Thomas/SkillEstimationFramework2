@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 05/21/26 at 9:24 AM MT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
 """Scaffold the H-JEEDS true decision-model sensitivity ablation.
 
 This runner will vary the simulator's true decision-making model while keeping
@@ -138,8 +138,6 @@ def build_config_for_scenario(
 ) -> base_experiment.ExperimentConfig:
     """Build one base H-JEEDS config for a true-decision-model scenario."""
 
-    # TODO: Add true_decision_model_slug to ExperimentConfig or a simulator-specific config object
-    # TODO: Thread that value into sampling.simulate_agent_dataset once decision_models.py is implemented
     output_dir = (
         Path(args.output_dir)
         / decision_model_folder_slug(decision_model.slug)
@@ -163,6 +161,7 @@ def build_config_for_scenario(
         min_success_regions=base_experiment.DEFAULT_MIN_SUCCESS_REGIONS,
         max_success_regions=base_experiment.DEFAULT_MAX_SUCCESS_REGIONS,
         min_region_width=base_experiment.DEFAULT_MIN_REGION_WIDTH,
+        true_decision_model_slug=decision_model.slug,
     )
     return base_experiment.build_config_from_args(base_args)
 
@@ -189,7 +188,6 @@ def build_scenarios(
 def run_single_scenario(scenario: DecisionModelScenario) -> None:
     """Run one decision-model x agents-per-bucket scenario."""
 
-    # TODO: Implement simulator dispatch so this scenario uses scenario.decision_model as the true policy
     # TODO: Keep H-JEEDS and independent JEEDS inference fixed to the existing softmax likelihood
     # TODO: Reuse base_experiment.main/run_single_seed machinery once the simulator config is threaded through
     raise NotImplementedError(

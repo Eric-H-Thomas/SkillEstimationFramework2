@@ -1,10 +1,10 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 10:51 AM MDT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
 
 from __future__ import annotations
 import math
 import numpy as np
 from . import darts_environment as darts
-from .decision_models import SOFTMAX_DECISION_MODEL_SLUG, sample_intended_targets_for_decision_model
+from .decision_models import sample_intended_targets_for_decision_model
 from .models import AgentDataset, AgentTruth, ExperimentConfig
 from .population_shapes import sample_log_skill_profile
 
@@ -198,7 +198,7 @@ def simulate_agent_dataset(
 
     intended_targets = sample_intended_targets_for_decision_model(
         rng=rng,
-        decision_model_slug=SOFTMAX_DECISION_MODEL_SLUG,
+        decision_model_slug=config.true_decision_model_slug,
         actions=actions,
         expected_values=expected_values,
         lambda_true=agent_truth.lambda_true,
@@ -230,7 +230,7 @@ def simulate_agent_dataset(
         intended_targets=np.asarray(intended_targets, dtype=float),
         executed_actions=executed_actions,
         notes=(
-            "Simulated with a JEEDS-style softmax policy over the 1D darts target grid "
-            "and non-wrapped Gaussian execution noise."
+            f"Simulated with the {config.true_decision_model_slug} true decision model over the "
+            "1D darts target grid and non-wrapped Gaussian execution noise."
         ),
     )

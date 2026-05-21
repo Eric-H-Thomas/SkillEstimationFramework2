@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
+# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,7 @@ from typing import Sequence
 
 import numpy as np
 
+from .decision_models import SOFTMAX_DECISION_MODEL_SLUG, get_decision_model_spec
 from .models import ExperimentConfig, HyperpriorConfig, TruePopulationConfig
 
 
@@ -76,6 +77,7 @@ DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
 DEFAULT_SEED = 12345
 DEFAULT_NUM_SEEDS = 500
+DEFAULT_TRUE_DECISION_MODEL_SLUG = SOFTMAX_DECISION_MODEL_SLUG
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts")
 
 # These values refer to the number of high-reward "success" regions, not the
@@ -346,6 +348,7 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         min_region_width=args.min_region_width,
         hyperpriors=DEFAULT_HYPERPRIORS,
         true_population=DEFAULT_TRUE_POPULATION,
+        true_decision_model_slug=getattr(args, "true_decision_model_slug", DEFAULT_TRUE_DECISION_MODEL_SLUG),
     )
 
     # The checks below catch design mistakes early, including in dry-run mode.
@@ -359,6 +362,7 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         raise ValueError(f"agents_per_bucket must be positive. Received {config.agents_per_bucket}.")
     if config.num_agents <= 0:
         raise ValueError(f"num_agents must be positive. Received {config.num_agents}.")
+    _ = get_decision_model_spec(config.true_decision_model_slug) # Validate the slug
     if config.expected_agent_count != config.num_agents:
         raise ValueError(
             "num_agents must equal len(count_buckets) * agents_per_bucket for this experiment. "
@@ -387,6 +391,7 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
     print(f"Agents: {config.num_agents}")
     print(f"Count buckets: {config.count_buckets}")
     print(f"Agents per bucket: {config.agents_per_bucket}")
+    print(f"True decision model: {config.true_decision_model_slug}")
     print(f"Delta: {config.delta}")
     print(f"Sigma grid size: {config.num_sigma_grid}")
     print(f"Lambda grid size: {config.num_lambda_grid}")
