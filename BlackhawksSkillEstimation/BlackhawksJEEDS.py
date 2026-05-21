@@ -1305,6 +1305,7 @@ def estimate_player_skill(
     return_intermediate_estimates: bool = False,
     save_intermediate_csv: bool = False,
     data_dir: Path | str = Path("Data/Hockey"),
+    player_dir_name: str | None = None,
     confirm: bool = True,
     offline_data: tuple[pd.DataFrame, dict[int, dict[str, object]]] | None = None,
     shot_group: str = "",
@@ -1344,6 +1345,9 @@ def estimate_player_skill(
         Base directory for player data. Default is "Data/Hockey".
         Each player's outputs (timing logs, CSVs, plots) live under
         ``data_dir/players/player_{id}/{data,logs,plots,times}/``.
+    player_dir_name : str | None
+        Override the per-player output directory name under ``data_dir/players``.
+        Defaults to ``player_{player_id}`` when unset.
     confirm : bool
         If True (default), prompt for confirmation before running estimation.
         Set to False for batch/automated runs.
@@ -1399,6 +1403,7 @@ def estimate_player_skill(
                 return_intermediate_estimates=return_intermediate_estimates,
                 save_intermediate_csv=save_intermediate_csv,
                 data_dir=data_dir,
+                player_dir_name=player_dir_name,
                 confirm=False,  # already confirmed or batch
                 offline_data=offline_data,
                 shot_group=grp,
@@ -1417,7 +1422,8 @@ def estimate_player_skill(
         candidate_skills or np.linspace(0.004, 0.25, DEFAULT_NUM_EXECUTION_SKILLS)
     )
     data_dir = Path(data_dir)
-    player_data_dir = data_dir / "players" / f"player_{player_id}"
+    player_dir_name = player_dir_name or f"player_{player_id}"
+    player_data_dir = data_dir / "players" / player_dir_name
 
     # Mode 0: Offline data (pre-loaded from disk)
     if offline_data is not None:
