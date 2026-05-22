@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/09/26 at 6:51 PM MT.
+# This file has been fully verified by a human researcher as of 05/22/26 at 2:29 PM MT.
 
 from __future__ import annotations
 import math
@@ -41,7 +41,7 @@ def compute_agent_log_likelihood_grid(
             f"{agent_dataset.executed_actions.shape[0]} vs {agent_dataset.num_observations}."
         )
 
-    executed_actions = np.asarray(agent_dataset.executed_actions, dtype=float)
+    executed_actions = np.asarray(agent_dataset.executed_actions, dtype=object if config.environment == "2d" else float)
     # Start with ``-inf`` everywhere so impossible parameter pairs naturally
     # remain excluded unless a later calculation supplies a valid likelihood.
     log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
@@ -49,41 +49,76 @@ def compute_agent_log_likelihood_grid(
     log_likelihood_grid = np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
 
     reference_targets: np.ndarray | None = None
+    cached_action_differences: np.ndarray | None = None
+
+    # Only create the 2D domain adapter if needed
+    domain = None
+    if config.environment == "2d":
+        from .environment_adapters import get_environment_domain
+        domain = get_environment_domain(config.environment)
 
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
         # First hold execution skill fixed. Under that sigma hypothesis we can
         # compute the target grid and Gaussian noise model once, then
         # reuse those pieces across all log-lambda grid cells.
-        expected_values, target_actions = darts.compute_expected_value_curve(
-            reward_surface,
-            float(sigma_hypothesis),
-            config.delta,
-        )
-        expected_values = np.asarray(expected_values, dtype=float)  # shape: (T,)
-        target_actions = np.asarray(target_actions, dtype=float)  # shape: (T,)
+        if config.environment == "1d":
+            expected_values, target_actions = darts.compute_expected_value_curve(
+                reward_surface,
+                float(sigma_hypothesis),
+                config.delta,
+            )
+        else:
+            expected_values, target_actions = domain.compute_expected_value_curve(
+                reward_surface,
+                float(sigma_hypothesis),
+                config.delta,
+            )
 
+        expected_values = np.asarray(expected_values, dtype=float)  # shape: (T,)
+        target_actions = np.asarray(target_actions, dtype=object if config.environment == "2d" else float)  # shape: (T,)
+
+        # Basic sanity checks for expected-values / target grid
+        if expected_values.size == 0:
+            raise RuntimeError("Expected-value computation returned an empty target grid.")
         if expected_values.shape != target_actions.shape:
             raise RuntimeError(
                 "Expected-value computation returned mismatched arrays for values and actions: "
                 f"{expected_values.shape} vs {target_actions.shape}."
             )
-        if expected_values.size == 0:
-            raise RuntimeError("Expected-value computation returned an empty target grid.")
 
         # In 1D darts, the target grid should be shared across sigma hypotheses.
         # We verify that explicitly so later code can safely assume a common grid.
         if reference_targets is None:
             reference_targets = target_actions
-        elif not np.allclose(reference_targets, target_actions):
-            raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
+        elif config.environment == "1d":
+            if not np.allclose(reference_targets, target_actions):
+                raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 1D darts grid.")
+        elif not np.array_equal(reference_targets, target_actions):
+            raise RuntimeError("Target grid changed across sigma hypotheses; expected a shared 2D darts grid.")
 
-        # Under the final-paper non-wrapped 1D darts model, observed executions
-        # live on the real line.  Actions that overshoot the board remain
-        # outside the board rather than wrapping to the opposite edge, so the
-        # Gaussian likelihood uses the ordinary target-to-execution difference.
-        action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
+        if config.environment == "1d":
+            action_differences = executed_actions[:, None] - target_actions[None, :]  # shape: (N, T)
+        elif config.environment == "2d":
+            if cached_action_differences is None:
+                cached_action_differences = np.array(
+                    [
+                        [
+                            domain.compute_action_difference(exec_action, target_action)
+                            for target_action in reference_targets
+                        ]
+                        for exec_action in executed_actions
+                    ],
+                    dtype=float,
+                )
+            action_differences = cached_action_differences
+        else:
+            raise ValueError(f"Unknown environment: {config.environment}")
+
         gaussian_scale = float(sigma_hypothesis)
-        gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
+        if config.environment == "2d":
+            gaussian_coeff = 1.0 / (2.0 * math.pi * gaussian_scale**2)
+        else:
+            gaussian_coeff = 1.0 / (math.sqrt(2.0 * math.pi) * gaussian_scale)
         pdf_matrix = gaussian_coeff * np.exp(-0.5 * np.square(action_differences / gaussian_scale))  # shape: (N, T)
 
         # If any observation receives zero density for every possible target

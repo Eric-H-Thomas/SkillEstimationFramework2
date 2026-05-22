@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 4:02 PM MDT.
 
 from __future__ import annotations
 import math
@@ -16,26 +16,37 @@ from .population_shapes import sample_log_skill_profile
 
 
 def sample_reward_surface(rng: np.random.Generator, config: ExperimentConfig) -> tuple[float, ...]:
-    """Sample a single 1D darts reward surface.
+    """Sample a single darts reward surface.
 
     We intentionally keep one reward surface fixed for all demonstrators within
     a seed. That isolates the skill-estimation question from environment
     variability.
     """
 
-    # The darts helper returns a list because the environment code can
-    # generate multiple random boards at once.  Here we always request exactly
-    # one board and then freeze it for the whole seed.
-    reward_surfaces = darts.generate_random_states(
-        rng=rng,
-        min_success_region_count=config.min_success_regions,
-        max_success_region_count=config.max_success_regions,
-        num_reward_surfaces=1,
-        min_boundary_spacing=config.min_region_width,
-    )
-    if not reward_surfaces:
-        raise RuntimeError("Failed to sample a 1D darts reward surface.")
-    return tuple(float(boundary) for boundary in reward_surfaces[0])
+    if config.environment == "1d":
+        # The darts helper returns a list because the environment code can
+        # generate multiple random boards at once.  Here we always request exactly
+        # one board and then freeze it for the whole seed.
+        reward_surfaces = darts.generate_random_states(
+            rng=rng,
+            min_success_region_count=config.min_success_regions,
+            max_success_region_count=config.max_success_regions,
+            num_reward_surfaces=1,
+            min_boundary_spacing=config.min_region_width,
+        )
+        if not reward_surfaces:
+            raise RuntimeError("Failed to sample a 1D darts reward surface.")
+        return tuple(float(boundary) for boundary in reward_surfaces[0])
+
+    if config.environment == "2d":
+        from Environments.Darts.RandomDarts import two_d_darts
+
+        states = two_d_darts.generate_random_states(rng, 1, "normal")
+        if not states:
+            raise RuntimeError("Failed to sample a 2D darts reward surface.")
+        return tuple(int(slice_value) for slice_value in states[0])
+
+    raise ValueError(f"Unknown environment: {config.environment}")
 
 
 def build_skill_grids(config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]:
@@ -161,6 +172,11 @@ def simulate_agent_dataset(
     first experiment.
     """
 
+    from .environment_adapters import get_environment_domain
+    # Import lazily so dry-run and helper tests can still run in lightweight
+    # environments where the full darts/scipy stack is not installed.
+    domain = get_environment_domain(config.environment)
+
     if num_observations <= 0:
         raise ValueError(f"num_observations must be positive. Received {num_observations}.")
     if agent_truth.sigma_true < float(np.min(sigma_grid)) or agent_truth.sigma_true > float(np.max(sigma_grid)):
@@ -180,21 +196,22 @@ def simulate_agent_dataset(
     # Compute the true expected-value curve over the same 1D target grid shape
     # used elsewhere in the darts codebase. ``actions`` is the discrete set of
     # intended targets from which the demonstrator chooses.
-    expected_values, actions = darts.compute_expected_value_curve(
+    expected_values, actions = domain.compute_expected_value_curve(
         reward_surface,
         agent_truth.sigma_true,
         config.delta,
     )
     expected_values = np.asarray(expected_values, dtype=float)
-    actions = np.asarray(actions, dtype=float)
+    actions = np.asarray(actions, dtype=object if config.environment == "2d" else float)
 
+    # Basic sanity checks for expected-values / target grid
+    if expected_values.size == 0:
+        raise RuntimeError("Expected-value computation returned an empty target grid.")
     if expected_values.shape != actions.shape:
         raise RuntimeError(
             "Expected-value computation returned mismatched arrays for values and actions: "
             f"{expected_values.shape} vs {actions.shape}."
         )
-    if expected_values.size == 0:
-        raise RuntimeError("Expected-value computation returned an empty target grid.")
 
     intended_targets = sample_intended_targets_for_decision_model(
         rng=rng,
@@ -203,23 +220,40 @@ def simulate_agent_dataset(
         expected_values=expected_values,
         lambda_true=agent_truth.lambda_true,
         num_observations=num_observations,
+        action_distance_fn=domain.compute_action_difference,
     )
 
     # This is the execution-skill part of the model: after a target is chosen,
     # the observed action is a noisy perturbation of that intended target.  The
     # final-paper 1D darts model does not wrap executions at the board edge, so
     # noisy actions can land outside [-BOARD_LIMIT, BOARD_LIMIT].
-    executed_actions = np.array(
-        [
-            darts.sample_noisy_action(
-                rng=rng,
-                execution_noise_sd=agent_truth.sigma_true,
-                intended_target=float(target),
-            )
-            for target in intended_targets
-        ],
-        dtype=float,
-    )
+    if config.environment == "1d":
+        executed_actions = np.array(
+            [
+                darts.sample_noisy_action(
+                    rng=rng,
+                    execution_noise_sd=agent_truth.sigma_true,
+                    intended_target=float(target),
+                )
+                for target in intended_targets
+            ],
+            dtype=float,
+        )
+    if config.environment == "2d":
+        executed_actions = np.array(
+            [
+                domain.sample_noisy_action(
+                    rng,
+                    reward_surface,
+                    agent_truth.sigma_true,
+                    tuple(target) if config.environment == "2d" else float(target),
+                )
+                for target in intended_targets
+            ],
+            dtype=object
+        )
+
+    intended_targets = np.asarray(intended_targets, dtype=object if config.environment == "2d" else float)
 
     return AgentDataset(
         agent_id=agent_truth.agent_id,
@@ -227,10 +261,10 @@ def simulate_agent_dataset(
         count_bucket=num_observations,
         num_observations=num_observations,
         reward_surface=reward_surface,
-        intended_targets=np.asarray(intended_targets, dtype=float),
+        intended_targets=intended_targets,
         executed_actions=executed_actions,
         notes=(
             f"Simulated with the {config.true_decision_model_slug} true decision model over the "
-            "1D darts target grid and non-wrapped Gaussian execution noise."
+            "darts target grid and non-wrapped Gaussian (or environment-specific) execution noise."
         ),
     )

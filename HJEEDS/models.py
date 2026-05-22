@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 12:22 PM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 1:09 PM MDT.
 from __future__ import annotations
 
 import math
@@ -66,6 +66,18 @@ class TruePopulationConfig:
 
 
 @dataclass(frozen=True)
+class EnvironmentGridConfig:
+    """Optional environment-specific JEEDS grid overrides."""
+
+    sigma_min: float | None = None
+    sigma_max: float | None = None
+    num_sigma_grid: int | None = None
+    lambda_min: float | None = None
+    lambda_max: float | None = None
+    num_lambda_grid: int | None = None
+
+
+@dataclass(frozen=True)
 class ExperimentConfig:
     """All configuration needed to define one sweep of the experiment."""
 
@@ -73,6 +85,7 @@ class ExperimentConfig:
     # (number of seeds, count buckets, grid size) and the modeling assumptions
     # (true population and hyperpriors).  Keeping them together means every
     # function downstream can operate on a single immutable config object.
+    environment: str
     seed: int
     num_seeds: int
     num_agents: int
@@ -93,6 +106,7 @@ class ExperimentConfig:
     hyperpriors: HyperpriorConfig
     true_population: TruePopulationConfig
     true_decision_model_slug: str = "softmax"
+    environment_grids: dict[str, EnvironmentGridConfig] = field(default_factory=dict)
 
     @property
     def expected_agent_count(self) -> int:

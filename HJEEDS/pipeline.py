@@ -132,6 +132,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
             reward_surface=reward_surface,
             sigma=agent_truth.sigma_true,
             delta=config.delta,
+            environment=config.environment,
         )
         rationality_percent_true = rationality_percent_from_expected_values(
             rationality_expected_values,

@@ -1,10 +1,11 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 12:07 PM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 4:17 PM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -121,6 +122,7 @@ def _deceptive_actions(
     actions: np.ndarray,
     expected_values: np.ndarray,
     rationality_probability: float,
+    action_distance_fn: Callable[[object, object], float] | None = None,
 ) -> np.ndarray:
     """Return acceptable actions farthest from the rational target set."""
 
@@ -149,7 +151,14 @@ def _deceptive_actions(
     # Extract the rational target set used as the distance reference
     optimal_actions = _optimal_actions(actions, expected_values)
     # Compute every acceptable action's distance to its nearest rational action
-    distances_to_optimal = np.min(np.abs(acceptable_actions[:, None] - optimal_actions[None, :]), axis=1)
+    if action_distance_fn is None:
+        distances_to_optimal = np.min(np.abs(acceptable_actions[:, None] - optimal_actions[None, :]), axis=1)
+    else:
+        distances = np.array(
+            [[action_distance_fn(action, optimal_action) for optimal_action in optimal_actions] for action in acceptable_actions],
+            dtype=float,
+        )
+        distances_to_optimal = np.min(distances, axis=1)
     # Find the largest distance among acceptable actions
     farthest_distance = float(np.max(distances_to_optimal))
     # Mark every acceptable action tied for farthest distance up to floating-point noise
@@ -166,11 +175,14 @@ def sample_intended_targets_for_decision_model(
     expected_values: np.ndarray,
     lambda_true: float,
     num_observations: int,
+    action_distance_fn: Callable[[object, object], float] | None = None,
 ) -> np.ndarray:
     """Sample intended targets from one true decision-making model."""
 
     decision_model = get_decision_model_spec(decision_model_slug)
-    actions = np.asarray(actions, dtype=float)
+    actions = np.asarray(actions, dtype=object)
+    if actions.ndim > 1:
+        actions = np.asarray([tuple(action) for action in actions], dtype=object)
     expected_values = np.asarray(expected_values, dtype=float)
 
     if num_observations <= 0:
@@ -182,12 +194,14 @@ def sample_intended_targets_for_decision_model(
         )
     if actions.size == 0:
         raise ValueError("actions and expected_values must be nonempty.")
-    if not np.all(np.isfinite(actions)):
-        raise ValueError("actions must contain only finite values.")
     if not np.all(np.isfinite(expected_values)):
         raise ValueError("expected_values must contain only finite values.")
     if not np.isfinite(lambda_true) or lambda_true < 0.0:
         raise ValueError(f"lambda_true must be finite and nonnegative. Received {lambda_true}.")
+
+    if action_distance_fn is None and actions.dtype != object:
+        if not np.all(np.isfinite(actions)):
+            raise ValueError("actions must contain only finite values.")
 
     if decision_model.slug == SOFTMAX_DECISION_MODEL_SLUG:
         # This is the decision-making part of the generative model from the paper:
@@ -223,7 +237,7 @@ def sample_intended_targets_for_decision_model(
         # Convert lambda into the paper's rationality-percent value for the acceptable-reward threshold
         rationality_probability = _lambda_to_rationality_probability(expected_values, float(lambda_true))
         # Find acceptable actions farthest from the rational target set
-        deceptive_actions = _deceptive_actions(actions, expected_values, rationality_probability)
+        deceptive_actions = _deceptive_actions(actions, expected_values, rationality_probability, action_distance_fn)
         # Sample uniformly among tied deceptive actions
         return rng.choice(deceptive_actions, size=num_observations)
 
