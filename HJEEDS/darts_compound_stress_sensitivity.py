@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 05/21/26 at 10:25 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 9:52 AM MDT.
 """Scaffold the compact H-JEEDS compound-stress ablation.
 
 This runner is meant to show that H-JEEDS was also tested under a small number
@@ -8,9 +8,9 @@ factorial ablation. The planned default sweep is:
 - compound stress setting: default, moderate compound stress, strong compound stress
 - agents per bucket: 1, 2, 5, 10, 25
 
-Execution and aggregation are intentionally TODO stubs for now. The dry-run
-path is implemented so we can review the planned workload before filling in the
-simulator and hyperprior wiring.
+Execution is implemented for each scenario. Aggregation remains a TODO stub
+for now, while the dry-run path lets us review the planned workload before
+filling in result collection and plotting.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
+from HJEEDS import darts_hierarchical_prior_sensitivity as prior_sensitivity
 from HJEEDS.decision_models import (
     SOFTMAX_DECISION_MODEL_SLUG,
     FLIP_DECISION_MODEL_SLUG,
@@ -202,6 +203,20 @@ def compound_stress_metadata_row(compound_stress: CompoundStressSpec) -> dict[st
     }
 
 
+def _hyperprior_condition_by_slug(condition_slug: str) -> prior_sensitivity.PriorSensitivityCondition:
+    """Return one representative hyperprior condition by slug."""
+
+    conditions = prior_sensitivity.build_representative_conditions()
+    for condition in conditions:
+        if condition.condition_slug == condition_slug:
+            return condition
+
+    allowed_slugs = ", ".join(condition.condition_slug for condition in conditions)
+    raise ValueError(
+        f"Unknown representative hyperprior condition '{condition_slug}'. Expected one of: {allowed_slugs}."
+    )
+
+
 def build_config_for_scenario(
     args: argparse.Namespace,
     compound_stress: CompoundStressSpec,
@@ -209,9 +224,6 @@ def build_config_for_scenario(
 ) -> base_experiment.ExperimentConfig:
     """Build one base H-JEEDS config for a compound-stress scenario."""
 
-    # TODO: Apply compound_stress.hyperprior_condition_slug using prior_sensitivity.build_condition_hyperpriors
-    # TODO: Thread compound_stress.decision_model_slug into simulator config once decision models are implemented
-    # TODO: Confirm whether strong compound stress should use bimodal or outlier-heavy before final experiments
     output_dir = (
         Path(args.output_dir)
         / f"compound_stress_{compound_stress.slug}"
@@ -235,14 +247,20 @@ def build_config_for_scenario(
         min_success_regions=base_experiment.DEFAULT_MIN_SUCCESS_REGIONS,
         max_success_regions=base_experiment.DEFAULT_MAX_SUCCESS_REGIONS,
         min_region_width=base_experiment.DEFAULT_MIN_REGION_WIDTH,
+        true_decision_model_slug=compound_stress.decision_model_slug,
     )
     config = base_experiment.build_config_from_args(base_args)
+    hyperprior_condition = _hyperprior_condition_by_slug(compound_stress.hyperprior_condition_slug)
+    hyperpriors = prior_sensitivity.build_condition_hyperpriors(
+        config.hyperpriors,
+        hyperprior_condition,
+    )
     true_population = replace(
         config.true_population,
         population_shape_slug=compound_stress.population_shape_slug,
         correlation=compound_stress.true_correlation,
     )
-    return replace(config, true_population=true_population)
+    return replace(config, hyperpriors=hyperpriors, true_population=true_population)
 
 
 def build_scenarios(
@@ -267,12 +285,44 @@ def build_scenarios(
 def run_single_scenario(scenario: CompoundStressScenario) -> None:
     """Run one compound-stress x agents-per-bucket scenario."""
 
-    # TODO: Implement after hyperprior, population-shape, decision-model, and correlation runners are stable
-    # TODO: Ensure each component of the compound stress appears in scenario metadata and result CSVs
-    # TODO: Keep this runner compact so it remains a reviewer-facing stress test rather than an ablation soup
-    raise NotImplementedError(
-        "Compound-stress sensitivity execution is scaffolded but not implemented yet. "
-        f"Requested scenario: {scenario.scenario_slug}."
+    config = scenario.config
+    print(
+        "[compound-stress] "
+        f"Running scenario {scenario.scenario_index}: {scenario.scenario_slug} "
+        f"({config.num_agents} agents/seed)",
+        flush=True,
+    )
+
+    seed_results: list[base_experiment.SeedResult] = []
+    for seed_index, seed in enumerate(config.seed_values, start=1):
+        print(
+            "[compound-stress] "
+            f"{scenario.scenario_slug}: seed {seed_index}/{config.num_seeds}: {seed}",
+            flush=True,
+        )
+        seed_results.append(base_experiment.run_single_seed(config, seed))
+
+    output_paths = base_experiment.planned_output_paths(config.output_dir)
+    all_agent_results = [
+        result
+        for seed_result in seed_results
+        for result in seed_result.agent_results
+    ]
+    summary_by_bucket_rows, summary_overall_rows = (
+        base_experiment.aggregate_results_across_seeds(seed_results)
+    )
+
+    base_experiment.write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+    base_experiment.write_summary_csvs(
+        config.output_dir,
+        summary_by_bucket_rows,
+        summary_overall_rows,
+    )
+    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    print(
+        "[compound-stress] "
+        f"Wrote scenario results to {scenario.scenario_output_dir.resolve()}",
+        flush=True,
     )
 
 

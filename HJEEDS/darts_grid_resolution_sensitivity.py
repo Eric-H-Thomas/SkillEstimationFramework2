@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 05/20/26 at 2:35 PM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 9:52 AM MDT.
 """Scaffold the H-JEEDS grid-resolution sensitivity ablation.
 
 This runner will vary the estimator's discrete JEEDS skill-grid resolution.
@@ -9,9 +9,10 @@ The planned default sweep is:
 - 41 x 41 skill grid
 
 This is intended as a compact appendix/runtime sanity check rather than a main
-factorial ablation. Execution and aggregation are intentionally TODO stubs for
-now. The dry-run path is implemented so we can review the planned workload
-before filling in result collection and runtime reporting.
+factorial ablation. Execution is implemented for each scenario, while
+aggregation remains a TODO stub for now. The dry-run path is implemented so we
+can review the planned workload before filling in result collection and runtime
+reporting.
 """
 
 from __future__ import annotations
@@ -207,12 +208,44 @@ def build_scenarios(args: argparse.Namespace) -> tuple[GridResolutionScenario, .
 def run_single_scenario(scenario: GridResolutionScenario) -> None:
     """Run one grid-resolution scenario."""
 
-    # TODO: Enable execution after deciding whether to include runtime instrumentation
-    # TODO: Reuse base_experiment.run_single_seed with the scenario-specific grid size
-    # TODO: Confirm output metadata records both grid dimensions and total grid cells
-    raise NotImplementedError(
-        "Grid-resolution sensitivity execution is scaffolded but not implemented yet. "
-        f"Requested scenario: {scenario.scenario_slug}."
+    config = scenario.config
+    print(
+        "[grid-resolution] "
+        f"Running scenario {scenario.scenario_index}: {scenario.scenario_slug} "
+        f"({config.num_sigma_grid} x {config.num_lambda_grid} grid)",
+        flush=True,
+    )
+
+    seed_results: list[base_experiment.SeedResult] = []
+    for seed_index, seed in enumerate(config.seed_values, start=1):
+        print(
+            "[grid-resolution] "
+            f"{scenario.scenario_slug}: seed {seed_index}/{config.num_seeds}: {seed}",
+            flush=True,
+        )
+        seed_results.append(base_experiment.run_single_seed(config, seed))
+
+    output_paths = base_experiment.planned_output_paths(config.output_dir)
+    all_agent_results = [
+        result
+        for seed_result in seed_results
+        for result in seed_result.agent_results
+    ]
+    summary_by_bucket_rows, summary_overall_rows = (
+        base_experiment.aggregate_results_across_seeds(seed_results)
+    )
+
+    base_experiment.write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+    base_experiment.write_summary_csvs(
+        config.output_dir,
+        summary_by_bucket_rows,
+        summary_overall_rows,
+    )
+    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    print(
+        "[grid-resolution] "
+        f"Wrote scenario results to {scenario.scenario_output_dir.resolve()}",
+        flush=True,
     )
 
 

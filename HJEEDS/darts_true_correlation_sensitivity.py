@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 05/20/26 at 2:17 PM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 9:52 AM MDT.
 """Scaffold the H-JEEDS true population-correlation sensitivity ablation.
 
 This runner will vary the simulator's true correlation between execution skill
@@ -8,9 +8,9 @@ hyperpriors fixed. The planned default sweep is:
 - true population correlation: -0.9, -0.5, 0.0, +0.5, +0.9
 - agents per bucket: 1, 2, 5, 10, 25
 
-Execution and aggregation are intentionally TODO stubs for now. The dry-run
-path is implemented so we can review the planned workload before filling in the
-result collection and plotting.
+Execution is implemented for each scenario. Aggregation remains a TODO stub
+for now, while the dry-run path lets us review the planned workload before
+filling in result collection and plotting.
 """
 
 from __future__ import annotations
@@ -236,12 +236,44 @@ def build_scenarios(
 def run_single_scenario(scenario: TrueCorrelationScenario) -> None:
     """Run one true-correlation x agents-per-bucket scenario."""
 
-    # TODO: Confirm the fixed-hyperprior design before enabling execution
-    # TODO: Reuse base_experiment.run_single_seed once scenario metadata and aggregation are wired
-    # TODO: Add output metadata columns for true_correlation_slug, label, and numeric r
-    raise NotImplementedError(
-        "True-correlation sensitivity execution is scaffolded but not implemented yet. "
-        f"Requested scenario: {scenario.scenario_slug}."
+    config = scenario.config
+    print(
+        "[true-correlation] "
+        f"Running scenario {scenario.scenario_index}: {scenario.scenario_slug} "
+        f"({config.num_agents} agents/seed)",
+        flush=True,
+    )
+
+    seed_results: list[base_experiment.SeedResult] = []
+    for seed_index, seed in enumerate(config.seed_values, start=1):
+        print(
+            "[true-correlation] "
+            f"{scenario.scenario_slug}: seed {seed_index}/{config.num_seeds}: {seed}",
+            flush=True,
+        )
+        seed_results.append(base_experiment.run_single_seed(config, seed))
+
+    output_paths = base_experiment.planned_output_paths(config.output_dir)
+    all_agent_results = [
+        result
+        for seed_result in seed_results
+        for result in seed_result.agent_results
+    ]
+    summary_by_bucket_rows, summary_overall_rows = (
+        base_experiment.aggregate_results_across_seeds(seed_results)
+    )
+
+    base_experiment.write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+    base_experiment.write_summary_csvs(
+        config.output_dir,
+        summary_by_bucket_rows,
+        summary_overall_rows,
+    )
+    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    print(
+        "[true-correlation] "
+        f"Wrote scenario results to {scenario.scenario_output_dir.resolve()}",
+        flush=True,
     )
 
 
