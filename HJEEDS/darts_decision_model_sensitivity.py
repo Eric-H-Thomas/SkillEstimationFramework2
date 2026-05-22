@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 9:52 AM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 10:44 AM MDT.
 """Scaffold the H-JEEDS true decision-model sensitivity ablation.
 
 This runner will vary the simulator's true decision-making model while keeping
@@ -8,19 +8,20 @@ The planned default sweep is:
 - true decision model: softmax, rational, flip, deceptive
 - agents per bucket: 1, 2, 5, 10, 25
 
-Execution and aggregation are intentionally TODO stubs for now. The dry-run
-path is implemented so we can review the planned workload before filling in the
-simulator changes.
+Execution and CSV aggregation are implemented. Comparison plotting remains a
+TODO for now, while the dry-run path lets us review the planned workload before
+launching the sweep.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 
 # Ensure the repository root is importable when this file is executed directly
@@ -33,6 +34,7 @@ from HJEEDS.decision_models import (
     DECISION_MODEL_SPECS,
     DecisionModelSpec,
     decision_model_folder_slug,
+    decision_model_metadata_row,
 )
 
 
@@ -44,6 +46,26 @@ SCENARIOS_FILENAME = "decision_model_sensitivity_scenarios.csv"
 COMBINED_AGENT_LEVEL_FILENAME = "decision_model_sensitivity_agent_level_results.csv"
 COMBINED_SUMMARY_BY_BUCKET_FILENAME = "decision_model_sensitivity_summary_by_bucket.csv"
 COMBINED_SUMMARY_OVERALL_FILENAME = "decision_model_sensitivity_summary_overall.csv"
+
+DECISION_MODEL_METADATA_HEADER = [
+    "decision_model_slug",
+    "decision_model_label",
+    "decision_model_description",
+]
+
+AGENTS_PER_BUCKET_METADATA_HEADER = [
+    "agents_per_bucket_slug",
+    "agents_per_bucket",
+    "scenario_num_agents",
+    "count_buckets",
+]
+
+SCENARIO_METADATA_HEADER = [
+    "scenario_index",
+    "scenario_slug",
+    "scenario_output_dir",
+    "scenario_error_plot",
+]
 
 
 @dataclass(frozen=True)
@@ -97,7 +119,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--aggregate-results",
         action="store_true",
-        help="TODO: collect already-computed scenario folders into root combined CSVs and plots.",
+        help="Collect already-computed scenario folders into root combined CSVs.",
     )
     return parser.parse_args(argv)
 
@@ -106,6 +128,12 @@ def _agents_per_bucket_slug(agents_per_bucket: int) -> str:
     """Return a stable folder slug for one agents-per-bucket value."""
 
     return f"agents_per_bucket_{agents_per_bucket:03d}"
+
+
+def _count_bucket_label(count_buckets: Sequence[int]) -> str:
+    """Return a compact label for CSV provenance."""
+
+    return ",".join(str(bucket) for bucket in count_buckets)
 
 
 def _seed_values_label(seed_values: Sequence[int]) -> str:
@@ -185,6 +213,61 @@ def build_scenarios(
     return tuple(scenarios)
 
 
+def agents_per_bucket_metadata_row(config: base_experiment.ExperimentConfig) -> dict[str, Any]:
+    """Return metadata for one agents-per-bucket value."""
+
+    return {
+        "agents_per_bucket_slug": _agents_per_bucket_slug(config.agents_per_bucket),
+        "agents_per_bucket": config.agents_per_bucket,
+        "scenario_num_agents": config.num_agents,
+        "count_buckets": _count_bucket_label(config.count_buckets),
+    }
+
+
+def scenario_metadata_row(scenario: DecisionModelScenario) -> dict[str, Any]:
+    """Return path metadata for one concrete scenario."""
+
+    return {
+        "scenario_index": scenario.scenario_index,
+        "scenario_slug": scenario.scenario_slug,
+        "scenario_output_dir": str(scenario.scenario_output_dir),
+        "scenario_error_plot": str(scenario.scenario_output_dir / base_experiment.ERROR_PLOT_FILENAME),
+    }
+
+
+def scenario_prefix_row(scenario: DecisionModelScenario) -> dict[str, Any]:
+    """Return all provenance columns for one scenario."""
+
+    return {
+        **decision_model_metadata_row(scenario.decision_model.slug),
+        **agents_per_bucket_metadata_row(scenario.config),
+        **scenario_metadata_row(scenario),
+    }
+
+
+def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[dict[str, Any]]) -> None:
+    """Write dictionaries with a fixed header, leaving missing fields blank."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(header))
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in header})
+
+
+def _read_dict_rows(input_path: Path, scenario_slug: str) -> list[dict[str, Any]]:
+    """Read one scenario CSV and fail clearly if the expected artifact is missing."""
+
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Missing expected artifact for scenario {scenario_slug}: {input_path}"
+        )
+
+    with input_path.open("r", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 def run_single_scenario(scenario: DecisionModelScenario) -> None:
     """Run one decision-model x agents-per-bucket scenario."""
 
@@ -235,11 +318,49 @@ def aggregate_existing_results(
 ) -> None:
     """Collect already-computed decision-model scenario folders."""
 
-    # TODO: Mirror darts_population_shape_sensitivity.aggregate_existing_results
-    # TODO: Prefix rows with decision-model and agents-per-bucket metadata
     # TODO: Add compact lowest-bucket comparison plots across decision models
-    _ = (scenarios, output_dir)
-    raise NotImplementedError("Decision-model sensitivity aggregation is scaffolded but not implemented yet.")
+    scenario_rows: list[dict[str, Any]] = []
+    all_agent_rows: list[dict[str, Any]] = []
+    all_bucket_rows: list[dict[str, Any]] = []
+    all_overall_rows: list[dict[str, Any]] = []
+
+    for scenario in scenarios:
+        prefix = scenario_prefix_row(scenario)
+        output_paths = base_experiment.planned_output_paths(scenario.scenario_output_dir)
+        scenario_slug = str(prefix["scenario_slug"])
+
+        agent_rows = _read_dict_rows(output_paths["agent_level_csv"], scenario_slug)
+        bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], scenario_slug)
+        overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], scenario_slug)
+
+        scenario_rows.append(prefix)
+        all_agent_rows.extend({**prefix, **row} for row in agent_rows)
+        all_bucket_rows.extend({**prefix, **row} for row in bucket_rows)
+        all_overall_rows.extend({**prefix, **row} for row in overall_rows)
+
+    combined_prefix_header = (
+        DECISION_MODEL_METADATA_HEADER
+        + AGENTS_PER_BUCKET_METADATA_HEADER
+        + SCENARIO_METADATA_HEADER
+    )
+    _write_dict_rows(output_dir / SCENARIOS_FILENAME, combined_prefix_header, scenario_rows)
+    _write_dict_rows(
+        output_dir / COMBINED_AGENT_LEVEL_FILENAME,
+        combined_prefix_header + base_experiment.AGENT_LEVEL_CSV_HEADER,
+        all_agent_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
+        combined_prefix_header + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
+        all_bucket_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
+        combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
+        all_overall_rows,
+    )
+
+    print(f"[decision-model] Aggregated results into {output_dir.resolve()}", flush=True)
 
 
 def print_dry_run_summary(
