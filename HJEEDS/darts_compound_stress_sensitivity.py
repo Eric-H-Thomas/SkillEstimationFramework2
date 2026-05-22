@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 10:44 AM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
 """Scaffold the compact H-JEEDS compound-stress ablation.
 
 This runner is meant to show that H-JEEDS was also tested under a small number
@@ -8,9 +8,8 @@ factorial ablation. The planned default sweep is:
 - compound stress setting: default, moderate compound stress, strong compound stress
 - agents per bucket: 1, 2, 5, 10, 25
 
-Execution and CSV aggregation are implemented. Main-paper comparison output
-remains a TODO for now, while the dry-run path lets us review the planned
-workload before launching the sweep.
+Execution, CSV aggregation, and compact comparison plotting are implemented.
+The dry-run path lets us review the planned workload before launching the sweep.
 """
 
 from __future__ import annotations
@@ -23,6 +22,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
+
 
 # Ensure the repository root is importable when this file is executed directly
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
 from HJEEDS import darts_hierarchical_prior_sensitivity as prior_sensitivity
+from HJEEDS.artifacts import ERROR_METRIC_PANELS, METHOD_ORDER
 from HJEEDS.decision_models import (
     SOFTMAX_DECISION_MODEL_SLUG,
     FLIP_DECISION_MODEL_SLUG,
@@ -57,6 +59,7 @@ SCENARIOS_FILENAME = "compound_stress_sensitivity_scenarios.csv"
 COMBINED_AGENT_LEVEL_FILENAME = "compound_stress_sensitivity_agent_level_results.csv"
 COMBINED_SUMMARY_BY_BUCKET_FILENAME = "compound_stress_sensitivity_summary_by_bucket.csv"
 COMBINED_SUMMARY_OVERALL_FILENAME = "compound_stress_sensitivity_summary_overall.csv"
+LOWEST_BUCKET_PLOT_TEMPLATE = "compound_stress_lowest_bucket_{metric}.png"
 
 COMPOUND_STRESS_METADATA_HEADER = [
     "compound_stress_slug",
@@ -293,6 +296,17 @@ def _read_dict_rows(input_path: Path, scenario_slug: str) -> list[dict[str, Any]
         return list(csv.DictReader(handle))
 
 
+def _as_float(value: Any) -> float | None:
+    """Convert CSV-ish values to floats, treating blanks as missing."""
+
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _hyperprior_condition_by_slug(condition_slug: str) -> prior_sensitivity.PriorSensitivityCondition:
     """Return one representative hyperprior condition by slug."""
 
@@ -416,13 +430,157 @@ def run_single_scenario(scenario: CompoundStressScenario) -> None:
     )
 
 
+def _plot_lowest_bucket_metric(
+    output_path: Path,
+    rows: Sequence[dict[str, Any]],
+    scenarios: Sequence[CompoundStressScenario],
+    metric_name: str,
+    title: str,
+    ylabel: str,
+    missing_message: str,
+) -> None:
+    """Plot one lowest-bucket metric across agents-per-bucket values and stress settings."""
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    bucket_values = sorted(
+        {
+            int(float(row["count_bucket"]))
+            for row in rows
+            if str(row.get("metric", "")) == metric_name and _as_float(row.get("count_bucket")) is not None
+        }
+    )
+    if not bucket_values:
+        return
+
+    selected_bucket = bucket_values[0]
+    stress_slugs = [spec.slug for spec in COMPOUND_STRESS_SPECS]
+    stress_labels = {spec.slug: spec.label for spec in COMPOUND_STRESS_SPECS}
+    agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
+    x_positions = {agents_per_bucket: index for index, agents_per_bucket in enumerate(agents_values)}
+
+    parsed_rows: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("metric", "")) != metric_name:
+            continue
+        if int(float(row["count_bucket"])) != selected_bucket:
+            continue
+        mean = _as_float(row.get("mean"))
+        if mean is None:
+            continue
+        key = (
+            str(row["compound_stress_slug"]),
+            int(row["agents_per_bucket"]),
+            str(row["method"]),
+        )
+        parsed_rows[key] = row
+
+    figure, axes = plt.subplots(
+        1,
+        len(stress_slugs),
+        figsize=(4.2 * len(stress_slugs), 4.2),
+        sharey=True,
+        squeeze=False,
+        constrained_layout=True,
+    )
+    axes_row = axes[0]
+    methods = sorted(
+        {
+            str(row.get("method", ""))
+            for row in rows
+            if str(row.get("metric", "")) == metric_name and int(float(row["count_bucket"])) == selected_bucket
+        },
+        key=lambda method: (METHOD_ORDER.get(method, len(METHOD_ORDER)), method),
+    )
+
+    for axis_index, (axis, stress_slug) in enumerate(zip(axes_row, stress_slugs)):
+        axis.set_title(stress_labels[stress_slug])
+        axis.set_xlabel("Agents per bucket")
+        if axis_index == 0:
+            axis.set_ylabel(ylabel)
+        axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+        axis.set_xticks(list(x_positions.values()))
+        axis.set_xticklabels([str(value) for value in agents_values])
+
+        drew_rows = False
+        for method in methods:
+            x_values: list[int] = []
+            y_values: list[float] = []
+            lower_errors: list[float] = []
+            upper_errors: list[float] = []
+
+            for agents_per_bucket in agents_values:
+                row = parsed_rows.get((stress_slug, agents_per_bucket, method))
+                if row is None:
+                    continue
+                mean = _as_float(row.get("mean"))
+                if mean is None:
+                    continue
+                ci_lower = _as_float(row.get("ci_lower"))
+                ci_upper = _as_float(row.get("ci_upper"))
+                x_values.append(x_positions[agents_per_bucket])
+                y_values.append(mean)
+                lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
+                upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
+
+            if x_values:
+                drew_rows = True
+                axis.errorbar(
+                    x_values,
+                    y_values,
+                    yerr=np.array([lower_errors, upper_errors], dtype=float),
+                    marker="o",
+                    capsize=4,
+                    linewidth=2,
+                    label=method,
+                )
+
+        if drew_rows:
+            axis.legend(title="Method")
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                missing_message,
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+            )
+
+    figure.suptitle(f"{title} at lowest observation bucket ({selected_bucket})")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=300)
+    plt.close(figure)
+
+
+def plot_lowest_bucket_comparisons(
+    output_dir: Path,
+    summary_by_bucket_rows: Sequence[dict[str, Any]],
+    scenarios: Sequence[CompoundStressScenario],
+) -> None:
+    """Write one root comparison plot per metric."""
+
+    for metric_name, title, ylabel, missing_message in ERROR_METRIC_PANELS:
+        _plot_lowest_bucket_metric(
+            output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name),
+            summary_by_bucket_rows,
+            scenarios,
+            metric_name,
+            title,
+            ylabel,
+            missing_message,
+        )
+
+
 def aggregate_existing_results(
     scenarios: Sequence[CompoundStressScenario],
     output_dir: Path,
 ) -> None:
     """Collect already-computed compound-stress scenario folders."""
 
-    # TODO: Add one compact plot or table suitable for the main paper
     scenario_rows: list[dict[str, Any]] = []
     all_agent_rows: list[dict[str, Any]] = []
     all_bucket_rows: list[dict[str, Any]] = []
@@ -463,6 +621,7 @@ def aggregate_existing_results(
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
+    plot_lowest_bucket_comparisons(output_dir, all_bucket_rows, scenarios)
 
     print(f"[compound-stress] Aggregated results into {output_dir.resolve()}", flush=True)
 
@@ -507,6 +666,8 @@ def print_dry_run_summary(
     print(f"  - {output_dir / COMBINED_AGENT_LEVEL_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_OVERALL_FILENAME}")
+    for metric_name, _title, _ylabel, _missing_message in ERROR_METRIC_PANELS:
+        print(f"  - {output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name)}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

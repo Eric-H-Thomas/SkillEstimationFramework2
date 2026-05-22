@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 10:44 AM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
 """Scaffold the H-JEEDS true decision-model sensitivity ablation.
 
 This runner will vary the simulator's true decision-making model while keeping
@@ -8,9 +8,8 @@ The planned default sweep is:
 - true decision model: softmax, rational, flip, deceptive
 - agents per bucket: 1, 2, 5, 10, 25
 
-Execution and CSV aggregation are implemented. Comparison plotting remains a
-TODO for now, while the dry-run path lets us review the planned workload before
-launching the sweep.
+Execution, CSV aggregation, and compact comparison plotting are implemented.
+The dry-run path lets us review the planned workload before launching the sweep.
 """
 
 from __future__ import annotations
@@ -23,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
+
 
 # Ensure the repository root is importable when this file is executed directly
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
+from HJEEDS.artifacts import ERROR_METRIC_PANELS, METHOD_ORDER
 from HJEEDS.decision_models import (
     DECISION_MODEL_SPECS,
     DecisionModelSpec,
@@ -46,6 +48,7 @@ SCENARIOS_FILENAME = "decision_model_sensitivity_scenarios.csv"
 COMBINED_AGENT_LEVEL_FILENAME = "decision_model_sensitivity_agent_level_results.csv"
 COMBINED_SUMMARY_BY_BUCKET_FILENAME = "decision_model_sensitivity_summary_by_bucket.csv"
 COMBINED_SUMMARY_OVERALL_FILENAME = "decision_model_sensitivity_summary_overall.csv"
+LOWEST_BUCKET_PLOT_TEMPLATE = "decision_model_lowest_bucket_{metric}.png"
 
 DECISION_MODEL_METADATA_HEADER = [
     "decision_model_slug",
@@ -268,6 +271,17 @@ def _read_dict_rows(input_path: Path, scenario_slug: str) -> list[dict[str, Any]
         return list(csv.DictReader(handle))
 
 
+def _as_float(value: Any) -> float | None:
+    """Convert CSV-ish values to floats, treating blanks as missing."""
+
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def run_single_scenario(scenario: DecisionModelScenario) -> None:
     """Run one decision-model x agents-per-bucket scenario."""
 
@@ -312,13 +326,157 @@ def run_single_scenario(scenario: DecisionModelScenario) -> None:
     )
 
 
+def _plot_lowest_bucket_metric(
+    output_path: Path,
+    rows: Sequence[dict[str, Any]],
+    scenarios: Sequence[DecisionModelScenario],
+    metric_name: str,
+    title: str,
+    ylabel: str,
+    missing_message: str,
+) -> None:
+    """Plot one lowest-bucket metric across agents-per-bucket values and decision models."""
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    bucket_values = sorted(
+        {
+            int(float(row["count_bucket"]))
+            for row in rows
+            if str(row.get("metric", "")) == metric_name and _as_float(row.get("count_bucket")) is not None
+        }
+    )
+    if not bucket_values:
+        return
+
+    selected_bucket = bucket_values[0]
+    decision_model_slugs = [model.slug for model in DECISION_MODEL_SPECS]
+    decision_model_labels = {model.slug: model.label for model in DECISION_MODEL_SPECS}
+    agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
+    x_positions = {agents_per_bucket: index for index, agents_per_bucket in enumerate(agents_values)}
+
+    parsed_rows: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("metric", "")) != metric_name:
+            continue
+        if int(float(row["count_bucket"])) != selected_bucket:
+            continue
+        mean = _as_float(row.get("mean"))
+        if mean is None:
+            continue
+        key = (
+            str(row["decision_model_slug"]),
+            int(row["agents_per_bucket"]),
+            str(row["method"]),
+        )
+        parsed_rows[key] = row
+
+    figure, axes = plt.subplots(
+        1,
+        len(decision_model_slugs),
+        figsize=(4.2 * len(decision_model_slugs), 4.2),
+        sharey=True,
+        squeeze=False,
+        constrained_layout=True,
+    )
+    axes_row = axes[0]
+    methods = sorted(
+        {
+            str(row.get("method", ""))
+            for row in rows
+            if str(row.get("metric", "")) == metric_name and int(float(row["count_bucket"])) == selected_bucket
+        },
+        key=lambda method: (METHOD_ORDER.get(method, len(METHOD_ORDER)), method),
+    )
+
+    for axis_index, (axis, decision_model_slug) in enumerate(zip(axes_row, decision_model_slugs)):
+        axis.set_title(decision_model_labels[decision_model_slug])
+        axis.set_xlabel("Agents per bucket")
+        if axis_index == 0:
+            axis.set_ylabel(ylabel)
+        axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+        axis.set_xticks(list(x_positions.values()))
+        axis.set_xticklabels([str(value) for value in agents_values])
+
+        drew_rows = False
+        for method in methods:
+            x_values: list[int] = []
+            y_values: list[float] = []
+            lower_errors: list[float] = []
+            upper_errors: list[float] = []
+
+            for agents_per_bucket in agents_values:
+                row = parsed_rows.get((decision_model_slug, agents_per_bucket, method))
+                if row is None:
+                    continue
+                mean = _as_float(row.get("mean"))
+                if mean is None:
+                    continue
+                ci_lower = _as_float(row.get("ci_lower"))
+                ci_upper = _as_float(row.get("ci_upper"))
+                x_values.append(x_positions[agents_per_bucket])
+                y_values.append(mean)
+                lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
+                upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
+
+            if x_values:
+                drew_rows = True
+                axis.errorbar(
+                    x_values,
+                    y_values,
+                    yerr=np.array([lower_errors, upper_errors], dtype=float),
+                    marker="o",
+                    capsize=4,
+                    linewidth=2,
+                    label=method,
+                )
+
+        if drew_rows:
+            axis.legend(title="Method")
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                missing_message,
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+            )
+
+    figure.suptitle(f"{title} at lowest observation bucket ({selected_bucket})")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=300)
+    plt.close(figure)
+
+
+def plot_lowest_bucket_comparisons(
+    output_dir: Path,
+    summary_by_bucket_rows: Sequence[dict[str, Any]],
+    scenarios: Sequence[DecisionModelScenario],
+) -> None:
+    """Write one root comparison plot per metric."""
+
+    for metric_name, title, ylabel, missing_message in ERROR_METRIC_PANELS:
+        _plot_lowest_bucket_metric(
+            output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name),
+            summary_by_bucket_rows,
+            scenarios,
+            metric_name,
+            title,
+            ylabel,
+            missing_message,
+        )
+
+
 def aggregate_existing_results(
     scenarios: Sequence[DecisionModelScenario],
     output_dir: Path,
 ) -> None:
     """Collect already-computed decision-model scenario folders."""
 
-    # TODO: Add compact lowest-bucket comparison plots across decision models
     scenario_rows: list[dict[str, Any]] = []
     all_agent_rows: list[dict[str, Any]] = []
     all_bucket_rows: list[dict[str, Any]] = []
@@ -359,6 +517,7 @@ def aggregate_existing_results(
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
+    plot_lowest_bucket_comparisons(output_dir, all_bucket_rows, scenarios)
 
     print(f"[decision-model] Aggregated results into {output_dir.resolve()}", flush=True)
 
@@ -393,6 +552,8 @@ def print_dry_run_summary(
     print(f"  - {output_dir / COMBINED_AGENT_LEVEL_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_OVERALL_FILENAME}")
+    for metric_name, _title, _ylabel, _missing_message in ERROR_METRIC_PANELS:
+        print(f"  - {output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name)}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
