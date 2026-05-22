@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 12:06 PM MDT.
 """Scaffold the H-JEEDS true population-correlation sensitivity ablation.
 
 This runner will vary the simulator's true correlation between execution skill
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import sys
 from dataclasses import dataclass, replace
@@ -43,12 +44,18 @@ COMBINED_AGENT_LEVEL_FILENAME = "true_correlation_sensitivity_agent_level_result
 COMBINED_SUMMARY_BY_BUCKET_FILENAME = "true_correlation_sensitivity_summary_by_bucket.csv"
 COMBINED_SUMMARY_OVERALL_FILENAME = "true_correlation_sensitivity_summary_overall.csv"
 LOWEST_BUCKET_PLOT_TEMPLATE = "true_correlation_lowest_bucket_{metric}.png"
+ESTIMATOR_CORRELATION_PRIOR_POLICY = "fixed_default_hyperprior"
 
 TRUE_CORRELATION_METADATA_HEADER = [
     "true_correlation_slug",
     "true_correlation_label",
     "true_correlation",
     "true_correlation_description",
+]
+
+ESTIMATOR_CORRELATION_PRIOR_METADATA_HEADER = [
+    "estimator_correlation_prior_policy",
+    "estimator_correlation_prior_r_center",
 ]
 
 AGENTS_PER_BUCKET_METADATA_HEADER = [
@@ -214,8 +221,6 @@ def build_config_for_scenario(
 ) -> base_experiment.ExperimentConfig:
     """Build one base H-JEEDS config for a true-correlation scenario."""
 
-    # TODO: Decide whether this ablation should keep hyperprior m_r fixed at default or matched per condition
-    # TODO: Current scaffold keeps estimator hyperpriors fixed and varies only the simulator truth
     output_dir = (
         Path(args.output_dir)
         / true_correlation_folder_slug(true_correlation)
@@ -241,6 +246,7 @@ def build_config_for_scenario(
         min_region_width=base_experiment.DEFAULT_MIN_REGION_WIDTH,
     )
     config = base_experiment.build_config_from_args(base_args)
+    # Keep estimator hyperpriors fixed at default so this ablation isolates simulator-side correlation mismatch
     true_population = replace(config.true_population, correlation=true_correlation.correlation)
     return replace(config, true_population=true_population)
 
@@ -275,6 +281,15 @@ def true_correlation_metadata_row(true_correlation: TrueCorrelationSpec) -> dict
     }
 
 
+def estimator_correlation_prior_metadata_row(config: base_experiment.ExperimentConfig) -> dict[str, Any]:
+    """Return metadata describing the fixed estimator-side correlation prior."""
+
+    return {
+        "estimator_correlation_prior_policy": ESTIMATOR_CORRELATION_PRIOR_POLICY,
+        "estimator_correlation_prior_r_center": math.tanh(config.hyperpriors.m_r),
+    }
+
+
 def agents_per_bucket_metadata_row(config: base_experiment.ExperimentConfig) -> dict[str, Any]:
     """Return metadata for one agents-per-bucket value."""
 
@@ -302,6 +317,7 @@ def scenario_prefix_row(scenario: TrueCorrelationScenario) -> dict[str, Any]:
 
     return {
         **true_correlation_metadata_row(scenario.true_correlation),
+        **estimator_correlation_prior_metadata_row(scenario.config),
         **agents_per_bucket_metadata_row(scenario.config),
         **scenario_metadata_row(scenario),
     }
@@ -557,6 +573,7 @@ def aggregate_existing_results(
 
     combined_prefix_header = (
         TRUE_CORRELATION_METADATA_HEADER
+        + ESTIMATOR_CORRELATION_PRIOR_METADATA_HEADER
         + AGENTS_PER_BUCKET_METADATA_HEADER
         + SCENARIO_METADATA_HEADER
     )
