@@ -9,7 +9,7 @@ from typing import Sequence
 import numpy as np
 
 from .decision_models import SOFTMAX_DECISION_MODEL_SLUG, get_decision_model_spec
-from .models import ExperimentConfig, HyperpriorConfig, TruePopulationConfig
+from .models import EnvironmentGridConfig, ExperimentConfig, HyperpriorConfig, TruePopulationConfig
 
 
 # This module exists to answer one question: "What study are we about to run?"
@@ -43,6 +43,9 @@ setting where the hierarchical model is expected to help most.
 DEFAULT_SIGMA_MIN = 0.5
 DEFAULT_SIGMA_MAX = 4.5
 DEFAULT_NUM_SIGMA_GRID = 21
+# 2D defaults focus on the good-to-moderate xskill band used in legacy setups.
+DEFAULT_SIGMA_MIN_2D = 8.0
+DEFAULT_SIGMA_MAX_2D = 60.0
 
 DEFAULT_LAMBDA_MIN = 1e-3
 DEFAULT_LAMBDA_MAX = 1e2
@@ -61,6 +64,7 @@ DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 DEFAULT_AGENTS_PER_BUCKET = 5
 DEFAULT_NUM_AGENTS = len(DEFAULT_COUNT_BUCKETS) * DEFAULT_AGENTS_PER_BUCKET
 DEFAULT_DELTA = 0.1
+DEFAULT_DELTA_2D = 5.0
 DEFAULT_SEED = 12345
 DEFAULT_NUM_SEEDS = 500
 DEFAULT_TRUE_DECISION_MODEL_SLUG = SOFTMAX_DECISION_MODEL_SLUG
@@ -74,6 +78,13 @@ DEFAULT_MAX_SUCCESS_REGIONS = 6
 DEFAULT_MIN_REGION_WIDTH = 0.25
 DEFAULT_TRUE_POPULATION = TruePopulationConfig(
     mean_log_sigma=math.log(1.5),
+    mean_log_lambda=math.log(1.0),
+    tau_eta=0.35,
+    tau_rho=1.0,
+    correlation=-0.5,
+)
+DEFAULT_TRUE_POPULATION_2D = TruePopulationConfig(
+    mean_log_sigma=math.log(math.sqrt(DEFAULT_SIGMA_MIN_2D * DEFAULT_SIGMA_MAX_2D)),
     mean_log_lambda=math.log(1.0),
     tau_eta=0.35,
     tau_rho=1.0,
@@ -93,6 +104,16 @@ DEFAULT_HYPERPRIORS = HyperpriorConfig(
     m_r=math.atanh(DEFAULT_TRUE_POPULATION.correlation),
     s_r=0.75,
 )
+DEFAULT_HYPERPRIORS_2D = HyperpriorConfig(
+    mean_vector=(DEFAULT_TRUE_POPULATION_2D.mean_log_sigma, DEFAULT_TRUE_POPULATION_2D.mean_log_lambda),
+    covariance_diagonal=(0.6**2, 3.0**2),
+    log_tau_eta_mean=math.log(DEFAULT_TRUE_POPULATION_2D.tau_eta),
+    log_tau_eta_sd=0.5,
+    log_tau_rho_mean=math.log(DEFAULT_TRUE_POPULATION_2D.tau_rho),
+    log_tau_rho_sd=0.5,
+    m_r=math.atanh(DEFAULT_TRUE_POPULATION_2D.correlation),
+    s_r=0.75,
+)
 
 AGENT_LEVEL_FILENAME = "agent_level_results.csv"
 SUMMARY_BY_BUCKET_FILENAME = "summary_by_bucket.csv"
@@ -102,6 +123,7 @@ ERROR_PLOT_FILENAME = "error_by_count_bucket.png"
 # CSV headers all declared in one place
 AGENT_LEVEL_CSV_HEADER = [
     "seed",
+    "environment",
     "agent_id",
     "count_bucket",
     "num_observations",
@@ -233,6 +255,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Target-grid resolution used by the darts environment and later likelihood code.",
     )
     parser.add_argument(
+        "--environment",
+        type=str,
+        choices=["1d", "2d"],
+        default="1d",
+        help="Darts environment: '1d' or '2d'.",
+    )
+    parser.add_argument(
         "--num-sigma-grid",
         type=int,
         default=DEFAULT_NUM_SIGMA_GRID,
@@ -313,27 +342,47 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     # Parse the structured fields once here so the rest of the code only needs
     # to reason about typed values, not raw CLI strings.
     count_buckets = _parse_count_buckets(args.count_buckets)
+    delta = args.delta
+    sigma_min = args.sigma_min
+    sigma_max = args.sigma_max
+    true_population = DEFAULT_TRUE_POPULATION
+    hyperpriors = DEFAULT_HYPERPRIORS
+    if args.environment == "2d":
+        if args.delta == DEFAULT_DELTA:
+            delta = DEFAULT_DELTA_2D
+        if args.sigma_min == DEFAULT_SIGMA_MIN:
+            sigma_min = DEFAULT_SIGMA_MIN_2D
+        if args.sigma_max == DEFAULT_SIGMA_MAX:
+            sigma_max = DEFAULT_SIGMA_MAX_2D
+        true_population = DEFAULT_TRUE_POPULATION_2D
+        hyperpriors = DEFAULT_HYPERPRIORS_2D
+
+    output_dir = Path(args.output_dir)
+    if args.output_dir == str(DEFAULT_OUTPUT_DIR):
+        output_dir = output_dir.with_name(f"{output_dir.name}_{args.environment}")
 
     config = ExperimentConfig(
+        environment=args.environment,
         seed=args.seed,
         num_seeds=args.num_seeds,
         num_agents=args.num_agents,
         count_buckets=count_buckets,
         agents_per_bucket=args.agents_per_bucket,
-        delta=args.delta,
+        delta=delta,
         num_sigma_grid=args.num_sigma_grid,
         num_lambda_grid=args.num_lambda_grid,
-        sigma_min=args.sigma_min,
-        sigma_max=args.sigma_max,
+        sigma_min=sigma_min,
+        sigma_max=sigma_max,
         lambda_min=args.lambda_min,
         lambda_max=args.lambda_max,
-        output_dir=Path(args.output_dir),
+        output_dir=output_dir,
+        environment_grids={},
         dry_run=args.dry_run,
         min_success_regions=args.min_success_regions,
         max_success_regions=args.max_success_regions,
         min_region_width=args.min_region_width,
-        hyperpriors=DEFAULT_HYPERPRIORS,
-        true_population=DEFAULT_TRUE_POPULATION,
+        hyperpriors=hyperpriors,
+        true_population=true_population,
         true_decision_model_slug=getattr(args, "true_decision_model_slug", DEFAULT_TRUE_DECISION_MODEL_SLUG),
     )
 
@@ -369,10 +418,11 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
     # or optimization begins.
     paths = planned_output_paths(config.output_dir)
 
-    print("=== DRY RUN: 1D Hierarchical Darts vs JEEDS ===")
+    print("=== DRY RUN: Hierarchical Darts vs JEEDS ===")
     print("This dry run validates parser/config wiring and reports the intended workload.")
     print("No simulation or inference functions will be executed.")
     print()
+    print(f"Environment: {config.environment}")
     print(f"Seeds: {config.seed_values}")
     print(f"Agents: {config.num_agents}")
     print(f"Count buckets: {config.count_buckets}")
@@ -387,7 +437,7 @@ def print_dry_run_summary(config: ExperimentConfig) -> None:
         print(f"  - {label}: {path}")
     print()
     print("Planned pipeline:")
-    print("  1. Sample one fixed 1D darts reward surface per seed.")
+    print(f"  1. Sample one fixed {config.environment.upper()} darts reward surface per seed.")
     print("  2. Sample demonstrator true skills from the hierarchical population.")
     print("  3. Assign uneven observation counts across demonstrators.")
     print("  4. Simulate agent datasets from the JEEDS-consistent generative model.")

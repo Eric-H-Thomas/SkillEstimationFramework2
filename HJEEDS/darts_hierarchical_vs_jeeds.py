@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from dataclasses import replace
 from typing import Sequence
 
 
@@ -129,7 +130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Keep CSV writing and plotting here in the entry module so the seed-level
     # pipeline stays focused on modeling rather than file I/O.
-    write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+    write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results, config.environment)
     write_summary_csvs(config.output_dir, summary_by_bucket_rows, summary_overall_rows)
     plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
     print(f"[hier-darts] Wrote results to {config.output_dir.resolve()}", flush=True)
