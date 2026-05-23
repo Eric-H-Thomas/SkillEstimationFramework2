@@ -1,16 +1,13 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
-"""Scaffold the H-JEEDS grid-resolution sensitivity ablation.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+"""Run H-JEEDS grid-resolution sensitivity experiments.
 
-This runner will vary the estimator's discrete JEEDS skill-grid resolution.
-The planned default sweep is:
+This runner varies the estimator's discrete JEEDS skill-grid resolution. The
+study is a compact appendix sanity check rather than a main factorial ablation.
+The default sweep is:
 
 - 11 x 11 skill grid
 - 21 x 21 skill grid
 - 41 x 41 skill grid
-
-This is intended as a compact appendix/runtime sanity check rather than a main
-factorial ablation. Execution, CSV aggregation, and compact comparison plotting
-are implemented.
 """
 
 from __future__ import annotations
@@ -120,7 +117,7 @@ class GridResolutionScenario:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI options for the grid-resolution ablation scaffold."""
+    """Parse CLI options for the grid-resolution ablation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -144,7 +141,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned grid-resolution workload and stop before simulation/inference.",
+        help="Report the grid-resolution workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--aggregate-results",
@@ -207,7 +204,7 @@ def build_config_for_scenario(
 
 
 def build_scenarios(args: argparse.Namespace) -> tuple[GridResolutionScenario, ...]:
-    """Build the planned grid-resolution scenarios."""
+    """Build the grid-resolution scenarios."""
 
     scenarios: list[GridResolutionScenario] = []
     for grid_resolution in GRID_RESOLUTION_SPECS:
@@ -523,7 +520,7 @@ def print_dry_run_summary(
     scenarios: Sequence[GridResolutionScenario],
     output_dir: Path,
 ) -> None:
-    """Report the planned grid-resolution workload without running inference."""
+    """Report the grid-resolution workload without running inference."""
 
     grid_labels = [spec.label for spec in GRID_RESOLUTION_SPECS]
 
@@ -558,7 +555,7 @@ def print_dry_run_summary(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the grid-resolution sensitivity scaffold."""
+    """Run the grid-resolution sensitivity sweep."""
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()

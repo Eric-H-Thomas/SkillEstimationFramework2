@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 """Run agents-per-bucket ablations crossed with hyperprior sensitivity.
 
 This script repeats selected hyperprior-robustness conditions for several
@@ -172,7 +172,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned agents-per-bucket x hyperprior workload and stop before simulation/inference.",
+        help="Report the agents-per-bucket x hyperprior workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--scenario-index",
@@ -527,7 +527,7 @@ def print_dry_run_summary(
     conditions: Sequence[prior_sensitivity.PriorSensitivityCondition],
     output_dir: Path,
 ) -> None:
-    """Report the planned agents-per-bucket workload without running inference."""
+    """Report the agents-per-bucket workload without running inference."""
 
     scenario_count = len(configs) * len(conditions)
     print("=== DRY RUN: Agents Per Bucket x Hyperprior Sensitivity ===")
@@ -601,7 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Normalize the output directory string into a pathlib Path
     output_dir = Path(args.output_dir)
 
-    # Dry-run reports the planned workload and exits before simulation/inference
+    # Dry-run reports the workload and exits before simulation/inference
     if args.dry_run:
         print_dry_run_summary(configs, conditions, output_dir)
         return 0

@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 """Run hyperprior-robustness sweeps for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
@@ -272,7 +272,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned robustness workload and stop before simulation/inference.",
+        help="Report the robustness workload and stop before simulation/inference.",
     )
 
     return parser.parse_args(argv)
@@ -977,7 +977,7 @@ def print_dry_run_summary(
     config: base_experiment.ExperimentConfig,
     conditions: Sequence[PriorSensitivityCondition],
 ) -> None:
-    """Report the planned sensitivity workload without running inference."""
+    """Report the sensitivity workload without running inference."""
 
     print("=== DRY RUN: 1D Darts Hyperprior Robustness ===")
     print("No simulation or inference functions will be executed.")

@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 """Run H-JEEDS agents-per-bucket ablations across true population shapes.
 
 This script varies the simulator's true population shape while keeping the
@@ -112,7 +112,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned population-shape workload and stop before simulation/inference.",
+        help="Report the population-shape workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--aggregate-results",
@@ -520,7 +520,7 @@ def print_dry_run_summary(
     scenarios: Sequence[PopulationShapeScenario],
     output_dir: Path,
 ) -> None:
-    """Report the planned population-shape workload without running inference."""
+    """Report the population-shape workload without running inference."""
 
     shape_slugs = [shape.slug for shape in POPULATION_SHAPE_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})

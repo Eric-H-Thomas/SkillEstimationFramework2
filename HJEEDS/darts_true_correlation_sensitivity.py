@@ -1,15 +1,12 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 12:06 PM MDT.
-"""Scaffold the H-JEEDS true population-correlation sensitivity ablation.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+"""Run H-JEEDS true population-correlation sensitivity experiments.
 
-This runner will vary the simulator's true correlation between execution skill
+This runner varies the simulator's true correlation between execution skill
 and decision-making skill while keeping the estimator model and default
-hyperpriors fixed. The planned default sweep is:
+hyperpriors fixed. The default sweep is:
 
 - true population correlation: -0.9, -0.5, 0.0, +0.5, +0.9
 - agents per bucket: 1, 2, 5, 10, 25
-
-Execution, CSV aggregation, and compact comparison plotting are implemented.
-The dry-run path lets us review the planned workload before launching the sweep.
 """
 
 from __future__ import annotations
@@ -139,7 +136,7 @@ class TrueCorrelationScenario:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI options for the true-correlation ablation scaffold."""
+    """Parse CLI options for the true-correlation ablation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -163,7 +160,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned true-correlation workload and stop before simulation/inference.",
+        help="Report the true-correlation workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--aggregate-results",
@@ -255,7 +252,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[TrueCorrelationScenario, ...]:
-    """Build the planned true-correlation x agents-per-bucket scenarios."""
+    """Build the true-correlation x agents-per-bucket scenarios."""
 
     scenarios: list[TrueCorrelationScenario] = []
     for true_correlation in TRUE_CORRELATION_SPECS:
@@ -602,7 +599,7 @@ def print_dry_run_summary(
     scenarios: Sequence[TrueCorrelationScenario],
     output_dir: Path,
 ) -> None:
-    """Report the planned true-correlation workload without running inference."""
+    """Report the true-correlation workload without running inference."""
 
     true_correlation_labels = [spec.label for spec in TRUE_CORRELATION_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
@@ -633,7 +630,7 @@ def print_dry_run_summary(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the true-correlation sensitivity scaffold."""
+    """Run the true-correlation sensitivity sweep."""
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()

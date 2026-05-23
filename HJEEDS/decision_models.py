@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/21/26 at 12:07 PM MDT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 """Decision-model metadata for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
@@ -227,7 +227,4 @@ def sample_intended_targets_for_decision_model(
         # Sample uniformly among tied deceptive actions
         return rng.choice(deceptive_actions, size=num_observations)
 
-    raise NotImplementedError(
-        "Decision-model sampling is scaffolded but not implemented yet. "
-        f"Requested true model: {decision_model.slug}."
-    )
+    raise ValueError(f"Unsupported decision model: {decision_model.slug}.")

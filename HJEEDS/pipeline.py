@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 from __future__ import annotations
 
 from dataclasses import replace
@@ -26,7 +26,7 @@ from .sampling import (
 
 # This module is the concrete seed-level recipe for the experiment.  The public
 # entry script loops over seeds, but each seed follows the exact same sequence
-# implemented here: simulate the environment, simulate all demonstrators, fit
+# defined here: simulate the environment, simulate all demonstrators, fit
 # independent JEEDS, fit the hierarchical population prior, and then rerun
 # agent-level posteriors under that fitted prior.
 

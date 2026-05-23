@@ -1,17 +1,8 @@
-# This file has been fully verified by a human researcher as of 05/20/26 at 10:14 AM MT.
-"""Initial 1D darts hierarchical-vs-JEEDS experiments.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+"""Run the baseline 1D darts hierarchical-vs-JEEDS experiment.
 
-This module implements the first end-to-end synthetic experiment for comparing
-independent JEEDS against a hierarchical empirical-Bayes extension. In
-particular, this file:
-
-1. Defines the configuration objects and command-line interface for the study.
-2. Holds the data structures for true skills, simulated data, per-method
-   estimates, and per-seed summaries.
-3. Runs simulation, independent JEEDS inference, hierarchical inference,
-   aggregation, and artifact writing.
-4. Keeps a working ``--dry-run`` mode so we can validate parser/config wiring
-   and inspect the intended workload before launching the numerical path.
+This module is the main entry point for comparing independent JEEDS against a
+hierarchical empirical-Bayes extension in the 1D darts setting.
 
 The experiment compares:
 
@@ -23,9 +14,6 @@ The experiment compares:
 The main experimental twist is uneven observation counts: some demonstrators
 will have only a handful of throws while others will have many. That is the
 setting where the hierarchical model is expected to help most.
-
-The implementation remains intentionally compact so later ablations can be
-added without reorganizing the file.
 """
 
 from __future__ import annotations

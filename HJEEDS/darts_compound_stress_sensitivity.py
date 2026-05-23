@@ -1,15 +1,12 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
-"""Scaffold the compact H-JEEDS compound-stress ablation.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+"""Run compact H-JEEDS compound-stress sensitivity experiments.
 
-This runner is meant to show that H-JEEDS was also tested under a small number
-of combined misspecification settings, without turning the paper into a giant
-factorial ablation. The planned default sweep is:
+This runner combines a small number of misspecification settings so the paper
+can show H-JEEDS under simultaneous stress without a full factorial ablation.
+The default sweep is:
 
 - compound stress setting: default, moderate compound stress, strong compound stress
 - agents per bucket: 1, 2, 5, 10, 25
-
-Execution, CSV aggregation, and compact comparison plotting are implemented.
-The dry-run path lets us review the planned workload before launching the sweep.
 """
 
 from __future__ import annotations
@@ -156,7 +153,7 @@ class CompoundStressScenario:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI options for the compound-stress ablation scaffold."""
+    """Parse CLI options for the compound-stress ablation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -180,7 +177,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned compound-stress workload and stop before simulation/inference.",
+        help="Report the compound-stress workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--aggregate-results",
@@ -371,7 +368,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[CompoundStressScenario, ...]:
-    """Build the planned compound-stress x agents-per-bucket scenarios."""
+    """Build the compound-stress x agents-per-bucket scenarios."""
 
     scenarios: list[CompoundStressScenario] = []
     for compound_stress in COMPOUND_STRESS_SPECS:
@@ -630,7 +627,7 @@ def print_dry_run_summary(
     scenarios: Sequence[CompoundStressScenario],
     output_dir: Path,
 ) -> None:
-    """Report the planned compound-stress workload without running inference."""
+    """Report the compound-stress workload without running inference."""
 
     stress_labels = [spec.label for spec in COMPOUND_STRESS_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
@@ -671,7 +668,7 @@ def print_dry_run_summary(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the compound-stress sensitivity scaffold."""
+    """Run the compound-stress sensitivity sweep."""
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()

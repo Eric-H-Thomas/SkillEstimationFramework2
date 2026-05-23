@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/08/26 at 9:59 AM MT.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 
 from __future__ import annotations
 import math
@@ -122,8 +122,8 @@ def fit_population_hyperparameters_map(
 
     The objective is still approximate relative to the full hierarchical model
     in the paper draft because it relies on the discretized prior described in
-    ``build_discrete_hierarchical_prior``. But this gives us a concrete,
-    testable MAP fit that can drive the first end-to-end experiments.
+    ``build_discrete_hierarchical_prior``. It gives the experiments a concrete,
+    testable MAP fit while keeping the estimator easy to inspect.
     """
     from scipy import optimize
 
@@ -430,10 +430,8 @@ def build_discrete_hierarchical_prior(
     if np.any(np.diff(sigma_grid) <= 0.0) or np.any(np.diff(log_lambda_grid) <= 0.0):
         raise ValueError("sigma_grid and log_lambda_grid must be strictly increasing.")
 
-    # Accept a couple of equivalent key layouts so this function stays easy to
-    # reuse once the MAP-fitting step is implemented.
     # Accept several equivalent key names so this helper is reusable with both
-    # the package's optimizer output and any future external experiments.
+    # the package's optimizer output and external experiment outputs.
     if "mu" in fitted_hyperparameters:
         mu = np.asarray(fitted_hyperparameters["mu"], dtype=float)
     elif "mean_vector" in fitted_hyperparameters:

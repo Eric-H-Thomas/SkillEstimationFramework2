@@ -1,15 +1,12 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 11:55 AM MDT.
-"""Scaffold the H-JEEDS true decision-model sensitivity ablation.
+# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+"""Run H-JEEDS true decision-model sensitivity experiments.
 
-This runner will vary the simulator's true decision-making model while keeping
+This runner varies the simulator's true decision-making model while keeping
 the H-JEEDS estimator's likelihood fixed to the default softmax assumption.
-The planned default sweep is:
+The default sweep is:
 
 - true decision model: softmax, rational, flip, deceptive
 - agents per bucket: 1, 2, 5, 10, 25
-
-Execution, CSV aggregation, and compact comparison plotting are implemented.
-The dry-run path lets us review the planned workload before launching the sweep.
 """
 
 from __future__ import annotations
@@ -93,7 +90,7 @@ class DecisionModelScenario:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI options for the decision-model ablation scaffold."""
+    """Parse CLI options for the decision-model ablation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -117,7 +114,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the planned decision-model workload and stop before simulation/inference.",
+        help="Report the decision-model workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--aggregate-results",
@@ -201,7 +198,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[DecisionModelScenario, ...]:
-    """Build the planned decision-model x agents-per-bucket scenarios."""
+    """Build the decision-model x agents-per-bucket scenarios."""
 
     scenarios: list[DecisionModelScenario] = []
     for decision_model in DECISION_MODEL_SPECS:
@@ -526,7 +523,7 @@ def print_dry_run_summary(
     scenarios: Sequence[DecisionModelScenario],
     output_dir: Path,
 ) -> None:
-    """Report the planned decision-model workload without running inference."""
+    """Report the decision-model workload without running inference."""
 
     decision_model_slugs = [model.slug for model in DECISION_MODEL_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
@@ -557,7 +554,7 @@ def print_dry_run_summary(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the decision-model sensitivity scaffold."""
+    """Run the decision-model sensitivity sweep."""
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()
