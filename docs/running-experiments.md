@@ -22,7 +22,9 @@ See [H-JEEDS Experiments](hjeeds.md) for the maintained workflow. The most commo
 python3 -m HJEEDS.darts_hierarchical_vs_jeeds --seed default --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --seed default --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --dry-run
+python3 -m HJEEDS.darts_anchor_availability_sensitivity --seed default --num-seeds 1 --dry-run
 ./submit_hjeeds_agents_per_bucket_sensitivity.sh --num-seeds 500 --seed 12345
+./submit_hjeeds_anchor_availability_sensitivity.sh --num-seeds 500 --seed 12345
 ```
 
 The current hyperprior robustness study defaults to 60 conditions. Downstream ablations default to the three representative robustness conditions unless `--condition-preset full_60` is supplied.

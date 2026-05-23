@@ -208,6 +208,54 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 
 After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
 
+## High-Data-Anchor Availability Ablation
+
+Use `HJEEDS.darts_anchor_availability_sensitivity` to test whether H-JEEDS depends on having some high-data agents available. Each scenario keeps a fixed set of one-sample agents, then adds a varying number of 25-sample anchor agents.
+
+The default sweep has six scenarios:
+
+```text
+25 one-sample agents + {0, 1, 2, 5, 10, 25} twenty-five-sample anchor agents
+```
+
+Dry run:
+
+```bash
+python3 -m HJEEDS.darts_anchor_availability_sensitivity --seed default --num-seeds 1 --dry-run
+```
+
+Run locally:
+
+```bash
+python3 -m HJEEDS.darts_anchor_availability_sensitivity \
+  --seed 12345 \
+  --num-seeds 500 \
+  --output-dir HJEEDS/results/hierarchical_darts_anchor_availability_sensitivity
+```
+
+Primary root outputs:
+
+- `anchor_availability_sensitivity_scenarios.csv`
+- `anchor_availability_sensitivity_agent_level_results.csv`
+- `anchor_availability_sensitivity_summary_by_bucket.csv`
+- `anchor_availability_sensitivity_summary_overall.csv`
+- `anchor_availability_low_data_abs_sigma_error.png`
+- `anchor_availability_low_data_abs_log_lambda_error.png`
+- `anchor_availability_low_data_abs_rationality_percent_error.png`
+
+The root plots focus on the one-sample agents, which is the main evaluation target for this ablation. Each scenario folder also contains ordinary H-JEEDS outputs, including `error_by_count_bucket.png`.
+
+Use the Slurm submit helper to launch one array task per anchor-count scenario and one dependent aggregation task:
+
+```bash
+./submit_hjeeds_anchor_availability_sensitivity.sh \
+  --seed 12345 \
+  --num-seeds 500 \
+  --output-dir HJEEDS/results/hierarchical_darts_anchor_availability_sensitivity
+```
+
+After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
+
 ## Slurm Agents-Per-Bucket Workflow
 
 Use the submit helper to launch one Slurm array task per scenario and one dependent aggregation task.
