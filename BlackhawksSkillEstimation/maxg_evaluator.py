@@ -47,12 +47,39 @@ def _extract_player_id(path: Path) -> int:
     raise ValueError(f"Unable to parse player_id from path: {path}")
 
 
+def _resolve_players_root(data_dir: Path) -> Path:
+    if (data_dir / "players").exists():
+        return data_dir / "players"
+    if data_dir.name == "players":
+        return data_dir
+    if any(data_dir.glob("player_*")):
+        return data_dir
+    return data_dir / "players"
+
+
+def _normalize_shot_group(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
 def discover_ees_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
+    players_root = _resolve_players_root(data_dir)
     if shot_group:
-        pattern = f"players/player_*/logs/{shot_group}/intermediate_estimates_{season_tag}.csv"
-    else:
-        pattern = f"players/player_*/logs/intermediate_estimates_{season_tag}.csv"
-    return sorted(data_dir.glob(pattern))
+        pattern = f"player_*/logs/{shot_group}/intermediate_estimates_{season_tag}.csv"
+        matches = sorted(players_root.glob(pattern))
+        if matches:
+            return matches
+
+        # Fallback: allow shot-group naming variants (spaces, dashes, underscores).
+        pattern = f"player_*/logs/*/intermediate_estimates_{season_tag}.csv"
+        normalized = _normalize_shot_group(shot_group)
+        return sorted(
+            path
+            for path in players_root.glob(pattern)
+            if _normalize_shot_group(path.parent.name) == normalized
+        )
+
+    pattern = f"player_*/logs/intermediate_estimates_{season_tag}.csv"
+    return sorted(players_root.glob(pattern))
 
 
 def _extract_model(path: Path) -> str | None:
