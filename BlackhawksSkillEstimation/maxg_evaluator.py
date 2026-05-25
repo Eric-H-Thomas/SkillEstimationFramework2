@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -40,8 +41,9 @@ def load_benchmark(benchmark_dir: Path, tag: str) -> tuple[pd.DataFrame, dict[in
 
 def _extract_player_id(path: Path) -> int:
     for part in path.parts:
-        if part.startswith("player_"):
-            return int(part.split("player_")[1])
+        match = re.match(r"player_(\d+)", part)
+        if match:
+            return int(match.group(1))
     raise ValueError(f"Unable to parse player_id from path: {path}")
 
 
@@ -53,18 +55,34 @@ def discover_ees_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[
     return sorted(data_dir.glob(pattern))
 
 
+def _extract_model(path: Path) -> str | None:
+    """Return 'legacy' or 'new' if path contains the model suffix, else None."""
+    for part in path.parts:
+        if part.startswith("player_"):
+            if "__" in part:
+                suffix = part.split("__", 1)[1]
+                if suffix in {"legacy", "new"}:
+                    return suffix
+            return None
+    return None
+
+
 def load_ees_xskills(
     data_dir: Path,
     season_tag: str,
     shot_group: str,
     player_ids: Sequence[int] | None = None,
+    model_filter: str | None = None,
 ) -> pd.DataFrame:
     csv_paths = discover_ees_csvs(data_dir, season_tag, shot_group)
     rows: list[dict[str, object]] = []
 
     for path in csv_paths:
         pid = _extract_player_id(path)
+        model = _extract_model(path)
         if player_ids is not None and pid not in player_ids:
+            continue
+        if model_filter is not None and model != model_filter:
             continue
 
         df = pd.read_csv(path)
@@ -78,7 +96,7 @@ def load_ees_xskills(
         else:
             raise ValueError(f"Expected execution skill column missing in {path}")
 
-        rows.append({"player_id": pid, "xskill_ees": xskill, "csv_path": str(path)})
+        rows.append({"player_id": pid, "xskill_ees": xskill, "csv_path": str(path), "model": model})
 
     if not rows:
         raise RuntimeError("No EES CSVs found for the requested season/shot group")
@@ -181,6 +199,7 @@ def evaluate_maxg(
     for _, row in xskill_table.iterrows():
         player_id = int(row["player_id"])
         xskill = float(row["xskill_ees"])
+        model = row.get("model") if hasattr(row, "get") else None
         maxg_sum = compute_maxg_sum(angular_shots, xskill)
         print(f"MAXG finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
 
@@ -188,6 +207,7 @@ def evaluate_maxg(
             {
                 "player_id": player_id,
                 "xskill_ees": xskill,
+                "model": model,
                 "maxg_sum": maxg_sum,
                 "benchmark_tag": benchmark_tag,
                 "season_tag": season_tag,
@@ -336,6 +356,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Seed for debug and smoke-test sampling.",
     )
+    parser.add_argument(
+        "--model-filter",
+        choices=("legacy", "new"),
+        default=None,
+        help="When running against comparison data, filter to 'legacy' or 'new' suffixed player folders.",
+    )
     return parser
 
 
@@ -357,6 +383,7 @@ def main() -> None:
         season_tag=args.season_tag,
         shot_group=args.shot_group,
         player_ids=player_ids,
+        model_filter=args.model_filter,
     )
 
     rng = np.random.default_rng(args.rng_seed)
