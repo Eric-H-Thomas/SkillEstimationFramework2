@@ -8,14 +8,13 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${script_dir}"
+cd "$HOME/research/SkillEstimationFramework2"
 
 module load miniforge3
 eval "$(conda shell.bash hook)"
 conda activate skill-estimation
 
-export PYTHONPATH="${script_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 export MPLBACKEND=Agg
 
 python_bin="${PYTHON_BIN:-python3}"
