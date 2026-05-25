@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# This file has been fully reviewed by a human researcher as of 05/25/26 at 11:49 AM MDT.
 from __future__ import annotations
 
 import argparse
@@ -342,12 +342,13 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     # Parse the structured fields once here so the rest of the code only needs
     # to reason about typed values, not raw CLI strings.
     count_buckets = _parse_count_buckets(args.count_buckets)
+    environment = getattr(args, "environment", "1d")
     delta = args.delta
     sigma_min = args.sigma_min
     sigma_max = args.sigma_max
     true_population = DEFAULT_TRUE_POPULATION
     hyperpriors = DEFAULT_HYPERPRIORS
-    if args.environment == "2d":
+    if environment == "2d":
         if args.delta == DEFAULT_DELTA:
             delta = DEFAULT_DELTA_2D
         if args.sigma_min == DEFAULT_SIGMA_MIN:
@@ -359,10 +360,10 @@ def build_config_from_args(args: argparse.Namespace) -> ExperimentConfig:
 
     output_dir = Path(args.output_dir)
     if args.output_dir == str(DEFAULT_OUTPUT_DIR):
-        output_dir = output_dir.with_name(f"{output_dir.name}_{args.environment}")
+        output_dir = output_dir.with_name(f"{output_dir.name}_{environment}")
 
     config = ExperimentConfig(
-        environment=args.environment,
+        environment=environment,
         seed=args.seed,
         num_seeds=args.num_seeds,
         num_agents=args.num_agents,
