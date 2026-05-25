@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# This file has been fully edited by a human researcher as of 05/25/26 at 11:47 AM MDT.
 """Run agents-per-bucket ablations crossed with hyperprior sensitivity.
 
 This script repeats selected hyperprior-robustness conditions for several
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -226,6 +227,25 @@ def _seed_values_label(seed_values: Sequence[int]) -> str:
     if len(seed_values) <= 10:
         return str(tuple(seed_values))
     return f"{len(seed_values)} seeds ({seed_values[0]} through {seed_values[-1]})"
+
+
+def scenario_index_from_environment() -> int | None:
+    """Return a scenario index supplied by a Slurm-style environment variable."""
+
+    raw_value = os.environ.get("SCENARIO_INDEX") or os.environ.get("SLURM_ARRAY_TASK_ID")
+    if raw_value is None or raw_value == "":
+        return None
+
+    try:
+        scenario_index = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            "SCENARIO_INDEX or SLURM_ARRAY_TASK_ID must be an integer. "
+            f"Received: {raw_value}."
+        ) from exc
+    if scenario_index < 0:
+        raise ValueError(f"Scenario index must be nonnegative. Received: {scenario_index}.")
+    return scenario_index
 
 
 def build_config_for_agents_per_bucket(
@@ -570,8 +590,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Parse CLI arguments; ``argv`` is only supplied by tests or programmatic callers
     args = parse_args(argv)
 
+    # Prefer the explicit CLI scenario index, but allow Slurm arrays to provide it through the environment
+    environment_scenario_index = scenario_index_from_environment()
+    scenario_index = args.scenario_index if args.scenario_index is not None else environment_scenario_index
+    if (
+        args.scenario_index is not None
+        and environment_scenario_index is not None
+        and args.scenario_index != environment_scenario_index
+    ):
+        raise ValueError(
+            "--scenario-index and SCENARIO_INDEX/SLURM_ARRAY_TASK_ID disagree. "
+            f"Received {args.scenario_index} and {environment_scenario_index}."
+        )
+
     # A run cannot both compute one scenario and aggregate already-computed scenarios
-    if args.scenario_index is not None and args.aggregate_results:
+    if scenario_index is not None and args.aggregate_results:
         # Fail early if mutually exclusive cluster modes were requested together
         raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
 
@@ -607,15 +640,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     # Scenario-index mode is used by one Slurm array task to compute one scenario
-    if args.scenario_index is not None:
+    if scenario_index is not None:
         # Validate that the requested index exists in the flattened scenario list
-        if args.scenario_index < 0 or args.scenario_index >= len(scenarios):
+        if scenario_index < 0 or scenario_index >= len(scenarios):
             raise ValueError(
                 f"scenario_index must be between 0 and {len(scenarios) - 1}. "
-                f"Received {args.scenario_index}."
+                f"Received {scenario_index}."
             )
         # Run exactly the requested scenario and write its scenario-level artifacts
-        run_single_scenario(scenarios[args.scenario_index])
+        run_single_scenario(scenarios[scenario_index])
         return 0
 
     # Aggregation mode is the final Slurm dependency task after scenario tasks finish
