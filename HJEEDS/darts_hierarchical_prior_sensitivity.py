@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# This file has been fully verified by a human researcher as of 05/25/26 at 1:35 PM MDT.
 """Run hyperprior-robustness sweeps for hierarchical 1D darts.
 
 This script wraps ``HJEEDS/darts_hierarchical_vs_jeeds.py`` and reruns the
@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -273,6 +274,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Report the robustness workload and stop before simulation/inference.",
+    )
+    parser.add_argument(
+        "--scenario-index",
+        type=int,
+        default=None,
+        help=(
+            "Run only one 0-based condition from the hyperprior robustness grid. "
+            "Used by Slurm array launchers."
+        ),
+    )
+    parser.add_argument(
+        "--aggregate-results",
+        action="store_true",
+        help=(
+            "Collect already-computed condition folders into root combined CSVs and plots. "
+            "Used by Slurm dependency launchers."
+        ),
     )
 
     return parser.parse_args(argv)
@@ -666,6 +684,37 @@ def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[di
             writer.writerow({column: row.get(column, "") for column in header})
 
 
+def _read_dict_rows(input_path: Path, condition_slug: str) -> list[dict[str, Any]]:
+    """Read one condition CSV and fail clearly if the expected artifact is missing."""
+
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Missing expected artifact for condition {condition_slug}: {input_path}"
+        )
+
+    with input_path.open("r", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def scenario_index_from_environment() -> int | None:
+    """Return a scenario index supplied by a Slurm-style environment variable."""
+
+    raw_value = os.environ.get("SCENARIO_INDEX") or os.environ.get("SLURM_ARRAY_TASK_ID")
+    if raw_value is None or raw_value == "":
+        return None
+
+    try:
+        scenario_index = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            "SCENARIO_INDEX or SLURM_ARRAY_TASK_ID must be an integer. "
+            f"Received: {raw_value}."
+        ) from exc
+    if scenario_index < 0:
+        raise ValueError(f"Scenario index must be nonnegative. Received: {scenario_index}.")
+    return scenario_index
+
+
 def run_condition(
     base_config: base_experiment.ExperimentConfig,
     condition: PriorSensitivityCondition,
@@ -714,6 +763,85 @@ def run_condition(
     combined_overall_rows = [{**prefix, **row} for row in summary_overall_rows]
 
     return combined_agent_rows, combined_bucket_rows, combined_overall_rows, prefix
+
+
+def run_single_condition(
+    config: base_experiment.ExperimentConfig,
+    condition: PriorSensitivityCondition,
+    scenario_index: int,
+) -> None:
+    """Run one hyperprior robustness condition for Slurm array execution."""
+
+    print(
+        "[prior-sensitivity] "
+        f"Running scenario {scenario_index}: {condition.condition_slug} "
+        f"({config.num_agents} agents/seed)",
+        flush=True,
+    )
+    run_condition(config, condition)
+    print(
+        "[prior-sensitivity] "
+        f"Wrote scenario results to {(config.output_dir / condition.condition_slug).resolve()}",
+        flush=True,
+    )
+
+
+def aggregate_existing_results(
+    config: base_experiment.ExperimentConfig,
+    conditions: Sequence[PriorSensitivityCondition],
+) -> PriorSensitivityGridResult:
+    """Collect precomputed condition folders into the combined robustness artifacts."""
+
+    condition_tuple = tuple(conditions)
+    all_agent_rows: list[dict[str, Any]] = []
+    all_bucket_rows: list[dict[str, Any]] = []
+    all_overall_rows: list[dict[str, Any]] = []
+    condition_rows: list[dict[str, Any]] = []
+
+    for condition in condition_tuple:
+        hyperpriors = build_condition_hyperpriors(config.hyperpriors, condition)
+        metadata_row = condition_metadata_row(condition, hyperpriors)
+        condition_output_dir = config.output_dir / condition.condition_slug
+        output_paths = base_experiment.planned_output_paths(condition_output_dir)
+
+        agent_rows = _read_dict_rows(output_paths["agent_level_csv"], condition.condition_slug)
+        bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], condition.condition_slug)
+        overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], condition.condition_slug)
+
+        condition_rows.append(metadata_row)
+        all_agent_rows.extend({**metadata_row, **row} for row in agent_rows)
+        all_bucket_rows.extend({**metadata_row, **row} for row in bucket_rows)
+        all_overall_rows.extend({**metadata_row, **row} for row in overall_rows)
+
+    output_dir = config.output_dir
+    condition_columns = CONDITION_METADATA_HEADER
+    _write_dict_rows(output_dir / CONDITION_METADATA_FILENAME, condition_columns, condition_rows)
+    _write_dict_rows(
+        output_dir / COMBINED_AGENT_LEVEL_FILENAME,
+        condition_columns + base_experiment.AGENT_LEVEL_CSV_HEADER,
+        all_agent_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
+        condition_columns + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
+        all_bucket_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
+        condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
+        all_overall_rows,
+    )
+    plot_lowest_bucket_heatmap(output_dir / LOWEST_BUCKET_HEATMAP_FILENAME, all_bucket_rows, condition_tuple)
+
+    print(f"[prior-sensitivity] Aggregated results into {output_dir.resolve()}", flush=True)
+    return PriorSensitivityGridResult(
+        output_dir=output_dir,
+        conditions=condition_tuple,
+        condition_rows=condition_rows,
+        agent_rows=all_agent_rows,
+        bucket_rows=all_bucket_rows,
+        overall_rows=all_overall_rows,
+    )
 
 
 def run_sensitivity_grid(
@@ -1019,11 +1147,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the requested prior-sensitivity sweep."""
 
     args = parse_args(argv)
+    environment_scenario_index = scenario_index_from_environment()
+    scenario_index = args.scenario_index if args.scenario_index is not None else environment_scenario_index
+    if (
+        args.scenario_index is not None
+        and environment_scenario_index is not None
+        and args.scenario_index != environment_scenario_index
+    ):
+        raise ValueError(
+            "--scenario-index and SCENARIO_INDEX/SLURM_ARRAY_TASK_ID disagree. "
+            f"Received {args.scenario_index} and {environment_scenario_index}."
+        )
+    if scenario_index is not None and args.aggregate_results:
+        raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
+
     config = build_base_config_from_args(args)
-    conditions = build_sensitivity_conditions(args)
+    conditions = tuple(build_sensitivity_conditions(args))
 
     if config.dry_run:
         print_dry_run_summary(config, conditions)
+        return 0
+
+    if scenario_index is not None:
+        if scenario_index >= len(conditions):
+            raise ValueError(
+                f"scenario_index must be between 0 and {len(conditions) - 1}. "
+                f"Received {scenario_index}."
+            )
+        run_single_condition(config, conditions[scenario_index], scenario_index)
+        return 0
+
+    if args.aggregate_results:
+        aggregate_existing_results(config, conditions)
         return 0
 
     run_sensitivity_grid(config, conditions)
