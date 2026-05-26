@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -80,6 +81,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=25,
         help="Max number of events to plot (default: 25).",
+    )
+    p.add_argument(
+        "--from-plot-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional existing plot directory to re-render. If provided, the script parses event IDs "
+            "from filenames (season_*_event_*_*.png) and ignores the Phase 1 report and filters."
+        ),
     )
     p.add_argument(
         "--seasons",
@@ -315,6 +325,43 @@ def _sample_overlap_events_filtered(
     return picked
 
 
+def _safe_min_max(x: np.ndarray) -> tuple[float | None, float | None]:
+    arr = np.asarray(x, dtype=float)
+    if arr.size == 0:
+        return None, None
+    vmin = float(np.nanmin(arr))
+    vmax = float(np.nanmax(arr))
+    if not np.isfinite(vmin) or not np.isfinite(vmax):
+        return None, None
+    if vmax <= vmin:
+        vmax = vmin + 1e-9
+    return vmin, vmax
+
+
+def _safe_mean(x: np.ndarray) -> float:
+    arr = np.asarray(x, dtype=float)
+    if arr.size == 0:
+        return 0.0
+    m = float(np.nanmean(arr))
+    if not np.isfinite(m):
+        return 0.0
+    return m
+
+
+def _annotate_avg_xg(ax: plt.Axes, avg_xg: float) -> None:
+    ax.text(
+        0.02,
+        0.98,
+        f"avg xG: {avg_xg:.4f}",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=8,
+        color="#222222",
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="#ffffff", edgecolor="none", alpha=0.75),
+    )
+
+
 def _safe_max(x: np.ndarray) -> float:
     x = np.asarray(x, dtype=float)
     if x.size == 0:
@@ -323,6 +370,43 @@ def _safe_max(x: np.ndarray) -> float:
     if not np.isfinite(m):
         return 0.0
     return m
+
+
+def _parse_plot_dir_events(plot_dir: Path) -> list[SampleEvent]:
+    if not plot_dir.exists():
+        raise FileNotFoundError(f"Plot dir not found: {plot_dir}")
+
+    pattern = re.compile(r"^(?:season_(\d+)_)?event_(\d+)_([a-z_]+)\.png$")
+    events: list[SampleEvent] = []
+
+    for path in sorted(plot_dir.glob("*.png")):
+        m = pattern.match(path.name)
+        if not m:
+            continue
+        season_str, event_str, source_tag = m.groups()
+        season = int(season_str) if season_str else None
+        event_id = int(event_str)
+
+        bucket = "overlap"
+        if source_tag:
+            has_legacy = "legacy" in source_tag
+            has_new = "new" in source_tag
+            if has_legacy and not has_new:
+                bucket = "legacy_only"
+            elif has_new and not has_legacy:
+                bucket = "new_only"
+
+        events.append(SampleEvent(event_id=event_id, season=season, sample_bucket=bucket))
+
+    # De-dupe while preserving order.
+    seen: set[int] = set()
+    deduped: list[SampleEvent] = []
+    for s in events:
+        if s.event_id in seen:
+            continue
+        seen.add(s.event_id)
+        deduped.append(s)
+    return deduped
 
 
 def _plot_event(
@@ -357,30 +441,36 @@ def _plot_event(
     if legacy_map is not None and new_map is not None:
         legacy_map_arr = np.asarray(legacy_map, dtype=float)
         new_map_arr = np.asarray(new_map, dtype=float)
-        vmax = max(_safe_max(legacy_map_arr), _safe_max(new_map_arr))
-        vmax = vmax if vmax > 0 else None
+        legacy_vmin, legacy_vmax = _safe_min_max(legacy_map_arr)
+        new_vmin, new_vmax = _safe_min_max(new_map_arr)
+        legacy_avg = _safe_mean(legacy_map_arr)
+        new_avg = _safe_mean(new_map_arr)
 
         fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.2), constrained_layout=True)
         (ax_l, ax_n) = axes
 
-        plot_xg_map_cartesian_native(
+        _, sm_l = plot_xg_map_cartesian_native(
             legacy_map_arr,
             net_coords=legacy_coords,
             ax=ax_l,
             title=f"Legacy ({legacy_map_arr.shape[0]}×{legacy_map_arr.shape[1]})",
-            vmin=0.0,
-            vmax=vmax,
+            vmin=legacy_vmin,
+            vmax=legacy_vmax,
         )
-        _, sm = plot_xg_map_cartesian_native(
+        _annotate_avg_xg(ax_l, legacy_avg)
+
+        _, sm_n = plot_xg_map_cartesian_native(
             new_map_arr,
             net_coords=new_coords,
             ax=ax_n,
             title=f"New ({new_map_arr.shape[0]}×{new_map_arr.shape[1]})",
-            vmin=0.0,
-            vmax=vmax,
+            vmin=new_vmin,
+            vmax=new_vmax,
         )
+        _annotate_avg_xg(ax_n, new_avg)
 
-        fig.colorbar(sm, ax=axes, shrink=0.88, pad=0.02, aspect=20)
+        fig.colorbar(sm_l, ax=ax_l, shrink=0.88, pad=0.02, aspect=20)
+        fig.colorbar(sm_n, ax=ax_n, shrink=0.88, pad=0.02, aspect=20)
         st = f"Season {season} | " if season is not None else ""
         fig.suptitle(f"{st}Event {event_id}", fontsize=11)
         fig.savefig(out_path, dpi=160)
@@ -393,8 +483,8 @@ def _plot_event(
     solo_label = "Legacy" if legacy_map is not None else "New"
 
     solo_arr = np.asarray(solo_map, dtype=float)
-    vmax = _safe_max(solo_arr)
-    vmax = vmax if vmax > 0 else None
+    vmin, vmax = _safe_min_max(solo_arr)
+    avg_xg = _safe_mean(solo_arr)
 
     fig, ax = plt.subplots(1, 1, figsize=(5.6, 4.2), constrained_layout=True)
     _, sm = plot_xg_map_cartesian_native(
@@ -402,9 +492,10 @@ def _plot_event(
         net_coords=solo_coords,
         ax=ax,
         title=f"{solo_label} ({solo_arr.shape[0]}×{solo_arr.shape[1]})",
-        vmin=0.0,
+        vmin=vmin,
         vmax=vmax,
     )
+    _annotate_avg_xg(ax, avg_xg)
     fig.colorbar(sm, ax=ax, shrink=0.92, pad=0.02, aspect=20)
     st = f"Season {season} | " if season is not None else ""
     fig.suptitle(f"{st}Event {event_id} | {solo_label}-only", fontsize=11)
@@ -550,13 +641,27 @@ def main() -> None:
     if args.top_n <= 0:
         raise ValueError("--top-n must be > 0")
 
+    use_plot_dir = args.from_plot_dir is not None
     use_filtered_sampling = bool(args.player_ids_file or args.shot_types)
 
     payload: dict | None = None
     report_path: Path | None = None
     sample_events: list[SampleEvent] = []
 
-    if use_filtered_sampling:
+    if use_plot_dir:
+        print("=" * 80)
+        print("Phase 2: xG-map migration sanity checks (replot existing batch)")
+        print("=" * 80)
+        print(f"Plot dir:      {args.from_plot_dir}")
+        print(f"Max events:    {args.max_events}")
+        print(f"Plots root:    {args.plots_root}")
+        print("=" * 80)
+
+        sample_events = _parse_plot_dir_events(args.from_plot_dir)
+        if not sample_events:
+            raise RuntimeError(f"No event IDs found in plot dir: {args.from_plot_dir}")
+        sample_events = sample_events[: args.max_events]
+    elif use_filtered_sampling:
         seasons = args.seasons if args.seasons else [20232024, 20242025]
         player_ids = _load_player_ids(args.player_ids_file) if args.player_ids_file else None
         shot_types = list(args.shot_types) if args.shot_types else None
@@ -597,7 +702,7 @@ def main() -> None:
     timestamp = started_at.strftime("%Y%m%d_%H%M%S")
     stem = f"xg_map_migration_phase2_{timestamp}"
 
-    if not use_filtered_sampling:
+    if not use_filtered_sampling and not use_plot_dir:
         print("=" * 80)
         print("Phase 2: xG-map migration sanity checks")
         print("=" * 80)
