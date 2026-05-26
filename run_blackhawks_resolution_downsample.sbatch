@@ -29,7 +29,7 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 
 if [[ -z "${BH_WORKER_MODE:-}" && -z "${BH_MAXG_MODE:-}" ]]; then
-  read -r TOTAL_JOBS SEASON_COUNT SEASONS_CSV PIDS_FILE <<EOF
+  IFS='|' read -r TOTAL_JOBS SEASON_COUNT SEASONS_CSV PIDS_FILE <<EOF
 $(python3 - "$CONFIG_PATH" "$OUTPUT_ROOT" <<'PY'
 import json
 import pathlib
@@ -117,7 +117,7 @@ EOF
     --export=ALL,BH_WORKER_MODE=1,BH_CONFIG_PATH="$CONFIG_PATH",BH_DATA_ROOT="$DATA_ROOT",BH_OUTPUT_ROOT="$OUTPUT_ROOT",BH_TARGET_NZ="$TARGET_NZ",BH_TARGET_NY="$TARGET_NY" \
     "$0")
 
-  SEASONS="${SEASONS_CSV//,/ }"
+  SEASONS="$SEASONS_CSV"
   MAXG_ARRAY_SPEC="0-$((SEASON_COUNT - 1))"
   echo "Submitting MAXG array: $MAXG_ARRAY_SPEC (afterok:$JEEDS_JOB_ID)"
 
@@ -147,7 +147,7 @@ if [[ -n "${BH_MAXG_MODE:-}" ]]; then
     exit 1
   fi
 
-  IFS=' ' read -r -a SEASON_LIST <<< "$BH_SEASONS"
+  IFS=',' read -r -a SEASON_LIST <<< "$BH_SEASONS"
   TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
   if (( TASK_ID < 0 || TASK_ID >= ${#SEASON_LIST[@]} )); then
