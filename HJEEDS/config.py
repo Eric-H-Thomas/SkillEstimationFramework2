@@ -40,10 +40,12 @@ setting where the hierarchical model is expected to help most.
 # -----------------------------------------------------------------------------
 
 # These defaults define the baseline study configuration in one inspectable place
+# Compare to Environments/Darts/makeAgents.py's sigma range of 0.5 - 14.5
 DEFAULT_SIGMA_MIN = 0.5
 DEFAULT_SIGMA_MAX = 4.5
 DEFAULT_NUM_SIGMA_GRID = 21
 # 2D defaults focus on the good-to-moderate xskill band used in legacy setups.
+# Compare to Environments/Darts/makeAgentsMulti.py's sigma ranges of "good" 8-15 and "bad" 130-145
 DEFAULT_SIGMA_MIN_2D = 8.0
 DEFAULT_SIGMA_MAX_2D = 60.0
 
