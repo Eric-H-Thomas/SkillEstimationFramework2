@@ -11,6 +11,7 @@ group_count="10"
 seeds_per_group="500"
 base_seed_start="1000"
 dry_run="0"
+agg_only="0"
 
 usage() {
   cat <<'USAGE'
@@ -21,6 +22,7 @@ Options:
   --group-count N         Number of group dirs (default: 10).
   --seeds-per-group N     Seeds per group (default: 500).
   --base-seed-start N     First base seed for group 0 (default: 1000).
+  --agg-only              Submit only the aggregation job.
   --dry-run               Print sbatch commands without submitting.
   -h, --help              Show this help.
 USAGE
@@ -46,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       dry_run="1"
+      shift
+      ;;
+    --agg-only)
+      agg_only="1"
       shift
       ;;
     -h|--help)
@@ -98,8 +104,24 @@ agg_cmd=(
 )
 
 if [[ "${dry_run}" == "1" ]]; then
+  if [[ "${agg_only}" == "1" ]]; then
+    echo "Aggregation submission: ${agg_cmd[*]/__ARRAY_JOB_ID__/JOB_ID}"
+    exit 0
+  fi
   echo "Array submission: ${array_cmd[*]}"
   echo "Aggregation submission: ${agg_cmd[*]/__ARRAY_JOB_ID__/JOB_ID}"
+  exit 0
+fi
+
+if [[ "${agg_only}" == "1" ]]; then
+  agg_only_cmd=(
+    sbatch
+    --array=0
+    --export="${export_env},AGGREGATE_RESULTS=1"
+    run_hjeeds_2d_cluster_tests.sbatch
+  )
+  agg_output="$(${agg_only_cmd[@]})"
+  echo "${agg_output}"
   exit 0
 fi
 
@@ -107,6 +129,6 @@ array_output="$(${array_cmd[@]})"
 echo "${array_output}"
 array_job_id="$(awk '{print $4}' <<< "${array_output}")"
 
-agg_cmd[3]="--dependency=afterok:${array_job_id}"
+agg_cmd[2]="--dependency=afterok:${array_job_id}"
 agg_output="$(${agg_cmd[@]})"
 echo "${agg_output}"
