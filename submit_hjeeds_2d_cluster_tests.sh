@@ -10,6 +10,8 @@ parts_per_group="10"
 group_count="10"
 seeds_per_group="500"
 base_seed_start="1000"
+agg_time="02:00:00"
+agg_mem="4G"
 dry_run="0"
 agg_only="0"
 
@@ -22,6 +24,8 @@ Options:
   --group-count N         Number of group dirs (default: 10).
   --seeds-per-group N     Seeds per group (default: 500).
   --base-seed-start N     First base seed for group 0 (default: 1000).
+  --agg-time HH:MM:SS     Walltime for aggregation job (default: 02:00:00).
+  --agg-mem MEM           Memory for aggregation job (default: 4G).
   --agg-only              Submit only the aggregation job.
   --dry-run               Print sbatch commands without submitting.
   -h, --help              Show this help.
@@ -44,6 +48,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --base-seed-start)
       base_seed_start="$2"
+      shift 2
+      ;;
+    --agg-time)
+      agg_time="$2"
+      shift 2
+      ;;
+    --agg-mem)
+      agg_mem="$2"
       shift 2
       ;;
     --dry-run)
@@ -82,6 +94,14 @@ if ! [[ "${base_seed_start}" =~ ^[0-9]+$ ]] || (( base_seed_start < 0 )); then
   echo "Error: --base-seed-start must be a nonnegative integer." >&2
   exit 1
 fi
+if [[ -z "${agg_time}" ]]; then
+  echo "Error: --agg-time must be non-empty." >&2
+  exit 1
+fi
+if [[ -z "${agg_mem}" ]]; then
+  echo "Error: --agg-mem must be non-empty." >&2
+  exit 1
+fi
 
 array_size=$(( group_count * parts_per_group ))
 array_spec="0-$((array_size - 1))"
@@ -99,6 +119,8 @@ agg_cmd=(
   sbatch
   --array=0
   --dependency=afterok:__ARRAY_JOB_ID__
+  --time="${agg_time}"
+  --mem="${agg_mem}"
   --export="${export_env},AGGREGATE_RESULTS=1"
   run_hjeeds_2d_cluster_tests.sbatch
 )
@@ -117,6 +139,8 @@ if [[ "${agg_only}" == "1" ]]; then
   agg_only_cmd=(
     sbatch
     --array=0
+    --time="${agg_time}"
+    --mem="${agg_mem}"
     --export="${export_env},AGGREGATE_RESULTS=1"
     run_hjeeds_2d_cluster_tests.sbatch
   )
