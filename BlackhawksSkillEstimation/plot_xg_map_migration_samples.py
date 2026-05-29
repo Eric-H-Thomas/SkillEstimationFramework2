@@ -35,10 +35,18 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
 from BlackhawksAPI import db
 from BlackhawksAPI import queries
-from BlackhawksSkillEstimation.blackhawks_plots import plot_xg_map_cartesian_native
+from BlackhawksSkillEstimation.blackhawks_plots import (
+    _infer_bhawks_grid_yz,
+    _make_custom_cmap,
+    _plot_projected_net_outline,
+    plot_xg_map_cartesian_native,
+)
+from Environments.Hockey.getAngularHeatmapsPerPlayer import getAngularHeatmap
 
 LEGACY_TABLE = "hawks_analytics.post_shot_xg_value_maps"
 NEW_TABLE = "hawks_analytics.expected_goal_values_post_shot_net_grid"
@@ -90,6 +98,19 @@ def _build_parser() -> argparse.ArgumentParser:
             "Optional existing plot directory to re-render. If provided, the script parses event IDs "
             "from filenames (season_*_event_*_*.png) and ignores the Phase 1 report and filters."
         ),
+    )
+    p.add_argument(
+        "--with-angular",
+        action="store_true",
+        help=(
+            "Also write a parallel plot directory that includes angular panels (cartesian top row, "
+            "angular bottom row)."
+        ),
+    )
+    p.add_argument(
+        "--no-angular-net-outline",
+        action="store_true",
+        help="Disable projected net outline on angular panels.",
     )
     p.add_argument(
         "--seasons",
@@ -348,6 +369,187 @@ def _safe_mean(x: np.ndarray) -> float:
     return m
 
 
+def _safe_float_or_none(value: object) -> float | None:
+    try:
+        out = float(value)
+    except Exception:  # noqa: BLE001
+        return None
+    if not np.isfinite(out):
+        return None
+    return out
+
+
+def _fetch_shot_metadata(event_ids: list[int]) -> dict[int, dict[str, object]]:
+    if not event_ids:
+        return {}
+
+    event_ids_str = ",".join(str(int(eid)) for eid in event_ids)
+    query = f"""
+        SELECT
+            e.EVENT_ID_HAWKS AS event_id,
+            e.X_ADJ_COORD    AS start_x,
+            e.Y_ADJ_COORD    AS start_y,
+            e.SHOT_IS_GOAL   AS shot_is_goal,
+            st.GOALLINE_Y_MODEL AS location_y,
+            st.GOALLINE_Z_MODEL AS location_z
+        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
+        LEFT JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
+          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
+        WHERE e.EVENT_ID_HAWKS IN ({event_ids_str})
+        ;
+    """
+
+    df = db.get_df(query).rename(columns=str.lower)
+    if df.empty:
+        return {}
+
+    if "location_y" in df.columns:
+        df["location_y"] = -df["location_y"]
+
+    meta: dict[int, dict[str, object]] = {}
+    for row in df.to_dict(orient="records"):
+        event_id = row.get("event_id")
+        if event_id is None:
+            continue
+        meta[int(event_id)] = {
+            "start_x": _safe_float_or_none(row.get("start_x")),
+            "start_y": _safe_float_or_none(row.get("start_y")),
+            "location_y": _safe_float_or_none(row.get("location_y")),
+            "location_z": _safe_float_or_none(row.get("location_z")),
+            "shot_is_goal": bool(row.get("shot_is_goal", False)),
+        }
+    return meta
+
+
+def _resolve_player_location(meta: dict[str, object] | None) -> list[float] | None:
+    if not meta:
+        return None
+    start_x = meta.get("start_x")
+    start_y = meta.get("start_y")
+    if start_x is None or start_y is None:
+        return None
+    return [float(start_x), float(start_y)]
+
+
+def _resolve_executed_action(
+    *,
+    map_payload: dict[str, object] | None,
+    meta: dict[str, object] | None,
+) -> list[float] | None:
+    if map_payload is not None:
+        net_coords = map_payload.get("net_coords")
+        if net_coords is not None:
+            try:
+                return [float(net_coords[0]), float(net_coords[1])]
+            except Exception:  # noqa: BLE001
+                pass
+    if not meta:
+        return None
+    loc_y = meta.get("location_y")
+    loc_z = meta.get("location_z")
+    if loc_y is None or loc_z is None:
+        return None
+    return [float(loc_y), float(loc_z)]
+
+
+def _compute_angular_data(
+    value_map: np.ndarray,
+    *,
+    player_location: list[float],
+    executed_action: list[float],
+) -> dict[str, object] | None:
+    heatmap = np.asarray(value_map, dtype=float)
+    grid_y, grid_z = _infer_bhawks_grid_yz(heatmap)
+
+    (
+        _dirs,
+        _elevations,
+        listed_targets_angular,
+        _grid_targets_angular,
+        _listed_targets_angular2yz,
+        _grid_targets_angular2yz,
+        listed_utilities_computed,
+        _grid_utilities_computed,
+        executed_action_angular,
+        skip,
+        _,
+    ) = getAngularHeatmap(
+        heatmap,
+        np.asarray(player_location),
+        np.asarray(executed_action),
+        grid_y=grid_y,
+        grid_z=grid_z,
+    )
+
+    if skip:
+        return None
+
+    targets = np.asarray(listed_targets_angular)
+    values = np.asarray(listed_utilities_computed).reshape(-1)
+    exec_ang = np.asarray(executed_action_angular).reshape(-1)
+    return {
+        "targets": targets,
+        "values": values,
+        "exec": exec_ang,
+    }
+
+
+def _plot_angular_panel(
+    *,
+    ax: plt.Axes,
+    value_map: np.ndarray,
+    player_location: list[float] | None,
+    executed_action: list[float] | None,
+    title: str,
+    show_net_outline: bool,
+    is_goal: bool,
+) -> ScalarMappable | None:
+    if player_location is None or executed_action is None:
+        ax.text(0.5, 0.5, "missing shot metadata", transform=ax.transAxes, ha="center", va="center")
+        ax.set_axis_off()
+        ax.set_title(title)
+        return None
+
+    data = _compute_angular_data(
+        value_map,
+        player_location=player_location,
+        executed_action=executed_action,
+    )
+    if data is None:
+        ax.text(0.5, 0.5, "angular skipped", transform=ax.transAxes, ha="center", va="center")
+        ax.set_axis_off()
+        ax.set_title(title)
+        return None
+
+    targets = data["targets"]
+    values = data["values"]
+    exec_ang = data["exec"]
+
+    vmin, vmax = _safe_min_max(values)
+    cmap = _make_custom_cmap()
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    colors = cmap(norm(values))
+
+    ax.scatter(targets[:, 0], targets[:, 1], c=colors, s=8, linewidths=0)
+    if show_net_outline:
+        _plot_projected_net_outline(ax, player_location, color="gray", lw=1.0)
+
+    marker = "*" if is_goal else "o"
+    color = "#FFD700" if is_goal else "steelblue"
+    size = 160 if is_goal else 80
+    ax.scatter(exec_ang[0], exec_ang[1], c=color, edgecolors="k", marker=marker, s=size, zorder=5)
+
+    ax.set_title(title)
+    ax.set_xlabel("Direction (rad)")
+    ax.set_ylabel("Elevation (rad)")
+    ax.set_aspect("equal", adjustable="box")
+    _annotate_avg_xg(ax, _safe_mean(values))
+
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    return sm
+
+
 def _annotate_avg_xg(ax: plt.Axes, avg_xg: float) -> None:
     ax.text(
         0.02,
@@ -497,6 +699,153 @@ def _plot_event(
     )
     _annotate_avg_xg(ax, avg_xg)
     fig.colorbar(sm, ax=ax, shrink=0.92, pad=0.02, aspect=20)
+    st = f"Season {season} | " if season is not None else ""
+    fig.suptitle(f"{st}Event {event_id} | {solo_label}-only", fontsize=11)
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+    return out_path
+
+
+def _plot_event_cartesian_angular(
+    *,
+    event_id: int,
+    season: int | None,
+    legacy: dict[str, object] | None,
+    new: dict[str, object] | None,
+    out_dir: Path,
+    shot_meta: dict[str, object] | None,
+    show_net_outline: bool,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_map = None if legacy is None else legacy.get("value_map")
+    legacy_coords = None if legacy is None else legacy.get("net_coords")
+
+    new_map = None if new is None else new.get("value_map")
+    new_coords = None if new is None else new.get("net_coords")
+
+    sources: list[str] = []
+    if legacy_map is not None:
+        sources.append("legacy")
+    if new_map is not None:
+        sources.append("new")
+    if not sources:
+        raise ValueError(f"Event {event_id}: neither legacy nor new map present")
+
+    season_tag = f"season_{season}_" if season is not None else ""
+    source_tag = "_".join(sources)
+    filename = f"{season_tag}event_{event_id}_{source_tag}.png"
+    out_path = out_dir / filename
+
+    player_location = _resolve_player_location(shot_meta)
+
+    if legacy_map is not None and new_map is not None:
+        legacy_map_arr = np.asarray(legacy_map, dtype=float)
+        new_map_arr = np.asarray(new_map, dtype=float)
+
+        fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.2), constrained_layout=True)
+        ax_l_cart, ax_n_cart = axes[0]
+        ax_l_ang, ax_n_ang = axes[1]
+
+        legacy_vmin, legacy_vmax = _safe_min_max(legacy_map_arr)
+        new_vmin, new_vmax = _safe_min_max(new_map_arr)
+        legacy_avg = _safe_mean(legacy_map_arr)
+        new_avg = _safe_mean(new_map_arr)
+
+        _, sm_l = plot_xg_map_cartesian_native(
+            legacy_map_arr,
+            net_coords=legacy_coords,
+            ax=ax_l_cart,
+            title=f"Legacy ({legacy_map_arr.shape[0]}×{legacy_map_arr.shape[1]})",
+            vmin=legacy_vmin,
+            vmax=legacy_vmax,
+        )
+        _annotate_avg_xg(ax_l_cart, legacy_avg)
+
+        _, sm_n = plot_xg_map_cartesian_native(
+            new_map_arr,
+            net_coords=new_coords,
+            ax=ax_n_cart,
+            title=f"New ({new_map_arr.shape[0]}×{new_map_arr.shape[1]})",
+            vmin=new_vmin,
+            vmax=new_vmax,
+        )
+        _annotate_avg_xg(ax_n_cart, new_avg)
+
+        fig.colorbar(sm_l, ax=ax_l_cart, shrink=0.88, pad=0.02, aspect=20)
+        fig.colorbar(sm_n, ax=ax_n_cart, shrink=0.88, pad=0.02, aspect=20)
+
+        legacy_exec = _resolve_executed_action(map_payload=legacy, meta=shot_meta)
+        new_exec = _resolve_executed_action(map_payload=new, meta=shot_meta)
+
+        sm_l_ang = _plot_angular_panel(
+            ax=ax_l_ang,
+            value_map=legacy_map_arr,
+            player_location=player_location,
+            executed_action=legacy_exec,
+            title="Legacy angular",
+            show_net_outline=show_net_outline,
+            is_goal=bool(shot_meta.get("shot_is_goal", False)) if shot_meta else False,
+        )
+        sm_n_ang = _plot_angular_panel(
+            ax=ax_n_ang,
+            value_map=new_map_arr,
+            player_location=player_location,
+            executed_action=new_exec,
+            title="New angular",
+            show_net_outline=show_net_outline,
+            is_goal=bool(shot_meta.get("shot_is_goal", False)) if shot_meta else False,
+        )
+
+        if sm_l_ang is not None:
+            fig.colorbar(sm_l_ang, ax=ax_l_ang, shrink=0.88, pad=0.02, aspect=20)
+        if sm_n_ang is not None:
+            fig.colorbar(sm_n_ang, ax=ax_n_ang, shrink=0.88, pad=0.02, aspect=20)
+
+        st = f"Season {season} | " if season is not None else ""
+        fig.suptitle(f"{st}Event {event_id}", fontsize=11)
+        fig.savefig(out_path, dpi=160)
+        plt.close(fig)
+        return out_path
+
+    solo_map = legacy_map if legacy_map is not None else new_map
+    solo_coords = legacy_coords if legacy_map is not None else new_coords
+    solo_label = "Legacy" if legacy_map is not None else "New"
+
+    solo_arr = np.asarray(solo_map, dtype=float)
+    vmin, vmax = _safe_min_max(solo_arr)
+    avg_xg = _safe_mean(solo_arr)
+
+    fig, axes = plt.subplots(2, 1, figsize=(6.2, 8.2), constrained_layout=True)
+    ax_cart, ax_ang = axes
+
+    _, sm = plot_xg_map_cartesian_native(
+        solo_arr,
+        net_coords=solo_coords,
+        ax=ax_cart,
+        title=f"{solo_label} ({solo_arr.shape[0]}×{solo_arr.shape[1]})",
+        vmin=vmin,
+        vmax=vmax,
+    )
+    _annotate_avg_xg(ax_cart, avg_xg)
+    fig.colorbar(sm, ax=ax_cart, shrink=0.88, pad=0.02, aspect=20)
+
+    solo_exec = _resolve_executed_action(
+        map_payload=legacy if legacy_map is not None else new,
+        meta=shot_meta,
+    )
+    sm_ang = _plot_angular_panel(
+        ax=ax_ang,
+        value_map=solo_arr,
+        player_location=player_location,
+        executed_action=solo_exec,
+        title=f"{solo_label} angular",
+        show_net_outline=show_net_outline,
+        is_goal=bool(shot_meta.get("shot_is_goal", False)) if shot_meta else False,
+    )
+    if sm_ang is not None:
+        fig.colorbar(sm_ang, ax=ax_ang, shrink=0.88, pad=0.02, aspect=20)
+
     st = f"Season {season} | " if season is not None else ""
     fig.suptitle(f"{st}Event {event_id} | {solo_label}-only", fontsize=11)
     fig.savefig(out_path, dpi=160)
@@ -742,10 +1091,23 @@ def main() -> None:
         legacy_maps = queries.get_shot_maps_by_event_ids(event_ids)
         new_maps = queries.get_shot_maps_by_event_ids_new_xg(event_ids)
 
+        shot_meta = _fetch_shot_metadata(event_ids) if args.with_angular else {}
+
         out_dir = args.plots_root / timestamp
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        angular_out_dir: Path | None = None
+        if args.with_angular:
+            if use_plot_dir and args.from_plot_dir is not None:
+                angular_out_dir = args.from_plot_dir.with_name(f"{args.from_plot_dir.name}_angular")
+            else:
+                angular_out_dir = args.plots_root / f"{timestamp}_angular"
+            angular_out_dir.mkdir(parents=True, exist_ok=True)
+
+        show_net_outline = not args.no_angular_net_outline
+
         saved: list[Path] = []
+        saved_angular: list[Path] = []
         for s in sample_events:
             legacy = legacy_maps.get(s.event_id)
             new = new_maps.get(s.event_id)
@@ -764,11 +1126,25 @@ def main() -> None:
                     out_dir=out_dir,
                 )
                 saved.append(path)
+                if angular_out_dir is not None:
+                    meta = shot_meta.get(s.event_id) if shot_meta else None
+                    ang_path = _plot_event_cartesian_angular(
+                        event_id=s.event_id,
+                        season=s.season,
+                        legacy=legacy,
+                        new=new,
+                        out_dir=angular_out_dir,
+                        shot_meta=meta,
+                        show_net_outline=show_net_outline,
+                    )
+                    saved_angular.append(ang_path)
             except Exception as exc:  # noqa: BLE001
                 print(f"Event {s.event_id}: failed to plot: {exc!r}")
 
         print("\nWrote plots:")
         print(f"- {out_dir} ({len(saved)} files)")
+        if angular_out_dir is not None:
+            print(f"- {angular_out_dir} ({len(saved_angular)} files)")
 
     if args.skip_clustering:
         return
