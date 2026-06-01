@@ -170,7 +170,7 @@ def _auto_title(csv_path: Path) -> str:
         player_dir_name = csv_path.parent.parent.name
         group_label = None
 
-    player_id = player_dir_name.replace("player_", "")
+    player_id = player_dir_name.replace("player_", "", 1).split("__", 1)[0]
 
     season_part = parts
     partition_part = ""
