@@ -34,12 +34,19 @@ Local mode runs all paper experiments sequentially in manifest order. Each exper
 
 ## Slurm Run
 
+First activate an environment with the H-JEEDS scientific dependencies. The repository includes `environment-hjeeds.yml` for the minimal paper-runner stack.
+
 ```bash
+module load miniforge3/25.3.1-0
+eval "$(conda shell.bash hook)"
+conda activate hjeeds-paper
+
 python3 run_hjeeds_paper_experiments.py \
   --mode slurm \
   --seed 12345 \
   --num-seeds 500 \
   --output-root HJEEDS/results/hjeeds_paper_experiments \
+  --python-bin "$(which python)" \
   --qos normal \
   --time 23:00:00 \
   --mem 16G

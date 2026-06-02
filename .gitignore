@@ -39,3 +39,4 @@ Data/**/logs/
 /Testing/Experiments/Testing/parallel_verification_parallel/times/estimators
 /Testing/Experiments/Testing/parallel_verification_serial/times/estimators
 .DS_Store
+/HJEEDS/results
