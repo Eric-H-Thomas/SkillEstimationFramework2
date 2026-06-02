@@ -8,6 +8,8 @@ Run all commands from the repository root so Python can import the `HJEEDS` pack
 
 All H-JEEDS experiment entry points require `--seed`. Use an integer seed or `--seed default`, which resolves to `12345`.
 
+For the full paper suite runner, see [Unified H-JEEDS Paper Experiments](hjeeds-paper-experiments.md).
+
 ## Main Hierarchical Darts Experiment
 
 Use `HJEEDS.darts_hierarchical_vs_jeeds` to compare independent JEEDS against the hierarchical empirical-Bayes estimator under uneven observation counts.
