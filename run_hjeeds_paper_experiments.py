@@ -43,6 +43,16 @@ ZIP_ONLY_EXPERIMENT_SLUG = "__zip_only__"
 DRY_RUN_JOB_ID_PLACEHOLDER = 1234567
 
 
+# Scientific Python libraries sometimes default to many native threads per process
+THREAD_LIMIT_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+
 # Fixed schema for the status CSV so interrupted runs are easy to inspect
 STATUS_HEADER = [
     "timestamp",
@@ -521,6 +531,8 @@ def run_local_suite(
     local_env = os.environ.copy()
     local_env["MPLBACKEND"] = "Agg"
     local_env["MPLCONFIGDIR"] = str(output_root / RUNNER_DIRNAME / "matplotlib")
+    for variable in THREAD_LIMIT_ENV_VARS:
+        local_env.setdefault(variable, "1")
 
     # Create the Matplotlib cache directory only for real runs, keeping dry-run read-only
     if not dry_run:
@@ -643,7 +655,7 @@ def write_slurm_script(script_path: Path, command: Sequence[str], *, repo_root: 
 
     # Each generated script is tiny: set environment, optionally set SCENARIO_INDEX, run command
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    mpl_config_dir = script_path.parent.parent / RUNNER_DIRNAME / "matplotlib"
+    mpl_config_base_dir = script_path.parent.parent / RUNNER_DIRNAME / "matplotlib"
 
     # These lines make generated scripts runnable from Slurm regardless of the submit directory
     lines = [
@@ -652,8 +664,19 @@ def write_slurm_script(script_path: Path, command: Sequence[str], *, repo_root: 
         f"cd {shlex.quote(str(repo_root))}",
         f"export PYTHONPATH=\"{repo_root}${{PYTHONPATH:+:$PYTHONPATH}}\"",
         "export MPLBACKEND=Agg",
-        f"export MPLCONFIGDIR=\"${{MPLCONFIGDIR:-{mpl_config_dir}}}\"",
+        f"export HJEEDS_MPLCONFIG_BASE={shlex.quote(str(mpl_config_base_dir))}",
+        'export HJEEDS_MPLCONFIG_JOB="${SLURM_JOB_ID:-local}"',
+        'if [[ -n "${SLURM_ARRAY_TASK_ID:-}" ]]; then',
+        '  export HJEEDS_MPLCONFIG_JOB="${HJEEDS_MPLCONFIG_JOB}_${SLURM_ARRAY_TASK_ID}"',
+        "fi",
+        'export MPLCONFIGDIR="${MPLCONFIGDIR:-${HJEEDS_MPLCONFIG_BASE}/${HJEEDS_MPLCONFIG_JOB}}"',
         "mkdir -p \"$MPLCONFIGDIR\"",
+        'export HJEEDS_THREAD_COUNT="${SLURM_CPUS_PER_TASK:-1}"',
+        'export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$HJEEDS_THREAD_COUNT}"',
+        'export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$HJEEDS_THREAD_COUNT}"',
+        'export MKL_NUM_THREADS="${MKL_NUM_THREADS:-$HJEEDS_THREAD_COUNT}"',
+        'export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-$HJEEDS_THREAD_COUNT}"',
+        'export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-$HJEEDS_THREAD_COUNT}"',
     ]
 
     # Multi-scenario runners read SCENARIO_INDEX to decide which scenario this array task owns
