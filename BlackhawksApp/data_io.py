@@ -18,6 +18,7 @@ import pandas as pd
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import (
     SHOT_TYPE_GROUPS,
+    _infer_grid_axes_from_value_map,
     load_player_data,
     load_player_data_by_games,
 )
@@ -32,10 +33,6 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
 _DEFAULT_DATA_DIR = Path("Data/Hockey")
 _PLAYER_DIR_RE = re.compile(r"player_(\d+)$")
 _SEASON_RE = re.compile(r"^shots_(\d{8})\.parquet$")
-
-# Blackhawks value_map coordinate extents.
-_BH_Y_MIN, _BH_Y_MAX, _BH_Y_LEN = -5.0, 5.0, 120
-_BH_Z_MIN, _BH_Z_MAX, _BH_Z_LEN = 0.0, 6.0, 72
 
 
 def _resolve_data_dir(data_dir: Path | str | None = None) -> Path:
@@ -511,6 +508,29 @@ def get_shot_row_by_index(df: pd.DataFrame, shot_index: int) -> pd.Series | None
     return df.iloc[int(shot_index) - 1]
 
 
+def _lookup_post_shot_xg_at_location(
+    value_map: np.ndarray,
+    location_y: float,
+    location_z: float,
+    *,
+    grid_y: np.ndarray | None = None,
+    grid_z: np.ndarray | None = None,
+) -> float:
+    """Sample post-shot xG at physical goal-line (Y, Z) on a native-resolution map."""
+    if not np.isfinite(location_y) or not np.isfinite(location_z):
+        return float("nan")
+
+    if grid_y is None or grid_z is None:
+        grid_y, grid_z = _infer_grid_axes_from_value_map(value_map)
+    else:
+        grid_y = np.asarray(grid_y, dtype=np.float64)
+        grid_z = np.asarray(grid_z, dtype=np.float64)
+
+    y_idx = int(np.argmin(np.abs(grid_y - float(location_y))))
+    z_idx = int(np.argmin(np.abs(grid_z - float(location_z))))
+    return float(value_map[z_idx, y_idx])
+
+
 def add_post_shot_xg_column(
     df: pd.DataFrame,
     shot_maps: dict[int, dict[str, object]],
@@ -521,7 +541,7 @@ def add_post_shot_xg_column(
 
     xG is sampled at each shot's observed goal-line coordinates
     (location_y, location_z) using nearest-grid-point lookup on the
-    72x120 post-shot xG map.
+    map's native Y/Z grid (legacy 72×120 or new-table ~31×51).
     """
     out = df.copy()
     out[out_column] = np.nan
@@ -533,11 +553,6 @@ def add_post_shot_xg_column(
     y_vals = pd.to_numeric(out["location_y"], errors="coerce").to_numpy(dtype=np.float64)
     z_vals = pd.to_numeric(out["location_z"], errors="coerce").to_numpy(dtype=np.float64)
     eids = pd.to_numeric(out["event_id"], errors="coerce").to_numpy(dtype=np.float64)
-
-    y_idx = np.rint((y_vals - _BH_Y_MIN) / (_BH_Y_MAX - _BH_Y_MIN) * (_BH_Y_LEN - 1)).astype(np.int64)
-    z_idx = np.rint((z_vals - _BH_Z_MIN) / (_BH_Z_MAX - _BH_Z_MIN) * (_BH_Z_LEN - 1)).astype(np.int64)
-    y_idx = np.clip(y_idx, 0, _BH_Y_LEN - 1)
-    z_idx = np.clip(z_idx, 0, _BH_Z_LEN - 1)
 
     sampled: list[float] = []
     for i in range(len(out)):
@@ -557,7 +572,15 @@ def add_post_shot_xg_column(
             continue
 
         try:
-            sampled.append(float(value_map[z_idx[i], y_idx[i]]))
+            sampled.append(
+                _lookup_post_shot_xg_at_location(
+                    np.asarray(value_map),
+                    y_vals[i],
+                    z_vals[i],
+                    grid_y=payload.get("grid_y"),
+                    grid_z=payload.get("grid_z"),
+                )
+            )
         except (IndexError, TypeError, ValueError):
             sampled.append(np.nan)
 
