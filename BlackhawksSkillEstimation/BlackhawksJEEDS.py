@@ -46,6 +46,7 @@ from BlackhawksAPI import (
 )
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
+from .rationality_metric import rationality_percent_from_expected_values_raw_lambda
 
 
 # Net center position used for proximity filtering (NHL standard).
@@ -303,11 +304,12 @@ def save_intermediate_estimates_csv(
         writer.writerow([
             "shot_count",
             "expected_execution_skill",
-            "map_execution_skill", 
+            "map_execution_skill",
             "expected_rationality",
             "map_rationality",
             "log10_expected_rationality",
             "log10_map_rationality",
+            "rationality_percent_eps",
         ])
         for row in skill_log:
             eps_val = row["eps"]
@@ -320,6 +322,7 @@ def save_intermediate_estimates_csv(
                 map_rat_val,
                 np.log10(eps_val) if eps_val and eps_val > 0 else None,
                 np.log10(map_rat_val) if map_rat_val and map_rat_val > 0 else None,
+                row.get("rationality_percent_eps"),
             ])
     
     return csv_path
@@ -548,6 +551,70 @@ def transform_shots_for_jeeds(
         info_rows=info_rows,
         skipped_proximity=skipped_proximity,
     )
+
+
+def _nearest_execution_skill(skill: float, candidate_skills: Sequence[float]) -> float:
+    """Snap a continuous EES value to the nearest candidate execution-skill grid point."""
+    arr = np.asarray(candidate_skills, dtype=float)
+    return float(arr[np.argmin(np.abs(arr - skill))])
+
+
+def rationality_percent_for_shot(
+    info_row: dict,
+    spaces: SimpleHockeySpaces,
+    execution_skill: float,
+    lambda_raw: float,
+    *,
+    candidate_skills: Sequence[float] | None = None,
+) -> float | None:
+    """Rationality percentage (0–100) for one shot's EV surface and (xskill, lambda)."""
+    skills = candidate_skills if candidate_skills is not None else spaces.candidate_execution_skills
+    execution_skill = _nearest_execution_skill(execution_skill, skills)
+    key = spaces.get_key([execution_skill, execution_skill], r=0.0)
+    evs_per_xskill = info_row.get("evsPerXskill") or {}
+    if key not in evs_per_xskill:
+        return None
+    evs = np.asarray(evs_per_xskill[key], dtype=float).ravel()
+    return rationality_percent_from_expected_values_raw_lambda(evs, lambda_raw)
+
+
+def _summarize_rationality_percents(values: Sequence[float | None]) -> dict[str, float | int | None]:
+    """Mean/median of finite per-shot rationality percentages."""
+    finite = [float(v) for v in values if v is not None and np.isfinite(v)]
+    n_defined = len(finite)
+    if n_defined == 0:
+        return {
+            "mean": None,
+            "median": None,
+            "n_defined": 0,
+            "n_shots": len(values),
+        }
+    arr = np.asarray(finite, dtype=float)
+    return {
+        "mean": float(np.mean(arr)),
+        "median": float(np.median(arr)),
+        "n_defined": n_defined,
+        "n_shots": len(values),
+    }
+
+
+def _compute_per_shot_rationality_percents(
+    jeeds_inputs: JEEDSInputs,
+    execution_skill: float,
+    lambda_raw: float,
+    candidate_skills: Sequence[float],
+) -> list[float | None]:
+    """Per-shot rationality % using one (xskill, lambda) pair for all shots."""
+    return [
+        rationality_percent_for_shot(
+            info,
+            spaces,
+            execution_skill,
+            lambda_raw,
+            candidate_skills=candidate_skills,
+        )
+        for spaces, info in zip(jeeds_inputs.spaces_per_shot, jeeds_inputs.info_rows)
+    ]
 
 
 def ensure_player_directories(player_dir: Path) -> None:
@@ -1232,14 +1299,19 @@ def _run_jeeds_estimation(
             if map_xskill and map_rationality and ees and eps:
                 eps_val = float(eps[-1])
                 map_rat_val = float(map_rationality[-1])
+                ees_val = float(ees[-1])
+                map_xskill_val = float(map_xskill[-1])
                 skill_log.append({
                     "shot_count": idx + 1,  # 1-indexed
-                    "ees": float(ees[-1]),  # Expected Execution Skill
-                    "map_execution_skill": float(map_xskill[-1]),
-                    "eps": eps_val,  # Expected Rationality
+                    "ees": ees_val,
+                    "map_execution_skill": map_xskill_val,
+                    "eps": eps_val,
                     "map_rationality": map_rat_val,
                     "log10_eps": np.log10(eps_val) if eps_val > 0 else None,
                     "log10_map_rationality": np.log10(map_rat_val) if map_rat_val > 0 else None,
+                    "rationality_percent_eps": rationality_percent_for_shot(
+                        info, spaces, ees_val, eps_val, candidate_skills=candidate_skills,
+                    ),
                 })
 
     results = estimator.get_results()
@@ -1259,6 +1331,15 @@ def _run_jeeds_estimation(
 
     final_rationality = float(map_rationality_estimates[-1])
     final_eps = float(eps_estimates[-1]) if eps_estimates else None
+    final_ees = float(ees_estimates[-1]) if ees_estimates else None
+    pct_eps_shots = (
+        _compute_per_shot_rationality_percents(
+            jeeds_inputs, final_ees, final_eps, candidate_skills,
+        )
+        if final_ees is not None and final_eps is not None
+        else []
+    )
+    summary_eps = _summarize_rationality_percents(pct_eps_shots)
 
     result: dict[str, object] = {
         # MAP estimates (primary)
@@ -1266,9 +1347,13 @@ def _run_jeeds_estimation(
         "rationality": final_rationality,
         "log10_rationality": np.log10(final_rationality) if final_rationality > 0 else None,
         # EES/EPS estimates (expected values under posterior)
-        "ees": float(ees_estimates[-1]) if ees_estimates else None,
+        "ees": final_ees,
         "eps": final_eps,
         "log10_eps": np.log10(final_eps) if final_eps and final_eps > 0 else None,
+        # Rationality percentage (0–100, JEEDS paper scale; EES+EPS, per-shot then aggregated)
+        "rationality_percent_mean_eps": summary_eps["mean"],
+        "rationality_percent_median_eps": summary_eps["median"],
+        "rationality_percent_n_defined_eps": summary_eps["n_defined"],
         "num_shots": len(jeeds_inputs.actions),
         "status": "success",
     }
