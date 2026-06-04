@@ -11,6 +11,7 @@ build/
 # Environments
 venv/
 .env
+.cursor
 
 # Slurm logs
 slurm-*.out
@@ -38,4 +39,3 @@ Data/**/logs/
 *.png
 /Testing/Experiments/Testing/parallel_verification_parallel/times/estimators
 /Testing/Experiments/Testing/parallel_verification_serial/times/estimators
-.DS_Store
