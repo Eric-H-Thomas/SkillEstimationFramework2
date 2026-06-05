@@ -29,7 +29,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
 from HJEEDS import darts_hierarchical_prior_sensitivity as prior_sensitivity
-from HJEEDS.artifacts import add_plotting_cli_arguments, error_metric_panels, METHOD_ORDER
+from HJEEDS.artifacts import (
+    add_plotting_cli_arguments,
+    error_metric_panels,
+    method_color,
+    method_label,
+    method_marker,
+    METHOD_ORDER,
+)
 from HJEEDS.decision_models import (
     SOFTMAX_DECISION_MODEL_SLUG,
     FLIP_DECISION_MODEL_SLUG,
@@ -538,10 +545,11 @@ def _plot_lowest_bucket_metric(
                     x_values,
                     y_values,
                     yerr=np.array([lower_errors, upper_errors], dtype=float),
-                    marker="o",
+                    color=method_color(method),
+                    marker=method_marker(method),
                     capsize=4,
                     linewidth=2,
-                    label=method,
+                    label=method_label(method),
                 )
 
         if drew_rows:

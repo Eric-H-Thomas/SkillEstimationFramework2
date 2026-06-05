@@ -235,7 +235,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Include the raw log-decision-skill error panel/plots in addition to "
-            "execution error and rationality percentage-point error."
+            "execution error and decision-skill percentage-point error."
         ),
     )
 

@@ -44,7 +44,7 @@ python3 run_hjeeds_paper_experiments.py \
   --output-root HJEEDS/results/hjeeds_paper_experiments
 ```
 
-By default, paper plots show execution skill error and rationality percentage-point error. Add `--include-raw-rationality-error` to also include the raw log-decision-skill error panel/plots from earlier three-metric figures.
+By default, paper plots show execution skill error and decision-skill percentage-point error. Add `--include-raw-rationality-error` to also include the raw log-decision-skill error panel/plots from earlier three-metric figures.
 
 ## Slurm Run
 

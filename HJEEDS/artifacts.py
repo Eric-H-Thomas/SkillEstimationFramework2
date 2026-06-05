@@ -22,23 +22,23 @@ from .models import AgentResult
 
 EXECUTION_ERROR_METRIC_PANEL = (
     "abs_sigma_error",
-    "Execution Skill Error",
-    r"|$\hat{\sigma} - \sigma$|",
+    "Execution Skill Estimation Error",
+    r"Absolute execution skill error ($|\hat{\sigma} - \sigma|$)",
     "No rows for execution skill error",
 )
 
 RAW_RATIONALITY_ERROR_METRIC_PANEL = (
     "abs_log_lambda_error",
-    "Log Decision Skill Error",
-    r"|$\widehat{\log \lambda} - \log \lambda$|",
+    "Log Decision Skill Estimation Error",
+    r"Absolute log decision skill error ($|\widehat{\log \lambda} - \log \lambda|$)",
     "No rows for log decision skill error",
 )
 
 RATIONALITY_PERCENT_ERROR_METRIC_PANEL = (
     "abs_rationality_percent_error",
-    "Decision Skill Error (%)",
-    "Absolute rationality error (percentage points)",
-    "No rows for rationality percentage-point error",
+    "Decision Skill Estimation Error (%)",
+    "Absolute decision skill error (percentage points)",
+    "No rows for decision skill percentage-point error",
 )
 
 DEFAULT_ERROR_METRIC_PANELS = (
@@ -59,6 +59,39 @@ METHOD_ORDER = {
     "jeeds": 0,
     "hierarchical": 1,
 }
+
+METHOD_LABELS = {
+    "jeeds": "JEEDS",
+    "hierarchical": "H-JEEDS",
+}
+
+METHOD_COLORS = {
+    "jeeds": "#4C566A",
+    "hierarchical": "#0F766E",
+}
+
+METHOD_MARKERS = {
+    "jeeds": "o",
+    "hierarchical": "s",
+}
+
+
+def method_label(method: str) -> str:
+    """Return the display label for an estimator method."""
+
+    return METHOD_LABELS.get(method, method)
+
+
+def method_color(method: str) -> str:
+    """Return the plot color for an estimator method."""
+
+    return METHOD_COLORS.get(method, "#6B7280")
+
+
+def method_marker(method: str) -> str:
+    """Return the marker symbol for an estimator method."""
+
+    return METHOD_MARKERS.get(method, "o")
 
 
 def error_metric_panels(
@@ -92,7 +125,7 @@ def add_plotting_cli_arguments(parser: Any) -> None:
         action="store_true",
         help=(
             "Include the raw log-decision-skill error panel/plots in addition to "
-            "execution error and rationality percentage-point error."
+            "execution error and decision-skill percentage-point error."
         ),
     )
 
@@ -282,10 +315,11 @@ def _draw_bucket_error_panel(
                 x_values,
                 y_values,
                 yerr=np.array([lower_errors, upper_errors], dtype=float),
-                marker="o",
+                color=method_color(method),
+                marker=method_marker(method),
                 capsize=4,
                 linewidth=2,
-                label=method,
+                label=method_label(method),
             )
 
         axis.set_xticks(list(bucket_positions.values()))
