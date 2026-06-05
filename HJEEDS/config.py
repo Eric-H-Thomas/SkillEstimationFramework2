@@ -332,6 +332,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Report the intended workload and stop before simulation or inference.",
     )
+    parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Read existing summary CSVs and regenerate plots without rerunning simulation or inference.",
+    )
+    parser.add_argument(
+        "--include-raw-rationality-error",
+        "--include-log-decision-error",
+        dest="include_raw_rationality_error",
+        action="store_true",
+        help=(
+            "Include the raw log-decision-skill error panel/plots in addition to "
+            "execution error and rationality percentage-point error."
+        ),
+    )
 
     return parser.parse_args(argv)
 

@@ -29,7 +29,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
-from HJEEDS.artifacts import ERROR_METRIC_PANELS, METHOD_ORDER
+from HJEEDS.artifacts import add_plotting_cli_arguments, error_metric_panels, METHOD_ORDER
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_true_correlation_sensitivity")
@@ -167,6 +167,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Collect already-computed scenario folders into root combined CSVs.",
     )
+    add_plotting_cli_arguments(parser)
     return parser.parse_args(argv)
 
 
@@ -354,7 +355,11 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def run_single_scenario(scenario: TrueCorrelationScenario) -> None:
+def run_single_scenario(
+    scenario: TrueCorrelationScenario,
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
     """Run one true-correlation x agents-per-bucket scenario."""
 
     config = scenario.config
@@ -390,7 +395,11 @@ def run_single_scenario(scenario: TrueCorrelationScenario) -> None:
         summary_by_bucket_rows,
         summary_overall_rows,
     )
-    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    base_experiment.plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
     print(
         "[true-correlation] "
         f"Wrote scenario results to {scenario.scenario_output_dir.resolve()}",
@@ -528,10 +537,12 @@ def plot_lowest_bucket_comparisons(
     output_dir: Path,
     summary_by_bucket_rows: Sequence[dict[str, Any]],
     scenarios: Sequence[TrueCorrelationScenario],
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Write one root comparison plot per metric."""
 
-    for metric_name, title, ylabel, missing_message in ERROR_METRIC_PANELS:
+    for metric_name, title, ylabel, missing_message in error_metric_panels(include_raw_rationality_error):
         _plot_lowest_bucket_metric(
             output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name),
             summary_by_bucket_rows,
@@ -546,6 +557,9 @@ def plot_lowest_bucket_comparisons(
 def aggregate_existing_results(
     scenarios: Sequence[TrueCorrelationScenario],
     output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
+    regenerate_scenario_plots: bool = False,
 ) -> None:
     """Collect already-computed true-correlation scenario folders."""
 
@@ -562,6 +576,12 @@ def aggregate_existing_results(
         agent_rows = _read_dict_rows(output_paths["agent_level_csv"], scenario_slug)
         bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], scenario_slug)
         overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], scenario_slug)
+        if regenerate_scenario_plots:
+            base_experiment.plot_error_by_bucket(
+                output_paths["error_plot"],
+                bucket_rows,
+                include_raw_rationality_error=include_raw_rationality_error,
+            )
 
         scenario_rows.append(prefix)
         all_agent_rows.extend({**prefix, **row} for row in agent_rows)
@@ -590,7 +610,12 @@ def aggregate_existing_results(
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
-    plot_lowest_bucket_comparisons(output_dir, all_bucket_rows, scenarios)
+    plot_lowest_bucket_comparisons(
+        output_dir,
+        all_bucket_rows,
+        scenarios,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     print(f"[true-correlation] Aggregated results into {output_dir.resolve()}", flush=True)
 
@@ -598,6 +623,8 @@ def aggregate_existing_results(
 def print_dry_run_summary(
     scenarios: Sequence[TrueCorrelationScenario],
     output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Report the true-correlation workload without running inference."""
 
@@ -625,7 +652,7 @@ def print_dry_run_summary(
     print(f"  - {output_dir / COMBINED_AGENT_LEVEL_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_OVERALL_FILENAME}")
-    for metric_name, _title, _ylabel, _missing_message in ERROR_METRIC_PANELS:
+    for metric_name, _title, _ylabel, _missing_message in error_metric_panels(include_raw_rationality_error):
         print(f"  - {output_dir / LOWEST_BUCKET_PLOT_TEMPLATE.format(metric=metric_name)}")
 
 
@@ -634,18 +661,27 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()
-    if scenario_index is not None and args.aggregate_results:
-        raise ValueError("Scenario-index environment mode and --aggregate-results are mutually exclusive.")
+    if scenario_index is not None and (args.aggregate_results or args.plot_only):
+        raise ValueError("Scenario-index environment mode cannot be combined with --aggregate-results or --plot-only.")
 
     scenarios = build_scenarios(args)
     output_dir = Path(args.output_dir)
 
     if args.dry_run:
-        print_dry_run_summary(scenarios, output_dir)
+        print_dry_run_summary(
+            scenarios,
+            output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
-    if args.aggregate_results:
-        aggregate_existing_results(scenarios, output_dir)
+    if args.aggregate_results or args.plot_only:
+        aggregate_existing_results(
+            scenarios,
+            output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+            regenerate_scenario_plots=args.plot_only,
+        )
         return 0
 
     if scenario_index is not None:
@@ -654,12 +690,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"scenario_index must be between 0 and {len(scenarios) - 1}. "
                 f"Received {scenario_index}."
             )
-        run_single_scenario(scenarios[scenario_index])
+        run_single_scenario(
+            scenarios[scenario_index],
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
     for scenario in scenarios:
-        run_single_scenario(scenario)
-    aggregate_existing_results(scenarios, output_dir)
+        run_single_scenario(
+            scenario,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
+    aggregate_existing_results(
+        scenarios,
+        output_dir,
+        include_raw_rationality_error=args.include_raw_rationality_error,
+    )
     return 0
 
 

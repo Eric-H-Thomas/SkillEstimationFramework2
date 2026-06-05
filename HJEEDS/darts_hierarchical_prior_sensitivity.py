@@ -292,6 +292,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Used by Slurm dependency launchers."
         ),
     )
+    base_experiment.add_plotting_cli_arguments(parser)
 
     return parser.parse_args(argv)
 
@@ -718,6 +719,8 @@ def scenario_index_from_environment() -> int | None:
 def run_condition(
     base_config: base_experiment.ExperimentConfig,
     condition: PriorSensitivityCondition,
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Run all seeds for one sensitivity condition and write per-condition artifacts."""
 
@@ -752,7 +755,11 @@ def run_condition(
         summary_by_bucket_rows,
         summary_overall_rows,
     )
-    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    base_experiment.plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     prefix = condition_metadata_row(condition, hyperpriors)
     combined_agent_rows = [
@@ -769,6 +776,8 @@ def run_single_condition(
     config: base_experiment.ExperimentConfig,
     condition: PriorSensitivityCondition,
     scenario_index: int,
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Run one hyperprior robustness condition for Slurm array execution."""
 
@@ -778,7 +787,11 @@ def run_single_condition(
         f"({config.num_agents} agents/seed)",
         flush=True,
     )
-    run_condition(config, condition)
+    run_condition(
+        config,
+        condition,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
     print(
         "[prior-sensitivity] "
         f"Wrote scenario results to {(config.output_dir / condition.condition_slug).resolve()}",
@@ -789,6 +802,9 @@ def run_single_condition(
 def aggregate_existing_results(
     config: base_experiment.ExperimentConfig,
     conditions: Sequence[PriorSensitivityCondition],
+    *,
+    include_raw_rationality_error: bool = False,
+    regenerate_scenario_plots: bool = False,
 ) -> PriorSensitivityGridResult:
     """Collect precomputed condition folders into the combined robustness artifacts."""
 
@@ -807,6 +823,12 @@ def aggregate_existing_results(
         agent_rows = _read_dict_rows(output_paths["agent_level_csv"], condition.condition_slug)
         bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], condition.condition_slug)
         overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], condition.condition_slug)
+        if regenerate_scenario_plots:
+            base_experiment.plot_error_by_bucket(
+                output_paths["error_plot"],
+                bucket_rows,
+                include_raw_rationality_error=include_raw_rationality_error,
+            )
 
         condition_rows.append(metadata_row)
         all_agent_rows.extend({**metadata_row, **row} for row in agent_rows)
@@ -831,7 +853,12 @@ def aggregate_existing_results(
         condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
-    plot_lowest_bucket_heatmap(output_dir / LOWEST_BUCKET_HEATMAP_FILENAME, all_bucket_rows, condition_tuple)
+    plot_lowest_bucket_heatmap(
+        output_dir / LOWEST_BUCKET_HEATMAP_FILENAME,
+        all_bucket_rows,
+        condition_tuple,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     print(f"[prior-sensitivity] Aggregated results into {output_dir.resolve()}", flush=True)
     return PriorSensitivityGridResult(
@@ -847,6 +874,8 @@ def aggregate_existing_results(
 def run_sensitivity_grid(
     config: base_experiment.ExperimentConfig,
     conditions: Sequence[PriorSensitivityCondition],
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> PriorSensitivityGridResult:
     """Run a prior-sensitivity grid and write its combined artifacts."""
 
@@ -857,7 +886,11 @@ def run_sensitivity_grid(
     condition_rows: list[dict[str, Any]] = []
 
     for condition in condition_tuple:
-        agent_rows, bucket_rows, overall_rows, metadata_row = run_condition(config, condition)
+        agent_rows, bucket_rows, overall_rows, metadata_row = run_condition(
+            config,
+            condition,
+            include_raw_rationality_error=include_raw_rationality_error,
+        )
         all_agent_rows.extend(agent_rows)
         all_bucket_rows.extend(bucket_rows)
         all_overall_rows.extend(overall_rows)
@@ -881,7 +914,12 @@ def run_sensitivity_grid(
         condition_columns + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
-    plot_lowest_bucket_heatmap(output_dir / LOWEST_BUCKET_HEATMAP_FILENAME, all_bucket_rows, condition_tuple)
+    plot_lowest_bucket_heatmap(
+        output_dir / LOWEST_BUCKET_HEATMAP_FILENAME,
+        all_bucket_rows,
+        condition_tuple,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     print(f"[prior-sensitivity] Wrote combined results to {output_dir.resolve()}", flush=True)
     return PriorSensitivityGridResult(
@@ -916,6 +954,8 @@ def plot_lowest_bucket_heatmap(
     output_path: Path,
     summary_by_bucket_rows: Sequence[dict[str, Any]],
     conditions: Sequence[PriorSensitivityCondition],
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Plot hierarchical error by focus, bias, and confidence for the lowest bucket."""
 
@@ -956,17 +996,19 @@ def plot_lowest_bucket_heatmap(
         for condition in conditions
     }
 
-    # Define the two error metrics shown as columns in the figure
+    # Use the same default/opt-in metric selection as the bucket plots.
     metric_panels = [
-        ("abs_sigma_error", "Execution Skill Error"),
-        ("abs_log_lambda_error", "Log-Decision Skill Error"),
+        (metric_name, title)
+        for metric_name, title, _ylabel, _missing_message in base_experiment.error_metric_panels(
+            include_raw_rationality_error
+        )
     ]
 
     # Create a subplot grid with one row per focus area and one column per metric
     figure, axes = plt.subplots(
         len(focus_slugs), # One row per focus area
         len(metric_panels), # One column per metric
-        figsize=(14, max(3.8, 3.2 * len(focus_slugs))),
+        figsize=(6.8 * len(metric_panels), max(3.8, 3.2 * len(focus_slugs))),
         squeeze=False, # Always return a 2D axes array, even if there is only one row or one column
         constrained_layout=True, # Automatically reduce label/title overlap
     )
@@ -1158,8 +1200,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--scenario-index and SCENARIO_INDEX/SLURM_ARRAY_TASK_ID disagree. "
             f"Received {args.scenario_index} and {environment_scenario_index}."
         )
-    if scenario_index is not None and args.aggregate_results:
-        raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
+    if scenario_index is not None and (args.aggregate_results or args.plot_only):
+        raise ValueError("--scenario-index cannot be combined with --aggregate-results or --plot-only.")
 
     config = build_base_config_from_args(args)
     conditions = tuple(build_sensitivity_conditions(args))
@@ -1174,14 +1216,28 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"scenario_index must be between 0 and {len(conditions) - 1}. "
                 f"Received {scenario_index}."
             )
-        run_single_condition(config, conditions[scenario_index], scenario_index)
+        run_single_condition(
+            config,
+            conditions[scenario_index],
+            scenario_index,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
-    if args.aggregate_results:
-        aggregate_existing_results(config, conditions)
+    if args.aggregate_results or args.plot_only:
+        aggregate_existing_results(
+            config,
+            conditions,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+            regenerate_scenario_plots=args.plot_only,
+        )
         return 0
 
-    run_sensitivity_grid(config, conditions)
+    run_sensitivity_grid(
+        config,
+        conditions,
+        include_raw_rationality_error=args.include_raw_rationality_error,
+    )
     return 0
 
 

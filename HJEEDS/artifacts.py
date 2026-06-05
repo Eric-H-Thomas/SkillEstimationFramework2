@@ -20,31 +20,81 @@ from .models import AgentResult
 # human reviewer or paper workflow will inspect: flat CSVs and a compact error
 # figure.  There is no modeling here, only formatting and presentation.
 
-ERROR_METRIC_PANELS = [
-    (
-        "abs_sigma_error",
-        "Execution Skill Error",
-        r"|$\hat{\sigma} - \sigma$|",
-        "No rows for execution skill error",
-    ),
-    (
-        "abs_log_lambda_error",
-        "Log Decision Skill Error",
-        r"|$\widehat{\log \lambda} - \log \lambda$|",
-        "No rows for log decision skill error",
-    ),
-    (
-        "abs_rationality_percent_error",
-        "Decision Skill Error (%)",
-        "Absolute rationality error (percentage points)",
-        "No rows for rationality percentage-point error",
-    ),
-]
+EXECUTION_ERROR_METRIC_PANEL = (
+    "abs_sigma_error",
+    "Execution Skill Error",
+    r"|$\hat{\sigma} - \sigma$|",
+    "No rows for execution skill error",
+)
+
+RAW_RATIONALITY_ERROR_METRIC_PANEL = (
+    "abs_log_lambda_error",
+    "Log Decision Skill Error",
+    r"|$\widehat{\log \lambda} - \log \lambda$|",
+    "No rows for log decision skill error",
+)
+
+RATIONALITY_PERCENT_ERROR_METRIC_PANEL = (
+    "abs_rationality_percent_error",
+    "Decision Skill Error (%)",
+    "Absolute rationality error (percentage points)",
+    "No rows for rationality percentage-point error",
+)
+
+DEFAULT_ERROR_METRIC_PANELS = (
+    EXECUTION_ERROR_METRIC_PANEL,
+    RATIONALITY_PERCENT_ERROR_METRIC_PANEL,
+)
+
+ALL_ERROR_METRIC_PANELS = (
+    EXECUTION_ERROR_METRIC_PANEL,
+    RAW_RATIONALITY_ERROR_METRIC_PANEL,
+    RATIONALITY_PERCENT_ERROR_METRIC_PANEL,
+)
+
+# Backwards-compatible name for callers that want the default paper plots.
+ERROR_METRIC_PANELS = DEFAULT_ERROR_METRIC_PANELS
 
 METHOD_ORDER = {
     "jeeds": 0,
     "hierarchical": 1,
 }
+
+
+def error_metric_panels(
+    include_raw_rationality_error: bool = False,
+) -> tuple[tuple[str, str, str, str], ...]:
+    """Return the metric panels requested for paper figures."""
+
+    if include_raw_rationality_error:
+        return ALL_ERROR_METRIC_PANELS
+    return DEFAULT_ERROR_METRIC_PANELS
+
+
+def error_metric_figure_size(metric_panel_count: int) -> tuple[float, float]:
+    """Return a compact figure size for the selected number of bucket panels."""
+
+    return (5.5 * metric_panel_count, 5.0)
+
+
+def add_plotting_cli_arguments(parser: Any) -> None:
+    """Add shared plotting-only and metric-panel CLI options."""
+
+    parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Read existing summary CSVs and regenerate plots without rerunning simulation or inference.",
+    )
+    parser.add_argument(
+        "--include-raw-rationality-error",
+        "--include-log-decision-error",
+        dest="include_raw_rationality_error",
+        action="store_true",
+        help=(
+            "Include the raw log-decision-skill error panel/plots in addition to "
+            "execution error and rationality percentage-point error."
+        ),
+    )
 
 
 def _value_or_blank(value: Any) -> Any:
@@ -295,16 +345,22 @@ def _plot_bucket_error_panels(
     plt.close(figure)
 
 
-def plot_error_by_bucket(output_path: Path, summary_by_bucket_rows: Sequence[dict[str, Any]]) -> None:
-    """Create the combined three-panel bucketed error figure.
+def plot_error_by_bucket(
+    output_path: Path,
+    summary_by_bucket_rows: Sequence[dict[str, Any]],
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
+    """Create the combined bucketed error figure.
 
     The input rows are the across-seed summaries, so the figure plots the
     reported mean and 95% CI for each method at each observation-count bucket.
     """
 
+    metric_panels = error_metric_panels(include_raw_rationality_error)
     _plot_bucket_error_panels(
         output_path,
         summary_by_bucket_rows,
-        ERROR_METRIC_PANELS,
-        figure_size=(16, 5),
+        metric_panels,
+        figure_size=error_metric_figure_size(len(metric_panels)),
     )

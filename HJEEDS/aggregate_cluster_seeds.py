@@ -143,7 +143,13 @@ def _group_by_seed(agent_results: Iterable[AgentResult]) -> dict[int, list[Agent
     return grouped
 
 
-def aggregate_group(group_dir: Path, parts_per_group: int, cleanup: bool) -> None:
+def aggregate_group(
+    group_dir: Path,
+    parts_per_group: int,
+    cleanup: bool,
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
     if parts_per_group <= 0:
         raise ValueError("parts_per_group must be positive.")
 
@@ -182,7 +188,11 @@ def aggregate_group(group_dir: Path, parts_per_group: int, cleanup: bool) -> Non
     output_paths = planned_output_paths(group_dir)
     write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results, environment=environment)
     write_summary_csvs(group_dir, summary_by_bucket_rows, summary_overall_rows)
-    plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     if cleanup:
         for part_dir in part_dirs:
@@ -206,12 +216,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Delete part_* directories after successful aggregation.",
     )
+    parser.add_argument(
+        "--include-raw-rationality-error",
+        "--include-log-decision-error",
+        dest="include_raw_rationality_error",
+        action="store_true",
+        help=(
+            "Include the raw log-decision-skill error panel in addition to "
+            "execution error and rationality percentage-point error."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    aggregate_group(args.group_dir, args.parts_per_group, args.cleanup)
+    aggregate_group(
+        args.group_dir,
+        args.parts_per_group,
+        args.cleanup,
+        include_raw_rationality_error=args.include_raw_rationality_error,
+    )
     return 0
 
 

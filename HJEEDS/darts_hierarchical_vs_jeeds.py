@@ -18,6 +18,7 @@ setting where the hierarchical model is expected to help most.
 
 from __future__ import annotations
 
+import csv
 import sys
 from pathlib import Path
 from dataclasses import replace
@@ -36,6 +37,8 @@ if str(REPO_ROOT) not in sys.path:
 from HJEEDS.aggregation import aggregate_results_across_seeds, summarize_seed_results
 from HJEEDS.artifacts import (
     _agent_result_to_row,
+    add_plotting_cli_arguments,
+    error_metric_panels,
     plot_error_by_bucket,
     write_agent_level_csv,
     write_summary_csvs,
@@ -101,6 +104,28 @@ from HJEEDS.sampling import (
 )
 
 
+def regenerate_plots_from_existing_results(
+    output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
+    """Regenerate plots from an existing summary CSV without rerunning seeds."""
+
+    output_paths = planned_output_paths(output_dir)
+    summary_path = output_paths["summary_by_bucket_csv"]
+    if not summary_path.exists():
+        raise FileNotFoundError(f"Cannot regenerate plot because summary CSV is missing: {summary_path}")
+
+    with summary_path.open("r", newline="") as handle:
+        summary_by_bucket_rows = list(csv.DictReader(handle))
+    plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
+    print(f"[hier-darts] Regenerated plot at {output_paths['error_plot'].resolve()}", flush=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the hierarchical-vs-JEEDS experiment."""
 
@@ -113,6 +138,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # cost of simulation, likelihood evaluation, and optimizer calls.
     if config.dry_run:
         print_dry_run_summary(config)
+        return 0
+
+    if args.plot_only:
+        regenerate_plots_from_existing_results(
+            config.output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
     seed_results: list[SeedResult] = []
@@ -132,7 +164,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     # pipeline stays focused on modeling rather than file I/O.
     write_agent_level_csv(output_paths["agent_level_csv"], all_agent_results, config.environment)
     write_summary_csvs(config.output_dir, summary_by_bucket_rows, summary_overall_rows)
-    plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=args.include_raw_rationality_error,
+    )
     print(f"[hier-darts] Wrote results to {config.output_dir.resolve()}", flush=True)
 
     return 0

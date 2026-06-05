@@ -38,6 +38,8 @@ Primary outputs:
 - `summary_overall.csv`
 - `error_by_count_bucket.png`
 
+By default, generated error plots show execution skill error and rationality percentage-point error. Add `--include-raw-rationality-error` to include the raw log-decision-skill error panel/plots as well. Add `--plot-only` to regenerate plots from existing summary CSVs without rerunning seeds.
+
 ## Hyperprior Robustness Study
 
 Use `HJEEDS.darts_hierarchical_prior_sensitivity` for the standalone hyperprior robustness study. The default condition preset is `full_60`:

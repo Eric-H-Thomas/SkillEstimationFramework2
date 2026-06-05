@@ -30,7 +30,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from HJEEDS import darts_hierarchical_vs_jeeds as base_experiment
-from HJEEDS.artifacts import ERROR_METRIC_PANELS, METHOD_ORDER
+from HJEEDS.artifacts import add_plotting_cli_arguments, error_metric_panels, METHOD_ORDER
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_anchor_availability_sensitivity")
@@ -164,6 +164,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Collect already-computed scenario folders into root combined CSVs and plots.",
     )
+    add_plotting_cli_arguments(parser)
     return parser.parse_args(argv)
 
 
@@ -321,7 +322,12 @@ def _read_dict_rows(input_path: Path, scenario_slug: str) -> list[dict[str, Any]
         return list(csv.DictReader(handle))
 
 
-def run_hjeeds_config(config: base_experiment.ExperimentConfig, *, log_prefix: str) -> None:
+def run_hjeeds_config(
+    config: base_experiment.ExperimentConfig,
+    *,
+    log_prefix: str,
+    include_raw_rationality_error: bool = False,
+) -> None:
     """Run the ordinary H-JEEDS experiment for one scenario config."""
 
     seed_results: list[base_experiment.SeedResult] = []
@@ -339,10 +345,18 @@ def run_hjeeds_config(config: base_experiment.ExperimentConfig, *, log_prefix: s
         summary_by_bucket_rows,
         summary_overall_rows,
     )
-    base_experiment.plot_error_by_bucket(output_paths["error_plot"], summary_by_bucket_rows)
+    base_experiment.plot_error_by_bucket(
+        output_paths["error_plot"],
+        summary_by_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
 
-def run_single_scenario(scenario: AnchorAvailabilityScenario) -> None:
+def run_single_scenario(
+    scenario: AnchorAvailabilityScenario,
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
     """Run one high-data-anchor availability scenario."""
 
     print(
@@ -354,6 +368,7 @@ def run_single_scenario(scenario: AnchorAvailabilityScenario) -> None:
     run_hjeeds_config(
         scenario.config,
         log_prefix=f"[anchor-availability] {scenario.scenario_slug}:",
+        include_raw_rationality_error=include_raw_rationality_error,
     )
     print(
         "[anchor-availability] "
@@ -475,10 +490,12 @@ def _plot_low_data_metric(
 def plot_low_data_comparisons(
     output_dir: Path,
     summary_by_bucket_rows: Sequence[dict[str, Any]],
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Write one root low-data-agent comparison plot per metric."""
 
-    for metric_name, title, ylabel, missing_message in ERROR_METRIC_PANELS:
+    for metric_name, title, ylabel, missing_message in error_metric_panels(include_raw_rationality_error):
         _plot_low_data_metric(
             output_dir / LOW_DATA_PLOT_TEMPLATE.format(metric=metric_name),
             summary_by_bucket_rows,
@@ -492,6 +509,9 @@ def plot_low_data_comparisons(
 def aggregate_existing_results(
     scenarios: Sequence[AnchorAvailabilityScenario],
     output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
+    regenerate_scenario_plots: bool = False,
 ) -> None:
     """Collect precomputed scenario folders into combined sweep artifacts."""
 
@@ -508,6 +528,12 @@ def aggregate_existing_results(
         agent_rows = _read_dict_rows(output_paths["agent_level_csv"], scenario_slug)
         bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], scenario_slug)
         overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], scenario_slug)
+        if regenerate_scenario_plots:
+            base_experiment.plot_error_by_bucket(
+                output_paths["error_plot"],
+                bucket_rows,
+                include_raw_rationality_error=include_raw_rationality_error,
+            )
 
         scenario_rows.append(prefix)
         all_agent_rows.extend({**prefix, **row} for row in agent_rows)
@@ -534,7 +560,11 @@ def aggregate_existing_results(
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
-    plot_low_data_comparisons(output_dir, all_bucket_rows)
+    plot_low_data_comparisons(
+        output_dir,
+        all_bucket_rows,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
 
     print(f"[anchor-availability] Aggregated results into {output_dir.resolve()}", flush=True)
 
@@ -542,6 +572,8 @@ def aggregate_existing_results(
 def print_dry_run_summary(
     scenarios: Sequence[AnchorAvailabilityScenario],
     output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
 ) -> None:
     """Report the high-data-anchor workload without running inference."""
 
@@ -572,7 +604,7 @@ def print_dry_run_summary(
     print(f"  - {output_dir / COMBINED_AGENT_LEVEL_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME}")
     print(f"  - {output_dir / COMBINED_SUMMARY_OVERALL_FILENAME}")
-    for metric_name, _title, _ylabel, _missing_message in ERROR_METRIC_PANELS:
+    for metric_name, _title, _ylabel, _missing_message in error_metric_panels(include_raw_rationality_error):
         print(f"  - {output_dir / LOW_DATA_PLOT_TEMPLATE.format(metric=metric_name)}")
 
 
@@ -581,14 +613,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     scenario_index = scenario_index_from_environment()
-    if scenario_index is not None and args.aggregate_results:
-        raise ValueError("Scenario-index environment mode and --aggregate-results are mutually exclusive.")
+    if scenario_index is not None and (args.aggregate_results or args.plot_only):
+        raise ValueError("Scenario-index environment mode cannot be combined with --aggregate-results or --plot-only.")
 
     scenarios = build_scenarios(args)
     output_dir = Path(args.output_dir)
 
     if args.dry_run:
-        print_dry_run_summary(scenarios, output_dir)
+        print_dry_run_summary(
+            scenarios,
+            output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
     if scenario_index is not None:
@@ -597,16 +633,31 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"scenario_index must be between 0 and {len(scenarios) - 1}. "
                 f"Received {scenario_index}."
             )
-        run_single_scenario(scenarios[scenario_index])
+        run_single_scenario(
+            scenarios[scenario_index],
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
-    if args.aggregate_results:
-        aggregate_existing_results(scenarios, output_dir)
+    if args.aggregate_results or args.plot_only:
+        aggregate_existing_results(
+            scenarios,
+            output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+            regenerate_scenario_plots=args.plot_only,
+        )
         return 0
 
     for scenario in scenarios:
-        run_single_scenario(scenario)
-    aggregate_existing_results(scenarios, output_dir)
+        run_single_scenario(
+            scenario,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
+    aggregate_existing_results(
+        scenarios,
+        output_dir,
+        include_raw_rationality_error=args.include_raw_rationality_error,
+    )
     return 0
 
 

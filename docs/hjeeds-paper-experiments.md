@@ -32,6 +32,20 @@ python3 run_hjeeds_paper_experiments.py \
 
 Local mode runs all paper experiments sequentially in manifest order. Each experiment uses its normal all-in-one runner behavior, then the unified runner zips the full output root.
 
+## Plot-Only Refresh
+
+Use `plots-only` mode to regenerate figures from an already-computed paper output root without rerunning simulation or inference:
+
+```bash
+python3 run_hjeeds_paper_experiments.py \
+  --mode plots-only \
+  --seed 12345 \
+  --num-seeds 500 \
+  --output-root HJEEDS/results/hjeeds_paper_experiments
+```
+
+By default, paper plots show execution skill error and rationality percentage-point error. Add `--include-raw-rationality-error` to also include the raw log-decision-skill error panel/plots from earlier three-metric figures.
+
 ## Slurm Run
 
 First activate an environment with the H-JEEDS scientific dependencies. The repository includes `environment-hjeeds.yml` for the minimal paper-runner stack.
@@ -103,4 +117,4 @@ python3 run_hjeeds_paper_experiments.py \
   --dry-run
 ```
 
-If `--output-root` already exists and contains any files, the runner stops before launching non-dry-run work. Pre-created empty directory trees are allowed, but any file under the output root is treated as existing output. This avoids accidentally mixing expensive results from different paper runs.
+If `--output-root` already exists and contains any files, the runner stops before launching non-dry-run `local` or `slurm` work. Pre-created empty directory trees are allowed, but any file under the output root is treated as existing output. This avoids accidentally mixing expensive results from different paper runs. `plots-only` and `zip-only` require an existing non-empty output root.

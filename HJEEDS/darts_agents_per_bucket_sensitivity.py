@@ -192,6 +192,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Used by the final Slurm dependency task."
         ),
     )
+    base_experiment.add_plotting_cli_arguments(parser)
 
     return parser.parse_args(argv)
 
@@ -374,7 +375,11 @@ def _condition_metadata_row(
     return prior_sensitivity.condition_metadata_row(condition, hyperpriors)
 
 
-def run_single_scenario(scenario: AgentsPerBucketScenario) -> None:
+def run_single_scenario(
+    scenario: AgentsPerBucketScenario,
+    *,
+    include_raw_rationality_error: bool = False,
+) -> None:
     """Run one agents-per-bucket x hyperprior scenario."""
 
     print(
@@ -383,7 +388,11 @@ def run_single_scenario(scenario: AgentsPerBucketScenario) -> None:
         f"({scenario.config.num_agents} agents/seed)",
         flush=True,
     )
-    prior_sensitivity.run_condition(scenario.config, scenario.condition)
+    prior_sensitivity.run_condition(
+        scenario.config,
+        scenario.condition,
+        include_raw_rationality_error=include_raw_rationality_error,
+    )
     print(
         "[agents-per-bucket] "
         f"Wrote scenario results to {scenario.scenario_output_dir.resolve()}",
@@ -395,6 +404,9 @@ def aggregate_existing_results(
     configs: Sequence[base_experiment.ExperimentConfig],
     conditions: Sequence[prior_sensitivity.PriorSensitivityCondition],
     output_dir: Path,
+    *,
+    include_raw_rationality_error: bool = False,
+    regenerate_scenario_plots: bool = False,
 ) -> None:
     """Collect precomputed scenario folders into the combined sweep artifacts."""
 
@@ -434,6 +446,12 @@ def aggregate_existing_results(
             agent_rows = _read_dict_rows(output_paths["agent_level_csv"], scenario_slug)
             bucket_rows = _read_dict_rows(output_paths["summary_by_bucket_csv"], scenario_slug)
             overall_rows = _read_dict_rows(output_paths["summary_overall_csv"], scenario_slug)
+            if regenerate_scenario_plots:
+                base_experiment.plot_error_by_bucket(
+                    output_paths["error_plot"],
+                    bucket_rows,
+                    include_raw_rationality_error=include_raw_rationality_error,
+                )
 
             # Save this condition's hyperprior metadata for the per-population-size conditions CSV
             per_agents_condition_rows.append(condition_metadata)
@@ -497,6 +515,7 @@ def aggregate_existing_results(
             config.output_dir / prior_sensitivity.LOWEST_BUCKET_HEATMAP_FILENAME,
             per_agents_bucket_rows,
             conditions,
+            include_raw_rationality_error=include_raw_rationality_error,
         )
 
     # End of loop over population sizes
@@ -604,9 +623,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     # A run cannot both compute one scenario and aggregate already-computed scenarios
-    if scenario_index is not None and args.aggregate_results:
+    if scenario_index is not None and (args.aggregate_results or args.plot_only):
         # Fail early if mutually exclusive cluster modes were requested together
-        raise ValueError("--scenario-index and --aggregate-results are mutually exclusive.")
+        raise ValueError("--scenario-index cannot be combined with --aggregate-results or --plot-only.")
 
     # Convert the comma-separated agents-per-bucket CLI string into a tuple of ints
     agents_per_bucket_values = _parse_positive_ints(
@@ -648,13 +667,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"Received {scenario_index}."
             )
         # Run exactly the requested scenario and write its scenario-level artifacts
-        run_single_scenario(scenarios[scenario_index])
+        run_single_scenario(
+            scenarios[scenario_index],
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
         return 0
 
     # Aggregation mode is the final Slurm dependency task after scenario tasks finish
-    if args.aggregate_results:
+    if args.aggregate_results or args.plot_only:
         # Read completed scenario folders and collect them into combined CSVs/plots
-        aggregate_existing_results(configs, conditions, output_dir)
+        aggregate_existing_results(
+            configs,
+            conditions,
+            output_dir,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+            regenerate_scenario_plots=args.plot_only,
+        )
         return 0
 
     # OTHERWISE, RUN ENTIRE EXPERIMENT LOCALLY ---------------------------------------------
@@ -677,7 +705,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
         # Run the selected hyperprior sensitivity condition set for this population size
-        grid_result = prior_sensitivity.run_sensitivity_grid(config, conditions)
+        grid_result = prior_sensitivity.run_sensitivity_grid(
+            config,
+            conditions,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
 
         # Record metadata for the current agents-per-bucket setting in the whole-sweep runs table
         run_metadata = agents_per_bucket_metadata_row(config)

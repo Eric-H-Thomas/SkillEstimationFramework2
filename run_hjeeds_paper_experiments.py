@@ -190,10 +190,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     # argparse owns user-facing validation for enum-like options such as --mode
     parser = argparse.ArgumentParser(description=__doc__)
 
-    # local runs everything sequentially, slurm submits jobs, zip-only packages existing results
+    # local runs everything sequentially, slurm submits jobs, plots-only redraws figures, zip-only packages existing results
     parser.add_argument(
         "--mode",
-        choices=("local", "slurm", "zip-only"),
+        choices=("local", "slurm", "plots-only", "zip-only"),
         default="local",
         help="Execution mode for the full experiment suite.",
     )
@@ -227,6 +227,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Print commands or Slurm submissions without launching work.",
+    )
+    parser.add_argument(
+        "--include-raw-rationality-error",
+        "--include-log-decision-error",
+        dest="include_raw_rationality_error",
+        action="store_true",
+        help=(
+            "Include the raw log-decision-skill error panel/plots in addition to "
+            "execution error and rationality percentage-point error."
+        ),
     )
 
     # Allows cluster users to choose a module-loaded Python without editing this script
@@ -289,6 +299,8 @@ def experiment_command(
     num_seeds: int,
     output_root: Path,
     aggregate_results: bool = False,
+    plot_only: bool = False,
+    include_raw_rationality_error: bool = False,
     dry_run: bool = False,
 ) -> list[str]:
     """Build the Python command for one experiment runner."""
@@ -309,6 +321,12 @@ def experiment_command(
     # Aggregation mode tells multi-scenario runners to read scenario folders rather than recompute
     if aggregate_results:
         command.append("--aggregate-results")
+
+    if plot_only:
+        command.append("--plot-only")
+
+    if include_raw_rationality_error:
+        command.append("--include-raw-rationality-error")
 
     # Dry-run mode is passed through when this top-level runner is previewing child commands
     if dry_run:
@@ -421,12 +439,12 @@ def output_files_under(output_root: Path) -> list[Path]:
 def ensure_output_root_policy(output_root: Path, *, mode: str) -> None:
     """Prevent accidental mixing of expensive paper experiment outputs."""
 
-    # Zip-only is allowed only after a real output root already exists
-    if mode == "zip-only":
+    # Zip-only and plots-only are allowed only after a real output root already exists
+    if mode in {"zip-only", "plots-only"}:
         if not output_root.exists():
-            raise FileNotFoundError(f"Cannot zip missing output root: {output_root}")
+            raise FileNotFoundError(f"Cannot use {mode} with missing output root: {output_root}")
         if not output_files_under(output_root):
-            raise FileNotFoundError(f"Cannot zip output root because it contains no files: {output_root}")
+            raise FileNotFoundError(f"Cannot use {mode} because output root contains no files: {output_root}")
         return
 
     existing_output_files = output_files_under(output_root)
@@ -524,6 +542,7 @@ def run_local_suite(
     python_bin: str,
     dry_run: bool,
     repo_root: Path,
+    include_raw_rationality_error: bool,
 ) -> None:
     """Run all paper experiments sequentially in the current process environment."""
 
@@ -548,6 +567,7 @@ def run_local_suite(
             seed=seed,
             num_seeds=num_seeds,
             output_root=output_root,
+            include_raw_rationality_error=include_raw_rationality_error,
         )
 
         # Record the start before launching an expensive child process
@@ -606,6 +626,41 @@ def run_local_suite(
         status="complete",
         detail=str(zip_path),
     )
+
+
+def run_plots_only_suite(
+    experiment_specs: Sequence[ExperimentSpec],
+    *,
+    seed: int,
+    num_seeds: int,
+    output_root: Path,
+    python_bin: str,
+    dry_run: bool,
+    repo_root: Path,
+    include_raw_rationality_error: bool,
+) -> None:
+    """Regenerate all paper-suite plots from existing summary CSVs."""
+
+    local_env = os.environ.copy()
+    local_env["MPLBACKEND"] = "Agg"
+    local_env["MPLCONFIGDIR"] = str(output_root / RUNNER_DIRNAME / "matplotlib")
+    for variable in THREAD_LIMIT_ENV_VARS:
+        local_env.setdefault(variable, "1")
+
+    if not dry_run:
+        Path(local_env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+
+    for spec in experiment_specs:
+        command = experiment_command(
+            python_bin,
+            spec,
+            seed=seed,
+            num_seeds=num_seeds,
+            output_root=output_root,
+            plot_only=True,
+            include_raw_rationality_error=include_raw_rationality_error,
+        )
+        run_command(command, cwd=repo_root, dry_run=dry_run, env=local_env)
 
 
 def slurm_output_dir(output_root: Path, raw_slurm_output_dir: str | None) -> Path:
@@ -759,6 +814,7 @@ def submit_slurm_single_experiment(
         seed=seed,
         num_seeds=num_seeds,
         output_root=output_root,
+        include_raw_rationality_error=args.include_raw_rationality_error,
     )
 
     # Single-job experiments such as the baseline do not need an array or aggregation step
@@ -805,6 +861,7 @@ def submit_slurm_array_experiment(
         seed=seed, # Pass the global reproducibility seed through to the child runner
         num_seeds=num_seeds, # Number of seeds each scenario task should run sequentially
         output_root=output_root,
+        include_raw_rationality_error=args.include_raw_rationality_error,
     )
 
     # Choose the path for the generated shell script that scenario array tasks will execute
@@ -855,6 +912,7 @@ def submit_slurm_array_experiment(
         num_seeds=num_seeds,
         output_root=output_root,
         aggregate_results=True,
+        include_raw_rationality_error=args.include_raw_rationality_error,
     )
 
     # Choose the path for the generated aggregation shell script
@@ -1063,8 +1121,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print()
         print("Planned commands:")
 
-    # zip-only should preserve the original launch manifest instead of rewriting it
-    elif args.mode != "zip-only":
+    # plots-only and zip-only should preserve the original launch manifest instead of rewriting it
+    elif args.mode not in {"plots-only", "zip-only"}:
         write_manifest(
             output_root,
             EXPERIMENT_SPECS,
@@ -1082,6 +1140,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_zip_only(output_root, zip_path)
         return 0
 
+    if args.mode == "plots-only":
+        run_plots_only_suite(
+            EXPERIMENT_SPECS,
+            seed=args.seed,
+            num_seeds=args.num_seeds,
+            output_root=output_root,
+            python_bin=args.python_bin,
+            dry_run=args.dry_run,
+            repo_root=repo_root,
+            include_raw_rationality_error=args.include_raw_rationality_error,
+        )
+        return 0
+
     # Local mode runs the child runners sequentially and then zips the output root
     if args.mode == "local":
         run_local_suite(
@@ -1093,6 +1164,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             python_bin=args.python_bin,
             dry_run=args.dry_run,
             repo_root=repo_root,
+            include_raw_rationality_error=args.include_raw_rationality_error,
         )
         return 0
 
