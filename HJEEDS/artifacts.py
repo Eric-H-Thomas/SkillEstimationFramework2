@@ -66,14 +66,16 @@ METHOD_LABELS = {
 }
 
 METHOD_COLORS = {
-    "jeeds": "#4C566A",
-    "hierarchical": "#0F766E",
+    "jeeds": "#17BEBB",
+    "hierarchical": "#AA1155",
 }
 
 METHOD_MARKERS = {
     "jeeds": "o",
     "hierarchical": "s",
 }
+
+METHOD_MARKER_SIZE = 4.0
 
 
 def method_label(method: str) -> str:
@@ -92,6 +94,12 @@ def method_marker(method: str) -> str:
     """Return the marker symbol for an estimator method."""
 
     return METHOD_MARKERS.get(method, "o")
+
+
+def method_marker_size(_method: str) -> float:
+    """Return the marker size for estimator method plots."""
+
+    return METHOD_MARKER_SIZE
 
 
 def error_metric_panels(
@@ -317,6 +325,7 @@ def _draw_bucket_error_panel(
                 yerr=np.array([lower_errors, upper_errors], dtype=float),
                 color=method_color(method),
                 marker=method_marker(method),
+                markersize=method_marker_size(method),
                 capsize=4,
                 linewidth=2,
                 label=method_label(method),

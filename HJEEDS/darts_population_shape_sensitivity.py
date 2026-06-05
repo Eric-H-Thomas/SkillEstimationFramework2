@@ -31,6 +31,7 @@ from HJEEDS.artifacts import (
     method_color,
     method_label,
     method_marker,
+    method_marker_size,
     METHOD_ORDER,
 )
 from HJEEDS.population_shapes import (
@@ -446,6 +447,7 @@ def _plot_lowest_bucket_metric(
                     yerr=np.array([lower_errors, upper_errors], dtype=float),
                     color=method_color(method),
                     marker=method_marker(method),
+                    markersize=method_marker_size(method),
                     capsize=4,
                     linewidth=2,
                     label=method_label(method),
