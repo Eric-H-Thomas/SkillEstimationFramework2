@@ -11,6 +11,7 @@ build/
 # Environments
 venv/
 .env
+.cursor
 
 # Slurm logs
 slurm-*.out
@@ -22,6 +23,10 @@ slurm-*.out
 Experiments/**/times/
 Experiments/**/plots/
 Experiments/**/logs/
+
+# Baseball data
+Data/Baseball/StatcastData/download.log
+Data/Baseball/StatcastData/ProcessedData-From-GivenFiles.pkl
 
 # Player data outputs (pkl, timing, plots)
 Data/**/data/
@@ -38,5 +43,4 @@ Data/**/logs/
 *.png
 /Testing/Experiments/Testing/parallel_verification_parallel/times/estimators
 /Testing/Experiments/Testing/parallel_verification_serial/times/estimators
-.DS_Store
 /HJEEDS/results
