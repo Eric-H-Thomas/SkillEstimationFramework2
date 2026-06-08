@@ -110,8 +110,7 @@ def manageData(csvFiles):
 	df19 = organizeData(raw19)
 
 
-	all_data = df22.append(df21, ignore_index = True)
-	all_data = all_data.append(df19, ignore_index = True)
+	all_data = pd.concat([df22, df21, df19], ignore_index=True)
 
 
 	#min max scale variables 

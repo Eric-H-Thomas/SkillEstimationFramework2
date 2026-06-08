@@ -257,6 +257,7 @@ dependencies:
       - memory-profiler==0.61.0
       - openpyxl==3.1.5
       - packaging==25.0
+      - pybaseball==2.2.7
       - pillow==11.3.0
       - platformdirs==4.5.1
       - psutil==7.1.1
