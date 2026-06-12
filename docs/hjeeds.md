@@ -212,37 +212,6 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 
 After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
 
-## Slurm 2D Cluster Wrapper (H-JEEDS)
-
-Use the bash wrapper to submit both the array and aggregation jobs in one step (do not call `sbatch` directly).
-
-Default grouped run (10 groups x 10 parts x 50 seeds):
-
-```bash
-bash submit_hjeeds_2d_cluster_tests.sh
-```
-
-Seed-per-task run (500 array tasks, 1 seed per task, grouped into `cluster_0`):
-
-```bash
-bash submit_hjeeds_2d_cluster_tests.sh \
-  --group-count 1 \
-  --parts-per-group 500 \
-  --seeds-per-group 500
-```
-
-Aggregation-only rerun (no new array tasks):
-
-```bash
-bash submit_hjeeds_2d_cluster_tests.sh --agg-only
-```
-
-The aggregation job defaults to a shorter walltime and memory. Override as needed:
-
-```bash
-bash submit_hjeeds_2d_cluster_tests.sh --agg-time 02:00:00 --agg-mem 4G
-```
-
 ## High-Data-Anchor Availability Ablation
 
 Use `HJEEDS.darts_anchor_availability_sensitivity` to test whether H-JEEDS depends on having some high-data agents available. Each scenario keeps a fixed set of one-sample agents, then adds a varying number of 25-sample anchor agents.
@@ -290,6 +259,67 @@ Use the Slurm submit helper to launch one array task per anchor-count scenario a
 ```
 
 After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
+
+## Slurm 2D Cluster Wrapper (H-JEEDS)
+
+Use the bash wrapper to submit both the array and aggregation jobs in one step (do not call `sbatch` directly).
+
+Default grouped run (10 groups x 10 parts x 50 seeds):
+
+```bash
+bash submit_hjeeds_2d_cluster_tests.sh
+```
+
+Seed-per-task run (500 array tasks, 1 seed per task, grouped into `cluster_0`):
+
+```bash
+bash submit_hjeeds_2d_cluster_tests.sh \
+  --group-count 1 \
+  --parts-per-group 500 \
+  --seeds-per-group 500
+```
+
+Aggregation-only rerun (no new array tasks):
+
+```bash
+bash submit_hjeeds_2d_cluster_tests.sh --agg-only
+```
+
+The aggregation job defaults to a shorter walltime and memory. Override as needed:
+
+```bash
+bash submit_hjeeds_2d_cluster_tests.sh --agg-time 02:00:00 --agg-mem 4G
+```
+
+## Baseball (Statcast) H-JEEDS
+
+Compare independent grid JEEDS against hierarchical H-JEEDS on real Statcast pitch data. Each agent is a `(pitcherID, pitchType)` pair. Per-pitch utility grids come from the OptimusPitch RNN weights in `Environments/Baseball/final_OP` and `utilsBaseball.getUtility()`.
+
+**Data prerequisites:** `Data/Baseball/StatcastData/ProcessedData-From-GivenFiles.pkl` (see `Environments/Baseball/downloadStatcastCSVs.py` and `dataTake2.py`).
+
+Dry run:
+
+```bash
+conda run -n skill-estimation python -m HJEEDS.baseball_hierarchical_vs_jeeds --seed default --dry-run
+```
+
+Smoke run (cap pitches and shrink grids):
+
+```bash
+conda run -n skill-estimation python -m HJEEDS.baseball_hierarchical_vs_jeeds \
+  --seed default \
+  --max-pitches-per-agent 5 \
+  --num-sigma-grid 21 \
+  --output-dir HJEEDS/results/baseball_smoke
+```
+
+Likelihood parity test (HJEEDS vs `JointMethodQRE` baseball-multi):
+
+```bash
+conda run -n skill-estimation python -m HJEEDS.verify_baseball_likelihood
+```
+
+Primary output: `agent_level_results.csv` under the chosen `--output-dir`.
 
 ## Slurm Agents-Per-Bucket Workflow
 

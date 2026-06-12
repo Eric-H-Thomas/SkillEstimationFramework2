@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 1:09 PM MDT.
+# This file has been fully edited by a human researcher as of 06/12/26 at 3:15 PM MDT.
 from __future__ import annotations
 
 import math
@@ -244,6 +244,30 @@ class AgentResult:
         """Recover the raw lambda only when a downstream calculation needs it."""
 
         return math.exp(self.log_lambda_true)
+
+
+@dataclass(frozen=True)
+class StatcastAgentResult:
+    """Agent-level outputs for real Statcast baseball (no simulated ground truth)."""
+
+    seed: int
+    agent_id: int
+    pitcher_id: int
+    pitch_type: str
+    count_bucket: int
+    num_observations: int
+    jeeds: MethodEstimate
+    hierarchical: MethodEstimate
+    notes: str = ""
+
+
+@dataclass
+class BaseballSeedResult:
+    """Per-seed bundle for Statcast baseball experiments."""
+
+    seed: int
+    agent_results: list[StatcastAgentResult] = field(default_factory=list)
+    notes: str = ""
 
 
 @dataclass

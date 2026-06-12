@@ -1,3 +1,4 @@
+# This file has been fully verified by a human researcher as of 6/12/26 at 3:14 PM MDT.
 """Environment-specific domain adapters for HJEEDS likelihood and simulation."""
 
 from __future__ import annotations
@@ -86,6 +87,23 @@ class TwoDDartsEnvironment(EnvironmentDomain):
         return float(two_d_darts.calculate_action_difference(action_1, action_2))
 
 
+class BaseballMultiEnvironment(EnvironmentDomain):
+    """Statcast baseball uses ``baseball_pitch`` directly; this stub satisfies the factory."""
+
+    def compute_expected_value_curve(self, reward_surface, sigma, delta):
+        raise NotImplementedError("Use HJEEDS.baseball_pitch for Statcast utility surfaces.")
+
+    def sample_noisy_action(self, rng, reward_surface, sigma, intended_action):
+        from HJEEDS.baseball_pitch import sample_noisy_action
+
+        return sample_noisy_action(rng, intended_action, sigma)
+
+    def compute_action_difference(self, action_1, action_2, reward_surface=None) -> float:
+        a1 = np.asarray(action_1, dtype=float)
+        a2 = np.asarray(action_2, dtype=float)
+        return float(np.linalg.norm(a1 - a2))
+
+
 def get_environment_domain(environment: str) -> EnvironmentDomain:
     """Factory function to get the appropriate domain adapter."""
 
@@ -93,4 +111,6 @@ def get_environment_domain(environment: str) -> EnvironmentDomain:
         return OneDDartsEnvironment()
     if environment == "2d":
         return TwoDDartsEnvironment()
-    raise ValueError(f"Unknown environment: {environment}. Choose '1d' or '2d'.")
+    if environment == "baseball":
+        return BaseballMultiEnvironment()
+    raise ValueError(f"Unknown environment: {environment}. Choose '1d', '2d', or 'baseball'.")
