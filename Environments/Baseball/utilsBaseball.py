@@ -28,8 +28,8 @@ def getUtilitiesPrev(pitch_df):
 
 	'''
 
-	pitch_df['swing_utility'] = -1 
-	pitch_df['take_utility'] = -1
+	pitch_df['swing_utility'] = -1.0
+	pitch_df['take_utility'] = -1.0
 
 
 	for balls in pitch_df.balls.unique():
@@ -99,8 +99,8 @@ def getUtilityPrev(pitch_df):
 	pitch_df['strikes_pre_event'] = pitch_df.strikes
 	pitch_df['balls_pre_event'] = pitch_df.balls
 
-	pitch_df['utility'] = -1 
-	pitch_df["actualPitchUtility"] = -1 
+	pitch_df['utility'] = -1.0
+	pitch_df["actualPitchUtility"] = -1.0
 
 	for balls in pitch_df.balls.unique():
 		for strikes in pitch_df.strikes.unique():
@@ -208,8 +208,8 @@ def getUtilities(pitch_df):
 	The batter's optimal utility for the pitch is the larger of those two values
 	'''
 
-	pitch_df['swing_utility'] = -1 
-	pitch_df['take_utility'] = -1
+	pitch_df['swing_utility'] = -1.0
+	pitch_df['take_utility'] = -1.0
 
 
 	for balls in pitch_df.balls.unique():
@@ -266,10 +266,10 @@ def getUtility(pitch_df):
 	The batter's optimal utility for the pitch is the larger of those two values
 	'''
 
-	pitch_df['swing_utility'] = -1 
-	pitch_df['take_utility'] = -1
+	pitch_df['swing_utility'] = -1.0
+	pitch_df['take_utility'] = -1.0
 
-	pitch_df['utility'] = -1
+	pitch_df['utility'] = -1.0
 
 	for balls in pitch_df.balls.unique():
 		for strikes in pitch_df.strikes.unique():
