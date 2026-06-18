@@ -1,4 +1,4 @@
-"""Verify HJEEDS baseball log-likelihood parity with production JointMethodQRE."""
+"""Verify that the HJEEDS baseball pipeline produces the same log-likelihood as the regular baseball environment."""
 
 from __future__ import annotations
 
