@@ -270,6 +270,40 @@ class BaseballSeedResult:
     notes: str = ""
 
 
+@dataclass(frozen=True)
+class StatcastConvergenceAgentResult:
+    """Agent-level convergence outputs vs a full-data independent JEEDS reference."""
+
+    seed: int
+    agent_id: int
+    pitcher_id: int
+    pitch_type: str
+    convergence_n: int
+    num_observations: int
+    num_reference_observations: int
+    reference: MethodEstimate
+    jeeds: MethodEstimate
+    hierarchical: MethodEstimate
+    abs_sigma_drift_vs_full_jeeds: float | None = None
+    abs_log_lambda_drift_vs_full_jeeds: float | None = None
+    abs_sigma_drift_vs_full_hierarchical: float | None = None
+    abs_log_lambda_drift_vs_full_hierarchical: float | None = None
+    hierarchical_closer_sigma: bool | None = None
+    hierarchical_closer_log_lambda: bool | None = None
+    notes: str = ""
+
+
+@dataclass
+class BaseballConvergenceSeedResult:
+    """Per-seed bundle for the baseball convergence study."""
+
+    seed: int
+    agent_results: list[StatcastConvergenceAgentResult] = field(default_factory=list)
+    summary_by_n_rows: list[dict[str, Any]] = field(default_factory=list)
+    summary_overall_rows: list[dict[str, Any]] = field(default_factory=list)
+    notes: str = ""
+
+
 @dataclass
 class SeedResult:
     """Bundle all per-seed outputs for later aggregation."""

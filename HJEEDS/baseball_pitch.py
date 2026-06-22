@@ -314,6 +314,100 @@ def get_agent_pitch_rows(
     return agent_data
 
 
+def count_agent_pitch_rows(
+    all_data: pd.DataFrame,
+    pitcher_id: int,
+    pitch_type: str,
+) -> int:
+    """Return how many pitches exist for one (pitcher, pitch type) agent."""
+
+    return int(
+        all_data.query(f"pitcher == {pitcher_id} and pitch_type == '{pitch_type}'").shape[0]
+    )
+
+
+def filter_roster_by_min_pitches(
+    roster: Sequence[StatcastAgentSpec],
+    all_data: pd.DataFrame,
+    min_pitches: int,
+) -> tuple[tuple[StatcastAgentSpec, ...], tuple[tuple[int, str, int], ...]]:
+    """Keep agents with at least ``min_pitches`` rows; return excluded (id, type, count)."""
+
+    if min_pitches <= 0:
+        raise ValueError(f"min_pitches must be positive. Received {min_pitches}.")
+
+    kept: list[StatcastAgentSpec] = []
+    excluded: list[tuple[int, str, int]] = []
+    for agent_index, agent_spec in enumerate(roster):
+        pitch_count = count_agent_pitch_rows(
+            all_data,
+            agent_spec.pitcher_id,
+            agent_spec.pitch_type,
+        )
+        if pitch_count >= min_pitches:
+            kept.append(
+                StatcastAgentSpec(
+                    agent_id=agent_index,
+                    pitcher_id=agent_spec.pitcher_id,
+                    pitch_type=agent_spec.pitch_type,
+                )
+            )
+        else:
+            excluded.append((agent_spec.pitcher_id, agent_spec.pitch_type, pitch_count))
+
+    renumbered = tuple(
+        StatcastAgentSpec(agent_id=index, pitcher_id=spec.pitcher_id, pitch_type=spec.pitch_type)
+        for index, spec in enumerate(kept)
+    )
+    return renumbered, tuple(excluded)
+
+
+def select_top_pitchers_by_pitch_count(
+    all_data: pd.DataFrame,
+    pitch_types: Sequence[str],
+    *,
+    min_pitches: int,
+    count: int,
+) -> tuple[int, ...]:
+    """Return the top ``count`` pitcher IDs by total pitch count across ``pitch_types``."""
+
+    if count <= 0:
+        raise ValueError(f"count must be positive. Received {count}.")
+
+    filtered = all_data[all_data["pitch_type"].isin(tuple(pitch_types))]
+    totals = filtered.groupby("pitcher").size()
+    eligible = totals[totals >= min_pitches].sort_values(ascending=False)
+    if eligible.empty:
+        raise ValueError(
+            f"No pitchers have at least {min_pitches} pitches for pitch types {tuple(pitch_types)}."
+        )
+    if len(eligible) < count:
+        raise ValueError(
+            f"Requested {count} pitchers but only {len(eligible)} meet min_pitches={min_pitches} "
+            f"for pitch types {tuple(pitch_types)}."
+        )
+    return tuple(int(pitcher_id) for pitcher_id in eligible.head(count).index)
+
+
+def list_eligible_pitcher_counts(
+    all_data: pd.DataFrame,
+    pitch_types: Sequence[str],
+    *,
+    min_pitches: int,
+    limit: int = 20,
+) -> list[tuple[int, str, int]]:
+    """Return up to ``limit`` (pitcher_id, pitch_type, count) rows meeting ``min_pitches``."""
+
+    rows: list[tuple[int, str, int]] = []
+    for pitch_type in pitch_types:
+        subset = all_data[all_data["pitch_type"] == pitch_type]
+        counts = subset.groupby("pitcher").size()
+        for pitcher_id, pitch_count in counts[counts >= min_pitches].sort_values(ascending=False).items():
+            rows.append((int(pitcher_id), str(pitch_type), int(pitch_count)))
+    rows.sort(key=lambda item: item[2], reverse=True)
+    return rows[:limit]
+
+
 def resolve_agent_roster(
     pitcher_ids: Sequence[int],
     pitch_types: Sequence[str],
