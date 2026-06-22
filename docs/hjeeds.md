@@ -375,7 +375,7 @@ Use the submit helper for a single job (~2 agents × 100 pitch surfaces; allow a
   --dry-run
 ```
 
-Drop `--dry-run` to submit. The job activates conda env `skill-estimation` on the cluster (or pass `--python-bin`). Results are zipped to `OUTPUT_DIR.zip` when the job finishes.
+Drop `--dry-run` to submit. The job runs `module load miniforge3`, activates conda env `skill-estimation`, and zips results to `OUTPUT_DIR.zip`. If activation fails, pass an explicit interpreter, e.g. `--python-bin "$(conda run -n skill-estimation which python)"`.
 
 Useful options: `--time`, `--mem`, `--partition`, `--account`, `--pitcher-ids` (instead of `--top-pitchers`).
 

@@ -22,7 +22,8 @@ Experiment options:
   --max-reference-pitches N      Cap reference pitches per agent (default: 100).
   --min-pitches-per-agent N      Override auto min-pitch threshold.
   --output-dir PATH              Output directory.
-  --python-bin PATH              Python executable (default: conda skill-estimation in sbatch).
+  --python-bin PATH              Python executable (default: module load miniforge3 + conda activate skill-estimation).
+  --conda-env NAME               Conda env to activate when PYTHON_BIN is unset (default: skill-estimation).
 
 Slurm options:
   --job-name NAME                Job name (default: hjeeds-baseball-conv).
@@ -58,6 +59,7 @@ max_reference_pitches="100"
 min_pitches_per_agent=""
 output_dir="HJEEDS/results/baseball_convergence_n100"
 python_bin=""
+conda_env="skill-estimation"
 
 job_name="hjeeds-baseball-conv"
 qos="normal"
@@ -113,6 +115,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --python-bin)
       python_bin="$2"
+      shift 2
+      ;;
+    --conda-env)
+      conda_env="$2"
       shift 2
       ;;
     --job-name)
@@ -193,6 +199,8 @@ if [[ -n "${min_pitches_per_agent}" ]]; then
 fi
 if [[ -n "${python_bin}" ]]; then
   experiment_env+=("PYTHON_BIN=${python_bin}")
+else
+  experiment_env+=("CONDA_ENV=${conda_env}")
 fi
 
 sbatch_args=(

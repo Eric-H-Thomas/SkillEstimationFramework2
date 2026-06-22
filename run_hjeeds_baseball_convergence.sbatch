@@ -20,18 +20,43 @@ mkdir -p "${MPLCONFIGDIR}"
 
 python_bin="${PYTHON_BIN:-}"
 if [[ -z "${python_bin}" ]]; then
-  if command -v module >/dev/null 2>&1; then
-  module load miniforge3 2>/dev/null || true
+  if ! command -v module >/dev/null 2>&1; then
+    echo "Error: module command not found and PYTHON_BIN is unset." >&2
+    echo "Pass --python-bin to submit_hjeeds_baseball_convergence.sh." >&2
+    exit 1
   fi
-  if [[ -f "${HOME}/miniforge3/etc/profile.d/conda.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${HOME}/miniforge3/etc/profile.d/conda.sh"
-    conda activate skill-estimation
-    python_bin="$(command -v python)"
-  else
-    python_bin="python3"
-  fi
+  module load miniforge3
+  eval "$(conda shell.bash hook)"
+  conda activate "${CONDA_ENV:-skill-estimation}"
+  python_bin="$(command -v python)"
 fi
+
+echo "[baseball-convergence] Using python: ${python_bin}" >&2
+"${python_bin}" - <<'PY'
+import sys
+
+required = ("numpy", "pandas", "torch", "scipy")
+missing = []
+for module_name in required:
+    try:
+        __import__(module_name)
+    except ImportError:
+        missing.append(module_name)
+
+if missing:
+    print(
+        "Error: Python environment is missing required packages: "
+        + ", ".join(missing),
+        file=sys.stderr,
+    )
+    print(f"Interpreter: {sys.executable}", file=sys.stderr)
+    print(
+        "Activate conda env skill-estimation on the cluster, or pass "
+        "--python-bin /path/to/python via submit_hjeeds_baseball_convergence.sh.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
 
 python_args=(
   -m HJEEDS.baseball_convergence_study
