@@ -91,7 +91,9 @@ class QREMethod_Multi_Particles():
             raise TypeError(f"Unsupported noise type: {type(noise)}")
 
         self.ranges["noise"] = noise_list
-        print(self.ranges["noise"])  # Debug: confirm per-dimension noise divisors
+        self.verbose = bool(otherArgs.get("verbose", False)) if otherArgs else False
+        if self.verbose:
+            print(self.ranges["noise"])
         # code.interact("...", local=dict(globals(), **locals()))
 
 
@@ -442,7 +444,7 @@ class QREMethod_Multi_Particles():
             # Means there's no way you'll be of this xskill
             # So no need to update probs, can remain 0.0
             if np.sum(pdfs) == 0.0 or np.isnan(np.sum(pdfs)):
-                self.probs[xi] = [0.0] * len(each)
+                self.probs[ii] = [0.0] * len(each)
                 # print(f"skipping (pdfs sum = 0) - x hyp: {x}")
                 continue
 
@@ -562,10 +564,11 @@ class QREMethod_Multi_Particles():
 
 
         # '''
-        print(self.methodType)
-        print(f"EES:{ees}  |  MAP: {self.estimatesXskills[self.names[0]][-1]}")
-        print(f"ERS:{ers}  |  MAP: {self.estimatesRhos[self.names[0]][-1]}")
-        print(f"EPS:{eps}  |  MAP: {self.estimatesPskills[self.names[0]][-1]}")
+        if self.verbose:
+            print(self.methodType)
+            print(f"EES:{ees}  |  MAP: {self.estimatesXskills[self.names[0]][-1]}")
+            print(f"ERS:{ers}  |  MAP: {self.estimatesRhos[self.names[0]][-1]}")
+            print(f"EPS:{eps}  |  MAP: {self.estimatesPskills[self.names[0]][-1]}")
         # code.interact("...", local=dict(globals(), **locals()))
         # '''
 
@@ -674,15 +677,16 @@ class QREMethod_Multi_Particles():
 
         folder = resultsFolder
 
-        #If the folder doesn't exist already, create it
-        if not os.path.exists("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep):
-            os.mkdir("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep)
+        if folder and (os.path.isabs(folder) or str(folder).startswith("Data")):
+            times_dir = os.path.join(folder, "times", "mcse", "estimators")
+            os.makedirs(times_dir, exist_ok=True)
+            times_path = os.path.join(times_dir, f"JT-QRE-Times-{tag}")
+        else:
+            base = os.path.join("Experiments", folder, "times")
+            os.makedirs(os.path.join(base, "estimators"), exist_ok=True)
+            times_path = os.path.join(base, "estimators", f"JT-QRE-Times-{tag}")
 
-        #If the folder doesn't exist already, create it
-        if not os.path.exists("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators"):
-            os.mkdir("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators")
-
-        with open("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators" + os.path.sep + "JT-QRE-Times-"+ tag, "a") as file:
+        with open(times_path, "a") as file:
             file.write(str(totalTimeEst) + "\n")
 
 
@@ -839,13 +843,13 @@ class QREMethod_Multi_Particles():
             tempIndexes = rng.choice(range(self.N),size=tempN,replace=True,p=self.probs.flatten())
 
         elif self.resamplingMethod == "systematic":
-            tempIndexes = systematic_resample(weights=self.probs.flatten())
+            tempIndexes = systematic_resample(weights=self.probs.flatten())[:tempN]
 
         elif self.resamplingMethod == "stratified":
-            tempIndexes = stratified_resample(weights=self.probs.flatten())
+            tempIndexes = stratified_resample(weights=self.probs.flatten())[:tempN]
 
         elif self.resamplingMethod == "residual":
-            tempIndexes = residual_resample(weights=self.probs.flatten())
+            tempIndexes = residual_resample(weights=self.probs.flatten())[:tempN]
 
 
         # tempIndexes = rng.choice(tempIndexes2,size=tempN)
@@ -1089,5 +1093,8 @@ class QREMethod_Multi_Particles():
 
         return results
 
+    add_observation = addObservation
+    get_results = getResults
+    get_estimator_name = getEstimatorName
 
 

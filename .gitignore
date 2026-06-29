@@ -24,6 +24,10 @@ Experiments/**/times/
 Experiments/**/plots/
 Experiments/**/logs/
 
+# Baseball data
+Data/Baseball/StatcastData/download.log
+Data/Baseball/StatcastData/ProcessedData-From-GivenFiles.pkl
+
 # Player data outputs (pkl, timing, plots)
 Data/**/data/
 Data/**/times/
