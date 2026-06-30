@@ -20,6 +20,14 @@ def _player_has_offline_data(player_id: int) -> bool:
     return any(player_dir.glob("shots_*.parquet"))
 
 
+def _leaf_mcse_result(result: dict) -> dict:
+    """Unwrap per-season results from estimate_player_skill (default per_season=True)."""
+    per_season = result.get("per_season_results")
+    if isinstance(per_season, dict) and per_season:
+        return next(iter(per_season.values()))
+    return result
+
+
 @pytest.mark.skipif(
     not all(_player_has_offline_data(pid) for pid in LIGHTWEIGHT_TEST_PLAYERS),
     reason="Offline shot data not cached for lightweight MCSE test players",
@@ -41,11 +49,12 @@ def test_mcse_offline_smoke() -> None:
             data_dir=DATA_DIR,
         )
 
-        assert result.get("status") == "success", result
-        assert result["num_shots"] > 0
-        assert result["ees_y"] is not None
-        assert result["ees_z"] is not None
-        csv_path = result.get("csv_path")
+        leaf = _leaf_mcse_result(result)
+        assert leaf.get("status") == "success", result
+        assert leaf["num_shots"] > 0
+        assert leaf["ees_y"] is not None
+        assert leaf["ees_z"] is not None
+        csv_path = leaf.get("csv_path")
         assert csv_path is not None
         assert Path(csv_path).exists()
         assert "logs/mcse" in str(csv_path)
