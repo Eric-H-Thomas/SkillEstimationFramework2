@@ -12,11 +12,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from HJEEDS.baseball_config import (
+    DEFAULT_MIN_PITCHES_PER_AGENT,
     build_baseball_config_from_args,
     parse_baseball_args,
     print_baseball_dry_run_summary,
 )
-from HJEEDS.config import planned_output_paths
+from HJEEDS.baseball_roster import print_eligible_agents, parse_pitch_types
+from HJEEDS.config import DEFAULT_SEED, planned_output_paths
 from HJEEDS.baseball_pipeline import run_single_baseball_seed
 from HJEEDS.models import StatcastAgentResult
 
@@ -87,6 +89,27 @@ def write_statcast_agent_level_csv(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_baseball_args(argv)
+
+    if args.list_eligible_pitchers:
+        min_pitches = (
+            args.min_pitches_per_agent
+            if args.min_pitches_per_agent is not None
+            else DEFAULT_MIN_PITCHES_PER_AGENT
+        )
+        print_eligible_agents(
+            season_year=args.season_year,
+            pitch_types=parse_pitch_types(args.pitch_types),
+            min_pitches=min_pitches,
+            limit=args.list_eligible_limit,
+        )
+        return 0
+
+    if args.seed is None:
+        if args.dry_run:
+            args.seed = DEFAULT_SEED
+        else:
+            raise SystemExit("error: --seed is required unless using --list-eligible-pitchers or --dry-run")
+
     config = build_baseball_config_from_args(args)
 
     if config.base.dry_run:

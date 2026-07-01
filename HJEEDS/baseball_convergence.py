@@ -12,20 +12,16 @@ import numpy as np
 
 from .baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
 from .baseball_likelihood import compute_baseball_log_likelihood_grid
+from .baseball_hyperpriors import resolve_baseball_hyperpriors
 from .baseball_pitch import (
     PitchObservation,
     StatcastAgentSpec,
     build_baseball_runtime,
     build_pitch_observation,
-    count_agent_pitch_rows,
-    filter_roster_by_min_pitches,
     get_agent_pitch_rows,
-    list_eligible_pitcher_counts,
-    load_processed_statcast,
-    resolve_agent_roster,
-    select_top_pitchers_by_pitch_count,
 )
-from .config import DEFAULT_HYPERPRIORS, TruePopulationConfig, _parse_count_buckets
+from .baseball_roster import load_statcast_for_roster, parse_pitch_types, resolve_baseball_roster
+from .config import TruePopulationConfig, _parse_count_buckets
 from .estimation import (
     build_discrete_hierarchical_prior,
     fit_population_hyperparameters_map,
@@ -67,11 +63,13 @@ class BaseballConvergenceConfig:
     """Configuration for the Statcast convergence study."""
 
     base: ExperimentConfig
+    season_year: int | None
     pitcher_ids: tuple[int, ...]
     pitch_types: tuple[str, ...]
     convergence_ns: tuple[int, ...]
     max_reference_pitches: int | None
     min_pitches_per_agent: int
+    agent_specs: tuple[StatcastAgentSpec, ...]
     agents: tuple[tuple[int, str], ...]
     agent_pitch_counts: tuple[tuple[int, str, int], ...] = ()
     excluded_agents: tuple[tuple[int, str, int], ...] = ()
@@ -292,8 +290,7 @@ def run_single_baseball_convergence_seed(
     sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
     execution_skills = tuple(float(value) for value in sigma_grid)
     runtime = build_baseball_runtime(rng, execution_skills, delta=config.base.delta)
-    all_data = load_processed_statcast()
-    roster = resolve_agent_roster(config.pitcher_ids, config.pitch_types)
+    all_data = load_statcast_for_roster(config.season_year)
 
     max_build_n = max(config.convergence_ns)
     agent_cache: list[
@@ -306,7 +303,7 @@ def run_single_baseball_convergence_seed(
         ]
     ] = []
 
-    for agent_spec in roster:
+    for agent_spec in config.agent_specs:
         agent_rows = get_agent_pitch_rows(
             all_data,
             agent_spec.pitcher_id,
@@ -479,9 +476,12 @@ def build_baseball_skill_grids_from_convergence(
 
     shim = BaseballExperimentConfig(
         base=config.base,
+        season_year=config.season_year,
         pitcher_ids=config.pitcher_ids,
         pitch_types=config.pitch_types,
         max_pitches_per_agent=None,
+        use_natural_pitch_counts=True,
+        agent_specs=config.agent_specs,
         agents=config.agents,
     )
     return _build(shim)
@@ -489,52 +489,41 @@ def build_baseball_skill_grids_from_convergence(
 
 def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConfig:
     convergence_ns = _parse_count_buckets(args.convergence_ns)
-    pitch_types = tuple(piece.strip() for piece in args.pitch_types.split(",") if piece.strip())
-    if not pitch_types:
-        raise ValueError("At least one pitch type is required.")
-
+    pitch_types = parse_pitch_types(args.pitch_types)
     min_pitches_per_agent = (
         args.min_pitches_per_agent
         if args.min_pitches_per_agent is not None
         else required_min_pitches_for_convergence(convergence_ns, args.max_reference_pitches)
     )
 
-    all_data = load_processed_statcast()
-    if args.top_pitchers is not None:
-        pitcher_ids = select_top_pitchers_by_pitch_count(
-            all_data,
-            pitch_types,
-            min_pitches=min_pitches_per_agent,
-            count=args.top_pitchers,
-        )
+    all_data = load_statcast_for_roster(args.season_year)
+    if args.all_eligible_agents:
+        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None)
+    elif args.top_pitchers is not None:
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers)
     else:
         pitcher_ids = tuple(int(piece.strip()) for piece in args.pitcher_ids.split(",") if piece.strip())
-        if not pitcher_ids:
-            raise ValueError("At least one pitcher id is required (or use --top-pitchers).")
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None)
 
-    roster = resolve_agent_roster(pitcher_ids, pitch_types)
-    roster, excluded_agents = filter_roster_by_min_pitches(
-        roster,
-        all_data,
-        min_pitches_per_agent,
+    roster = resolve_baseball_roster(
+        all_data=all_data,
+        season_year=args.season_year,
+        pitch_types=pitch_types,
+        min_pitches_per_agent=min_pitches_per_agent,
+        max_agents=args.max_agents,
+        **roster_selector,
     )
-    if not roster:
-        raise ValueError(
-            "No agents meet min_pitches_per_agent="
-            f"{min_pitches_per_agent}. Excluded: {excluded_agents}. "
-            "Use --list-eligible-pitchers to find alternatives or lower the threshold."
-        )
 
-    agent_pitch_counts = tuple(
-        (spec.pitcher_id, spec.pitch_type, count_agent_pitch_rows(all_data, spec.pitcher_id, spec.pitch_type))
-        for spec in roster
+    hyperpriors = resolve_baseball_hyperpriors(
+        preset=args.hyperprior_preset,
+        calibrated_path=Path(args.hyperprior_config) if args.hyperprior_config else None,
     )
     output_dir = Path(args.output_dir)
     base = ExperimentConfig(
         environment="baseball",
         seed=args.seed,
         num_seeds=args.num_seeds,
-        num_agents=len(roster),
+        num_agents=len(roster.agent_specs),
         count_buckets=convergence_ns,
         agents_per_bucket=1,
         delta=args.delta,
@@ -549,25 +538,27 @@ def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConf
         min_success_regions=2,
         max_success_regions=6,
         min_region_width=0.25,
-        hyperpriors=DEFAULT_HYPERPRIORS,
+        hyperpriors=hyperpriors,
         true_population=TruePopulationConfig(
-            mean_log_sigma=math.log(0.5),
-            mean_log_lambda=math.log(1.0),
-            tau_eta=0.35,
-            tau_rho=1.0,
-            correlation=-0.5,
+            mean_log_sigma=hyperpriors.mean_vector[0],
+            mean_log_lambda=hyperpriors.mean_vector[1],
+            tau_eta=math.exp(hyperpriors.log_tau_eta_mean),
+            tau_rho=math.exp(hyperpriors.log_tau_rho_mean),
+            correlation=math.tanh(hyperpriors.m_r),
         ),
     )
     return BaseballConvergenceConfig(
         base=base,
-        pitcher_ids=pitcher_ids,
-        pitch_types=pitch_types,
+        season_year=args.season_year,
+        pitcher_ids=roster.pitcher_ids,
+        pitch_types=roster.pitch_types,
         convergence_ns=convergence_ns,
         max_reference_pitches=args.max_reference_pitches,
         min_pitches_per_agent=min_pitches_per_agent,
-        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in roster),
-        agent_pitch_counts=agent_pitch_counts,
-        excluded_agents=excluded_agents,
+        agent_specs=roster.agent_specs,
+        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in roster.agent_specs),
+        agent_pitch_counts=roster.agent_pitch_counts,
+        excluded_agents=roster.excluded_agents,
     )
 
 
@@ -576,20 +567,16 @@ def print_eligible_pitchers(
     *,
     min_pitches: int,
     limit: int,
+    season_year: int | None = None,
 ) -> None:
-    all_data = load_processed_statcast()
-    rows = list_eligible_pitcher_counts(
-        all_data,
-        pitch_types,
+    from .baseball_roster import print_eligible_agents
+
+    print_eligible_agents(
+        season_year=season_year,
+        pitch_types=pitch_types,
         min_pitches=min_pitches,
         limit=limit,
     )
-    print(f"Eligible agents with >= {min_pitches} pitches (top {limit}):")
-    if not rows:
-        print("  (none)")
-        return
-    for pitcher_id, pitch_type, pitch_count in rows:
-        print(f"  pitcher={pitcher_id} pitch_type={pitch_type} count={pitch_count}")
 
 
 def planned_convergence_output_paths(output_dir: Path) -> dict[str, Path]:
@@ -605,7 +592,7 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
     paths = planned_convergence_output_paths(config.base.output_dir)
     max_n = max(config.convergence_ns)
-    pitch_builds = len(config.agents) * max(
+    pitch_builds = len(config.agent_specs) * max(
         max_n,
         config.max_reference_pitches or 0,
     )
@@ -614,8 +601,9 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     print("No RNN inference or estimation will run.")
     print()
     print(f"Environment: {config.environment}")
+    print(f"Season year: {config.season_year or 'all seasons in pickle'}")
     print(f"Seeds: {config.seed_values}")
-    print(f"Agents (pitcher, pitch type): {config.agents}")
+    print(f"Agents: {len(config.agent_specs)}")
     if config.agent_pitch_counts:
         print("Agent pitch counts:")
         for pitcher_id, pitch_type, pitch_count in config.agent_pitch_counts:
@@ -625,7 +613,8 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
         for pitcher_id, pitch_type, pitch_count in config.excluded_agents:
             print(f"  pitcher={pitcher_id} pitch_type={pitch_type} count={pitch_count}")
     print(f"Min pitches per agent: {config.min_pitches_per_agent}")
-    print(f"Convergence N values (cumulative newest-first prefix): {config.convergence_ns}")
+    print(f"Convergence N values (prefix pitch counts): {config.convergence_ns}")
+    print(f"Hyperprior centers (log sigma, log lambda): {config.base.hyperpriors.mean_vector}")
     print(
         "Reference: independent JEEDS posterior mean on "
         f"{'all available' if config.max_reference_pitches is None else config.max_reference_pitches} "
@@ -650,5 +639,5 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     print()
     print(
         f"Upper-bound pitch-surface builds (no cache reuse): ~{pitch_builds} "
-        f"({len(config.agents)} agents x max build depth)."
+        f"({len(config.agent_specs)} agents x max build depth)."
     )

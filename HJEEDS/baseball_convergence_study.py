@@ -27,12 +27,12 @@ from HJEEDS.baseball_convergence import (
     build_baseball_convergence_config_from_args,
     planned_convergence_output_paths,
     print_baseball_convergence_dry_run_summary,
-    print_eligible_pitchers,
     required_min_pitches_for_convergence,
     run_single_baseball_convergence_seed,
 )
 from HJEEDS.baseball_pitch import DEFAULT_DELTA, DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MIN
-from HJEEDS.config import SUMMARY_BY_BUCKET_CSV_HEADER, SUMMARY_OVERALL_CSV_HEADER, parse_seed_argument
+from HJEEDS.baseball_roster import add_common_roster_arguments, add_hyperprior_arguments, print_eligible_agents
+from HJEEDS.config import DEFAULT_SEED, SUMMARY_BY_BUCKET_CSV_HEADER, SUMMARY_OVERALL_CSV_HEADER, parse_seed_argument
 from HJEEDS.models import StatcastConvergenceAgentResult
 
 CONVERGENCE_AGENT_LEVEL_HEADER = [
@@ -102,34 +102,13 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     parser.add_argument("--lambda-max", type=float, default=DEFAULT_LAMBDA_MAX)
     parser.add_argument("--pitcher-ids", type=str, default=",".join(str(pid) for pid in DEFAULT_PITCHER_IDS))
     parser.add_argument("--pitch-types", type=str, default=",".join(DEFAULT_PITCH_TYPES))
-    parser.add_argument(
-        "--top-pitchers",
-        type=int,
-        default=None,
-        help="Select the top-N pitchers by pitch count (meeting min pitches) instead of --pitcher-ids.",
-    )
-    parser.add_argument(
-        "--min-pitches-per-agent",
-        type=int,
-        default=None,
-        help="Require at least this many pitches per agent. Default: max(convergence-ns, max-reference-pitches).",
-    )
+    add_common_roster_arguments(parser)
+    add_hyperprior_arguments(parser)
     parser.add_argument(
         "--max-reference-pitches",
         type=int,
         default=None,
         help="Cap full-data reference pitches per agent (smoke tests). Default: all available.",
-    )
-    parser.add_argument(
-        "--list-eligible-pitchers",
-        action="store_true",
-        help="Print pitchers meeting the min-pitch threshold and exit.",
-    )
-    parser.add_argument(
-        "--list-eligible-limit",
-        type=int,
-        default=20,
-        help="How many eligible pitchers to show with --list-eligible-pitchers.",
     )
     parser.add_argument("--output-dir", type=str, default=str(DEFAULT_OUTPUT_DIR_CONVERGENCE))
     parser.add_argument("--dry-run", action="store_true")
@@ -244,11 +223,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.min_pitches_per_agent is not None
             else required_min_pitches_for_convergence(convergence_ns, args.max_reference_pitches)
         )
-        print_eligible_pitchers(pitch_types, min_pitches=min_pitches, limit=args.list_eligible_limit)
+        print_eligible_agents(
+            season_year=args.season_year,
+            pitch_types=pitch_types,
+            min_pitches=min_pitches,
+            limit=args.list_eligible_limit,
+        )
         return 0
 
     if args.seed is None:
-        raise SystemExit("error: --seed is required unless using --list-eligible-pitchers")
+        if args.dry_run or args.plot_only:
+            args.seed = DEFAULT_SEED
+        else:
+            raise SystemExit(
+                "error: --seed is required unless using --list-eligible-pitchers, --dry-run, or --plot-only"
+            )
 
     config = build_baseball_convergence_config_from_args(args)
 

@@ -15,9 +15,8 @@ from .baseball_pitch import (
     build_baseball_runtime,
     build_pitch_observation,
     get_agent_pitch_rows,
-    load_processed_statcast,
-    resolve_agent_roster,
 )
+from .baseball_roster import load_statcast_for_roster
 from .estimation import (
     build_discrete_hierarchical_prior,
     fit_population_hyperparameters_map,
@@ -39,6 +38,16 @@ def _build_pitch_observations_for_agent(
     return observations
 
 
+def _observation_target_for_agent(
+    config: BaseballExperimentConfig,
+    agent_spec: StatcastAgentSpec,
+    observation_counts: Sequence[int],
+) -> int:
+    if config.use_natural_pitch_counts:
+        return 10**9
+    return observation_counts[agent_spec.agent_id]
+
+
 def run_single_baseball_seed(
     config: BaseballExperimentConfig,
     seed: int,
@@ -49,8 +58,7 @@ def run_single_baseball_seed(
     sigma_grid, log_lambda_grid = build_baseball_skill_grids(config)
     execution_skills = tuple(float(value) for value in sigma_grid)
     runtime = build_baseball_runtime(rng, execution_skills, delta=config.base.delta)
-    all_data = load_processed_statcast()
-    roster = resolve_agent_roster(config.pitcher_ids, config.pitch_types)
+    all_data = load_statcast_for_roster(config.season_year)
     observation_counts = assign_observation_counts(config.base)
 
     seed_result = BaseballSeedResult(
@@ -61,7 +69,8 @@ def run_single_baseball_seed(
         tuple[StatcastAgentSpec, int, list[PitchObservation], np.ndarray, MethodEstimate]
     ] = []
 
-    for agent_spec, num_observations in zip(roster, observation_counts, strict=True):
+    for agent_spec in config.agent_specs:
+        target_count = _observation_target_for_agent(config, agent_spec, observation_counts)
         agent_rows = get_agent_pitch_rows(
             all_data,
             agent_spec.pitcher_id,
@@ -74,7 +83,7 @@ def run_single_baseball_seed(
                     agent_id=agent_spec.agent_id,
                     pitcher_id=agent_spec.pitcher_id,
                     pitch_type=agent_spec.pitch_type,
-                    count_bucket=num_observations,
+                    count_bucket=0,
                     num_observations=0,
                     jeeds=MethodEstimate(
                         method_name="jeeds",
@@ -91,7 +100,7 @@ def run_single_baseball_seed(
             )
             continue
 
-        take_n = min(num_observations, len(agent_rows))
+        take_n = min(target_count, len(agent_rows))
         if config.max_pitches_per_agent is not None:
             take_n = min(take_n, config.max_pitches_per_agent)
         agent_rows = agent_rows.iloc[:take_n, :]
@@ -115,7 +124,7 @@ def run_single_baseball_seed(
             log_lambda_grid=log_lambda_grid,
         )
         agent_records.append(
-            (agent_spec, num_observations, pitch_observations, log_likelihood_grid, jeeds_estimate)
+            (agent_spec, len(pitch_observations), pitch_observations, log_likelihood_grid, jeeds_estimate)
         )
 
     if agent_records:
