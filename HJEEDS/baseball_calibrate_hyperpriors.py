@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -16,14 +18,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from HJEEDS.baseball_config import DEFAULT_MIN_PITCHES_PER_AGENT, build_baseball_skill_grids
+from HJEEDS.baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
 from HJEEDS.baseball_hyperpriors import (
     build_hyperpriors_from_jeeds_estimates,
     hyperprior_config_to_dict,
+    resolve_baseball_hyperpriors,
     write_hyperprior_config,
 )
 from HJEEDS.baseball_likelihood import compute_baseball_log_likelihood_grid
-from HJEEDS.baseball_pitch import build_baseball_runtime, build_pitch_observation, get_agent_pitch_rows
+from HJEEDS.baseball_pitch import (
+    StatcastAgentSpec,
+    build_baseball_runtime,
+    build_pitch_observation,
+    get_agent_pitch_rows,
+)
 from HJEEDS.baseball_roster import (
     add_common_roster_arguments,
     load_statcast_for_roster,
@@ -31,11 +39,14 @@ from HJEEDS.baseball_roster import (
     print_eligible_agents,
     resolve_baseball_roster,
 )
-from HJEEDS.config import parse_seed_argument
+from HJEEDS.config import ExperimentConfig, TruePopulationConfig, parse_seed_argument
 from HJEEDS.estimation import run_independent_jeeds_baseline
 from HJEEDS.models import MethodEstimate
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/baseball_hyperprior_calibration")
+ROSTER_FILENAME = "calibration_roster.json"
+ROSTER_METADATA_FILENAME = "calibration_roster_metadata.json"
+AGENT_RESULTS_SUBDIR = "agents"
 
 JEEDS_CALIBRATION_HEADER = [
     "agent_id",
@@ -51,10 +62,23 @@ JEEDS_CALIBRATION_HEADER = [
 ]
 
 
+@dataclass(frozen=True)
+class CalibrationContext:
+    """Shared configuration for one calibration workload."""
+
+    args: argparse.Namespace
+    output_dir: Path
+    roster_path: Path
+    agent_results_dir: Path
+    config: BaseballExperimentConfig
+    all_data: Any
+
+
 def parse_calibration_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run independent JEEDS on a Statcast roster and write suggested baseball hyperpriors."
+            "Run independent JEEDS on a Statcast roster and write suggested baseball hyperpriors. "
+            "Supports local sequential runs, per-agent cluster tasks, and aggregation."
         )
     )
     parser.add_argument("--seed", type=parse_seed_argument, default=12345)
@@ -79,6 +103,22 @@ def parse_calibration_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     )
     parser.add_argument("--output-dir", type=str, default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--prepare-roster",
+        action="store_true",
+        help="Write calibration_roster.json and exit (no JEEDS inference).",
+    )
+    parser.add_argument(
+        "--agent-index",
+        type=int,
+        default=None,
+        help="Run independent JEEDS for one roster agent (0-based index for Slurm arrays).",
+    )
+    parser.add_argument(
+        "--aggregate-results",
+        action="store_true",
+        help="Combine per-agent outputs and write final hyperprior artifacts.",
+    )
     add_common_roster_arguments(parser)
     return parser.parse_args(argv)
 
@@ -104,12 +144,30 @@ def _estimate_to_row(
     }
 
 
-def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
+def _row_from_estimate_row(row: dict[str, Any]) -> MethodEstimate:
+    return MethodEstimate(
+        method_name="jeeds",
+        posterior_mean_sigma=_optional_float(row.get("posterior_mean_sigma")),
+        posterior_mean_log_lambda=_optional_float(row.get("posterior_mean_log_lambda")),
+        map_sigma=_optional_float(row.get("map_sigma")),
+        map_log_lambda=_optional_float(row.get("map_log_lambda")),
+        status=str(row.get("status", "")),
+        notes=str(row.get("notes", "")),
+    )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _resolve_roster_from_args(args: argparse.Namespace):
     pitch_types = parse_pitch_types(args.pitch_types)
     min_pitches = (
         args.min_pitches_per_agent
         if args.min_pitches_per_agent is not None
-        else DEFAULT_MIN_PITCHES_PER_AGENT
+        else 100
     )
     all_data = load_statcast_for_roster(args.season_year)
 
@@ -129,12 +187,14 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         max_agents=args.max_agents,
         **roster_selector,
     )
+    return roster, pitch_types, min_pitches, all_data
 
-    from HJEEDS.baseball_config import BaseballExperimentConfig
-    from HJEEDS.baseball_hyperpriors import resolve_baseball_hyperpriors
-    from HJEEDS.config import ExperimentConfig, TruePopulationConfig
-    import math
 
+def _build_calibration_config(
+    args: argparse.Namespace,
+    roster,
+    output_dir: Path,
+) -> BaseballExperimentConfig:
     hyperpriors = resolve_baseball_hyperpriors(preset="low-confidence", calibrated_path=None)
     base = ExperimentConfig(
         environment="baseball",
@@ -150,7 +210,7 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         sigma_max=2.81,
         lambda_min=1e-3,
         lambda_max=10**3.6,
-        output_dir=Path(args.output_dir),
+        output_dir=output_dir,
         environment_grids={},
         dry_run=False,
         min_success_regions=2,
@@ -165,7 +225,7 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
             correlation=math.tanh(hyperpriors.m_r),
         ),
     )
-    config = BaseballExperimentConfig(
+    return BaseballExperimentConfig(
         base=base,
         season_year=args.season_year,
         pitcher_ids=roster.pitcher_ids,
@@ -178,51 +238,148 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         excluded_agents=roster.excluded_agents,
     )
 
-    rng = np.random.default_rng(args.seed)
-    sigma_grid, log_lambda_grid = build_baseball_skill_grids(config)
+
+def roster_path_for(output_dir: Path) -> Path:
+    return output_dir / ROSTER_FILENAME
+
+
+def agent_result_path_for(output_dir: Path, agent_id: int) -> Path:
+    return output_dir / AGENT_RESULTS_SUBDIR / f"agent_{agent_id:04d}.json"
+
+
+def write_calibration_roster(
+    output_dir: Path,
+    roster,
+    *,
+    season_year: int | None,
+    pitch_types: Sequence[str],
+    min_pitches_per_agent: int,
+    max_pitches_per_agent: int | None,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = roster_path_for(output_dir)
+    payload = [
+        {
+            "agent_id": spec.agent_id,
+            "pitcher_id": spec.pitcher_id,
+            "pitch_type": spec.pitch_type,
+        }
+        for spec in roster.agent_specs
+    ]
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+        handle.write("\n")
+
+    metadata = {
+        "season_year": season_year,
+        "pitch_types": list(pitch_types),
+        "min_pitches_per_agent": min_pitches_per_agent,
+        "max_pitches_per_agent": max_pitches_per_agent,
+        "num_agents": len(payload),
+    }
+    with (output_dir / ROSTER_METADATA_FILENAME).open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2)
+        handle.write("\n")
+    return path
+
+
+def load_calibration_roster(output_dir: Path) -> tuple[StatcastAgentSpec, ...]:
+    path = roster_path_for(output_dir)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Calibration roster not found: {path}. Run with --prepare-roster first."
+        )
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return tuple(
+        StatcastAgentSpec(
+            agent_id=int(row["agent_id"]),
+            pitcher_id=int(row["pitcher_id"]),
+            pitch_type=str(row["pitch_type"]),
+        )
+        for row in payload
+    )
+
+
+def run_single_agent_calibration(
+    context: CalibrationContext,
+    agent_spec: StatcastAgentSpec,
+) -> dict[str, Any]:
+    rng = np.random.default_rng(context.args.seed + agent_spec.agent_id)
+    sigma_grid, log_lambda_grid = build_baseball_skill_grids(context.config)
     execution_skills = tuple(float(value) for value in sigma_grid)
-    runtime = build_baseball_runtime(rng, execution_skills, delta=config.base.delta)
+    runtime = build_baseball_runtime(rng, execution_skills, delta=context.config.base.delta)
 
+    agent_rows = get_agent_pitch_rows(
+        context.all_data,
+        agent_spec.pitcher_id,
+        agent_spec.pitch_type,
+        max_rows=context.args.max_pitches_per_agent,
+    )
+    pitch_observations = [
+        build_pitch_observation(row, runtime, execution_skills) for _, row in agent_rows.iterrows()
+    ]
+    if not pitch_observations:
+        estimate = MethodEstimate(method_name="jeeds", status="no_data", notes="No pitches for agent.")
+    else:
+        log_likelihood_grid = compute_baseball_log_likelihood_grid(
+            pitch_observations=pitch_observations,
+            possible_targets_feet=runtime.grids.possible_targets_feet,
+            all_covs=runtime.all_covs,
+            sigma_grid=sigma_grid,
+            log_lambda_grid=log_lambda_grid,
+            delta=context.config.base.delta,
+        )
+        estimate = run_independent_jeeds_baseline(
+            log_likelihood_grid=log_likelihood_grid,
+            sigma_grid=sigma_grid,
+            log_lambda_grid=log_lambda_grid,
+        )
+    return _estimate_to_row(
+        agent_spec.agent_id,
+        agent_spec.pitcher_id,
+        agent_spec.pitch_type,
+        len(pitch_observations),
+        estimate,
+    )
+
+
+def write_agent_result(path: Path, row: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(row, handle, indent=2)
+        handle.write("\n")
+
+
+def load_agent_results(output_dir: Path) -> tuple[list[dict[str, Any]], list[int]]:
+    agents_dir = output_dir / AGENT_RESULTS_SUBDIR
+    if not agents_dir.is_dir():
+        raise FileNotFoundError(f"Missing per-agent results directory: {agents_dir}")
+
+    roster = load_calibration_roster(output_dir)
     rows: list[dict[str, Any]] = []
-    estimates: list[MethodEstimate] = []
-    for agent_spec in roster.agent_specs:
-        agent_rows = get_agent_pitch_rows(
-            all_data,
-            agent_spec.pitcher_id,
-            agent_spec.pitch_type,
-            max_rows=args.max_pitches_per_agent,
-        )
-        pitch_observations = [
-            build_pitch_observation(row, runtime, execution_skills) for _, row in agent_rows.iterrows()
-        ]
-        if not pitch_observations:
-            estimate = MethodEstimate(method_name="jeeds", status="no_data", notes="No pitches for agent.")
-        else:
-            log_likelihood_grid = compute_baseball_log_likelihood_grid(
-                pitch_observations=pitch_observations,
-                possible_targets_feet=runtime.grids.possible_targets_feet,
-                all_covs=runtime.all_covs,
-                sigma_grid=sigma_grid,
-                log_lambda_grid=log_lambda_grid,
-                delta=config.base.delta,
-            )
-            estimate = run_independent_jeeds_baseline(
-                log_likelihood_grid=log_likelihood_grid,
-                sigma_grid=sigma_grid,
-                log_lambda_grid=log_lambda_grid,
-            )
-        rows.append(
-            _estimate_to_row(
-                agent_spec.agent_id,
-                agent_spec.pitcher_id,
-                agent_spec.pitch_type,
-                len(pitch_observations),
-                estimate,
-            )
-        )
-        estimates.append(estimate)
+    missing_agent_ids: list[int] = []
+    for agent_spec in roster:
+        path = agent_result_path_for(output_dir, agent_spec.agent_id)
+        if not path.is_file():
+            missing_agent_ids.append(agent_spec.agent_id)
+            continue
+        with path.open("r", encoding="utf-8") as handle:
+            rows.append(json.load(handle))
+    rows.sort(key=lambda row: int(row["agent_id"]))
+    return rows, missing_agent_ids
 
-    hyperpriors = build_hyperpriors_from_jeeds_estimates(estimates, confidence=args.confidence)
+
+def build_calibration_summary(
+    rows: Sequence[dict[str, Any]],
+    estimates: Sequence[MethodEstimate],
+    *,
+    confidence: str,
+    season_year: int | None,
+    pitch_types: Sequence[str],
+    missing_agent_ids: Sequence[int],
+) -> dict[str, Any]:
+    hyperpriors = build_hyperpriors_from_jeeds_estimates(estimates, confidence=confidence)
     ok_estimates = [
         estimate
         for estimate in estimates
@@ -233,19 +390,21 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
     log_sigmas = [float(np.log(estimate.posterior_mean_sigma)) for estimate in ok_estimates]
     log_lambdas = [float(estimate.posterior_mean_log_lambda) for estimate in ok_estimates]
 
-    summary = {
-        "season_year": args.season_year,
+    return {
+        "season_year": season_year,
         "pitch_types": list(pitch_types),
-        "num_agents": len(rows),
+        "num_agents": len(rows) + len(missing_agent_ids),
+        "num_completed_agent_results": len(rows),
+        "num_missing_agent_results": len(missing_agent_ids),
+        "missing_agent_ids": list(missing_agent_ids),
         "num_successful_estimates": len(ok_estimates),
         "sample_mean_log_sigma": float(np.mean(log_sigmas)) if log_sigmas else None,
         "sample_mean_log_lambda": float(np.mean(log_lambdas)) if log_lambdas else None,
         "sample_std_log_sigma": float(np.std(log_sigmas, ddof=1)) if len(log_sigmas) > 1 else None,
         "sample_std_log_lambda": float(np.std(log_lambdas, ddof=1)) if len(log_lambdas) > 1 else None,
-        "confidence": args.confidence,
+        "confidence": confidence,
         "suggested_hyperpriors": hyperprior_config_to_dict(hyperpriors),
     }
-    return {"rows": rows, "summary": summary, "hyperpriors": hyperpriors}
 
 
 def write_calibration_outputs(output_dir: Path, payload: dict[str, Any]) -> None:
@@ -264,6 +423,159 @@ def write_calibration_outputs(output_dir: Path, payload: dict[str, Any]) -> None
     write_hyperprior_config(output_dir / "suggested_hyperpriors.json", payload["hyperpriors"])
 
 
+def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
+    roster, pitch_types, min_pitches, all_data = _resolve_roster_from_args(args)
+    output_dir = Path(args.output_dir)
+    config = _build_calibration_config(args, roster, output_dir)
+    context = CalibrationContext(
+        args=args,
+        output_dir=output_dir,
+        roster_path=roster_path_for(output_dir),
+        agent_results_dir=output_dir / AGENT_RESULTS_SUBDIR,
+        config=config,
+        all_data=all_data,
+    )
+
+    rows: list[dict[str, Any]] = []
+    estimates: list[MethodEstimate] = []
+    for agent_spec in roster.agent_specs:
+        row = run_single_agent_calibration(context, agent_spec)
+        rows.append(row)
+        estimates.append(_row_from_estimate_row(row))
+
+    hyperpriors = build_hyperpriors_from_jeeds_estimates(estimates, confidence=args.confidence)
+    summary = build_calibration_summary(
+        rows,
+        estimates,
+        confidence=args.confidence,
+        season_year=args.season_year,
+        pitch_types=pitch_types,
+        missing_agent_ids=(),
+    )
+    return {"rows": rows, "summary": summary, "hyperpriors": hyperpriors}
+
+
+def prepare_roster(args: argparse.Namespace) -> Path:
+    roster, pitch_types, min_pitches, _all_data = _resolve_roster_from_args(args)
+    output_dir = Path(args.output_dir)
+    path = write_calibration_roster(
+        output_dir,
+        roster,
+        season_year=args.season_year,
+        pitch_types=pitch_types,
+        min_pitches_per_agent=min_pitches,
+        max_pitches_per_agent=args.max_pitches_per_agent,
+    )
+    print(f"[baseball-calibrate] Wrote roster with {len(roster.agent_specs)} agents to {path.resolve()}")
+    return path
+
+
+def run_agent_index(args: argparse.Namespace) -> Path:
+    output_dir = Path(args.output_dir)
+    roster = load_calibration_roster(output_dir)
+    if args.agent_index is None:
+        raise ValueError("--agent-index is required for per-agent calibration tasks.")
+    if args.agent_index < 0 or args.agent_index >= len(roster):
+        raise IndexError(
+            f"agent_index={args.agent_index} is out of range for roster size {len(roster)}."
+        )
+
+    agent_spec = roster[args.agent_index]
+    hyperpriors = resolve_baseball_hyperpriors(preset="low-confidence", calibrated_path=None)
+    base = ExperimentConfig(
+        environment="baseball",
+        seed=args.seed,
+        num_seeds=1,
+        num_agents=len(roster),
+        count_buckets=(0,),
+        agents_per_bucket=len(roster),
+        delta=0.0417,
+        num_sigma_grid=21,
+        num_lambda_grid=21,
+        sigma_min=0.17,
+        sigma_max=2.81,
+        lambda_min=1e-3,
+        lambda_max=10**3.6,
+        output_dir=output_dir,
+        environment_grids={},
+        dry_run=False,
+        min_success_regions=2,
+        max_success_regions=6,
+        min_region_width=0.25,
+        hyperpriors=hyperpriors,
+        true_population=TruePopulationConfig(
+            mean_log_sigma=hyperpriors.mean_vector[0],
+            mean_log_lambda=hyperpriors.mean_vector[1],
+            tau_eta=math.exp(hyperpriors.log_tau_eta_mean),
+            tau_rho=math.exp(hyperpriors.log_tau_rho_mean),
+            correlation=math.tanh(hyperpriors.m_r),
+        ),
+    )
+    config = BaseballExperimentConfig(
+        base=base,
+        season_year=args.season_year,
+        pitcher_ids=tuple(dict.fromkeys(spec.pitcher_id for spec in roster)),
+        pitch_types=parse_pitch_types(args.pitch_types),
+        max_pitches_per_agent=args.max_pitches_per_agent,
+        use_natural_pitch_counts=True,
+        agent_specs=roster,
+        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in roster),
+    )
+    all_data = load_statcast_for_roster(args.season_year)
+    context = CalibrationContext(
+        args=args,
+        output_dir=output_dir,
+        roster_path=roster_path_for(output_dir),
+        agent_results_dir=output_dir / AGENT_RESULTS_SUBDIR,
+        config=config,
+        all_data=all_data,
+    )
+    row = run_single_agent_calibration(context, agent_spec)
+    out_path = agent_result_path_for(output_dir, agent_spec.agent_id)
+    write_agent_result(out_path, row)
+    print(
+        f"[baseball-calibrate] agent_index={args.agent_index} "
+        f"pitcher={agent_spec.pitcher_id} pitch_type={agent_spec.pitch_type} "
+        f"status={row['status']} -> {out_path.resolve()}",
+        flush=True,
+    )
+    return out_path
+
+
+def aggregate_results(args: argparse.Namespace) -> dict[str, Any]:
+    output_dir = Path(args.output_dir)
+    rows, missing_agent_ids = load_agent_results(output_dir)
+    if missing_agent_ids:
+        print(
+            f"[baseball-calibrate] Warning: missing {len(missing_agent_ids)} agent result files.",
+            flush=True,
+        )
+
+    estimates = [_row_from_estimate_row(row) for row in rows]
+    metadata_path = output_dir / ROSTER_METADATA_FILENAME
+    if metadata_path.is_file():
+        with metadata_path.open("r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        pitch_types = metadata.get("pitch_types", parse_pitch_types(args.pitch_types))
+        season_year = metadata.get("season_year", args.season_year)
+    else:
+        pitch_types = parse_pitch_types(args.pitch_types)
+        season_year = args.season_year
+
+    hyperpriors = build_hyperpriors_from_jeeds_estimates(estimates, confidence=args.confidence)
+    summary = build_calibration_summary(
+        rows,
+        estimates,
+        confidence=args.confidence,
+        season_year=season_year,
+        pitch_types=pitch_types,
+        missing_agent_ids=missing_agent_ids,
+    )
+    payload = {"rows": rows, "summary": summary, "hyperpriors": hyperpriors}
+    write_calibration_outputs(output_dir, payload)
+    return payload
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_calibration_args(argv)
 
@@ -271,7 +583,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         min_pitches = (
             args.min_pitches_per_agent
             if args.min_pitches_per_agent is not None
-            else DEFAULT_MIN_PITCHES_PER_AGENT
+            else 100
         )
         print_eligible_agents(
             season_year=args.season_year,
@@ -288,10 +600,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Max agents: {args.max_agents or 'no cap'}")
         print(f"Max pitches per agent: {args.max_pitches_per_agent or 'all available'}")
         print(f"Output directory: {Path(args.output_dir).resolve()}")
+        print("Modes:")
+        print("  --prepare-roster            write calibration_roster.json")
+        print("  --agent-index N             one agent per Slurm array task")
+        print("  --aggregate-results         combine agents/ and write hyperpriors")
         print("Artifacts:")
+        print(f"  - {ROSTER_FILENAME}")
+        print(f"  - {AGENT_RESULTS_SUBDIR}/agent_XXXX.json")
         print("  - jeeds_calibration_agent_estimates.csv")
         print("  - calibration_summary.json")
         print("  - suggested_hyperpriors.json")
+        return 0
+
+    if args.prepare_roster:
+        prepare_roster(args)
+        return 0
+
+    if args.aggregate_results:
+        payload = aggregate_results(args)
+        isummary = payload["summary"]
+        print(f"[baseball-calibrate] Wrote aggregated outputs to {Path(args.output_dir).resolve()}")
+        print(
+            "[baseball-calibrate] Suggested centers "
+            f"(log sigma, log lambda): ({isummary['sample_mean_log_sigma']:.4f}, "
+            f"{isummary['sample_mean_log_lambda']:.4f}) from {isummary['num_successful_estimates']} agents"
+        )
+        return 0
+
+    if args.agent_index is not None:
+        run_agent_index(args)
         return 0
 
     payload = run_calibration(args)
