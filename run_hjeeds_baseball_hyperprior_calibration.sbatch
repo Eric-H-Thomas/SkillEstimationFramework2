@@ -2,7 +2,7 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
 #SBATCH --job-name=hjeeds-baseball-calib
 #SBATCH --qos=normal
-#SBATCH --time=02:30:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=slurm-%x-%A_%a.out

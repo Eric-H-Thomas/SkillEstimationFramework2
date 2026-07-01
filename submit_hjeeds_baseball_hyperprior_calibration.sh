@@ -35,7 +35,7 @@ Slurm options:
   --qos QOS                      Slurm QOS (default: normal).
   --partition PARTITION          Optional Slurm partition.
   --account ACCOUNT              Optional Slurm account.
-  --time HH:MM:SS                Per-agent walltime (default: 02:30:00).
+  --time HH:MM:SS                Per-agent walltime (default: 12:00:00).
   --agg-time HH:MM:SS            Aggregation walltime (default: 00:30:00).
   --mem MEM                      Memory per agent task (default: 8G).
   --agg-mem MEM                  Aggregation memory (default: 4G).
@@ -74,7 +74,7 @@ job_name="hjeeds-baseball-calib"
 qos="normal"
 partition=""
 account=""
-time_limit="02:30:00"
+time_limit="12:00:00"
 agg_time_limit="00:30:00"
 memory="8G"
 agg_memory="4G"
