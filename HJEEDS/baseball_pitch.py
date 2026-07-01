@@ -125,6 +125,19 @@ def load_processed_statcast() -> pd.DataFrame:
     return loaded[0][0]
 
 
+def filter_statcast_by_season(all_data: pd.DataFrame, season_year: int | None) -> pd.DataFrame:
+    """Return rows for one ``game_year``, or the full dataframe when ``season_year`` is None."""
+
+    if season_year is None:
+        return all_data
+    if "game_year" not in all_data.columns:
+        raise ValueError("Processed Statcast data is missing a game_year column.")
+    filtered = all_data.loc[all_data["game_year"] == int(season_year)]
+    if filtered.empty:
+        raise ValueError(f"No Statcast rows found for season_year={season_year}.")
+    return filtered
+
+
 def _load_processed_bundle() -> tuple[
     np.ndarray,
     np.ndarray,
@@ -362,6 +375,32 @@ def filter_roster_by_min_pitches(
     return renumbered, tuple(excluded)
 
 
+def build_eligible_agent_roster(
+    all_data: pd.DataFrame,
+    pitch_types: Sequence[str],
+    *,
+    min_pitches: int,
+    max_agents: int | None = None,
+) -> tuple[StatcastAgentSpec, ...]:
+    """Return all (pitcher, pitchType) agents meeting ``min_pitches``, sorted by pitch count."""
+
+    if min_pitches <= 0:
+        raise ValueError(f"min_pitches must be positive. Received {min_pitches}.")
+
+    rows = list_eligible_pitcher_counts(
+        all_data,
+        pitch_types,
+        min_pitches=min_pitches,
+        limit=None,
+    )
+    if max_agents is not None:
+        rows = rows[: max(0, max_agents)]
+    return tuple(
+        StatcastAgentSpec(agent_id=index, pitcher_id=pitcher_id, pitch_type=pitch_type)
+        for index, (pitcher_id, pitch_type, _pitch_count) in enumerate(rows)
+    )
+
+
 def select_top_pitchers_by_pitch_count(
     all_data: pd.DataFrame,
     pitch_types: Sequence[str],
@@ -394,9 +433,9 @@ def list_eligible_pitcher_counts(
     pitch_types: Sequence[str],
     *,
     min_pitches: int,
-    limit: int = 20,
+    limit: int | None = 20,
 ) -> list[tuple[int, str, int]]:
-    """Return up to ``limit`` (pitcher_id, pitch_type, count) rows meeting ``min_pitches``."""
+    """Return (pitcher_id, pitch_type, count) rows meeting ``min_pitches``."""
 
     rows: list[tuple[int, str, int]] = []
     for pitch_type in pitch_types:
@@ -405,6 +444,8 @@ def list_eligible_pitcher_counts(
         for pitcher_id, pitch_count in counts[counts >= min_pitches].sort_values(ascending=False).items():
             rows.append((int(pitcher_id), str(pitch_type), int(pitch_count)))
     rows.sort(key=lambda item: item[2], reverse=True)
+    if limit is None:
+        return rows
     return rows[:limit]
 
 
