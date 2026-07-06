@@ -249,6 +249,7 @@ dependencies:
       - cryptography==46.0.3
       - cycler==0.12.1
       - et-xmlfile==2.0.0
+      - filterpy==1.4.5
       - fonttools==4.60.1
       - importlib-resources==6.5.2
       - jmespath==1.1.0
