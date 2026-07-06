@@ -183,11 +183,20 @@ def main() -> None:
             print(f"[{idx}] player_id={job['player_id']} season={job.get('season')} shot_group={job['shot_group']}")
         return
 
+    if not jobs:
+        print("No eligible jobs to run.")
+        return
+
     requested_index = args.job_index
     if requested_index is None:
         env_index = os.getenv("SLURM_ARRAY_TASK_ID")
         if env_index is not None:
             requested_index = int(env_index) - int(args.array_base)
+
+    if requested_index is not None and (requested_index < 0 or requested_index >= len(jobs)):
+        raise SystemExit(
+            f"Job index {requested_index} out of range for {len(jobs)} eligible job(s)."
+        )
 
     selected_jobs = jobs if requested_index is None else [jobs[requested_index]]
     results: list[dict[str, Any]] = []

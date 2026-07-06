@@ -39,9 +39,29 @@ DEFAULT_NUM_PARTICLES = 1000
 DEFAULT_MCSE_NOISE = [200, 200]
 DEFAULT_RESAMPLE_PERCENT = 0.90
 DEFAULT_RESAMPLING_METHOD = "systematic"
+# Match JEEDS Blackhawks grids: execution skill in [0.004, 0.25] rad per axis;
+# rationality lambda on log10 scale in [0, 4] (same as JEEDS logspace(0, 4)).
+#
+# Historical MCSE defaults (pre-2026-07 bounds alignment):
+#   execution skill per axis: [0.004, pi/4]  (~0.785 rad upper bound)
+#   rationality log10 lambda: [-3, 1.6]      (~0.001 to ~40 on the particle grid)
+# The smoke run on 950160/950184 (200 particles, legacy Data/Hockey) used those
+# older bounds. joint_pfe.py previously hardcoded the lambda grid as linspace(-3, 1.6).
+DEFAULT_EXECUTION_SKILL_MAX = 0.25
+DEFAULT_RATIONALITY_LOG10_MIN = 0.0
+DEFAULT_RATIONALITY_LOG10_MAX = 4.0
+# Prior execution upper bound (radians); kept for reference / sensitivity reruns.
+LEGACY_EXECUTION_SKILL_MAX = float(np.pi / 4)
+# Prior rationality log10 endpoints; kept for reference / sensitivity reruns.
+LEGACY_RATIONALITY_LOG10_MIN = -3.0
+LEGACY_RATIONALITY_LOG10_MAX = 1.6
+LEGACY_MCSE_RANGES = {
+    "start": [0.004, 0.004, -0.75, LEGACY_RATIONALITY_LOG10_MIN],
+    "end": [LEGACY_EXECUTION_SKILL_MAX, LEGACY_EXECUTION_SKILL_MAX, 0.75, LEGACY_RATIONALITY_LOG10_MAX],
+}
 DEFAULT_MCSE_RANGES = {
-    "start": [0.004, 0.004, -0.75, -3.0],
-    "end": [float(np.pi / 4), float(np.pi / 4), 0.75, 1.6],
+    "start": [0.004, 0.004, -0.75, DEFAULT_RATIONALITY_LOG10_MIN],
+    "end": [DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MAX, 0.75, DEFAULT_RATIONALITY_LOG10_MAX],
 }
 
 

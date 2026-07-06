@@ -1,0 +1,66 @@
+{
+  "config_version": 1,
+  "data_root": "Data/Hockey",
+  "data_filters": {
+    "player_ids": [950160, 950184],
+    "seasons": [20232024],
+    "shot_groups": ["wristshot_snapshot"]
+  },
+  "estimator": {
+    "method": "mcse",
+    "per_season": true,
+    "num_particles": 1000,
+    "noise": [200, 200],
+    "resample_percent": 0.9,
+    "resample_neff": true,
+    "resampling_method": "systematic",
+    "rng_seed": 0,
+    "ranges": {
+      "start": [0.004, 0.004, -0.75, 0.0],
+      "end": [0.25, 0.25, 0.75, 4.0]
+    },
+    "save_intermediate_csv": true,
+    "generate_convergence_png": true,
+    "convergence_png_include_map": true,
+    "compute_maxg": false
+  },
+  "maxg": {
+    "compute": false,
+    "benchmark_tag": "wristshot-snapshot_v1",
+    "benchmark_dir": "Data/Hockey/benchmarks"
+  },
+  "output": {
+    "write_run_summary": true
+  },
+  "validation": {
+    "min_shots_per_job": 10,
+    "fail_policy": "skip"
+  },
+  "cluster_plan": {
+    "split_mode": "per_season",
+    "eligible_jobs": 2,
+    "jobs": [
+      {
+        "player_id": 950160,
+        "season": 20232024,
+        "shot_group": "wristshot_snapshot",
+        "count": null,
+        "eligible": true,
+        "missing_local_data": false
+      },
+      {
+        "player_id": 950184,
+        "season": 20232024,
+        "shot_group": "wristshot_snapshot",
+        "count": null,
+        "eligible": true,
+        "missing_local_data": false
+      }
+    ],
+    "sbatch_recommendation": {
+      "time": "12:00:00",
+      "mem": "16G",
+      "max_concurrent": 2
+    }
+  }
+}

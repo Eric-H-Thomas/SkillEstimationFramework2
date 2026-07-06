@@ -1,5 +1,9 @@
 #!/bin/bash
 # sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_smoke.json
+#
+# Legacy xG only (data_root in config, typically Data/Hockey).
+# For new xG: run_blackhawks_mcse_config_new_xg_root.sbatch <same-config.json>
+# For both:   run_blackhawks_mcse_config_both.sbatch <legacy-config.json>
 
 #SBATCH --job-name=bh-mcse-bootstrap
 #SBATCH --time=00:05:00
@@ -16,6 +20,11 @@ fi
 
 cd ~/research/SkillEstimationFramework2
 
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  echo "Config file not found: $CONFIG_PATH"
+  exit 1
+fi
+
 if [[ -z "${BH_WORKER_MODE:-}" ]]; then
   read -r TOTAL_JOBS MAX_CONCURRENT SB_TIME SB_MEM <<EOF
 $(python3 - "$CONFIG_PATH" <<'PY'
@@ -25,10 +34,15 @@ cluster = cfg.get("cluster_plan", {})
 reco = cluster.get("sbatch_recommendation", {})
 jobs = cluster.get("jobs", [])
 eligible = cluster.get("eligible_jobs")
-if eligible is None:
-    eligible = sum(1 for j in jobs if j.get("eligible", True)) if jobs else 0
-total_jobs = int(eligible) or len(jobs)
+if eligible is not None:
+    total_jobs = int(eligible)
+else:
+    total_jobs = sum(1 for j in jobs if j.get("eligible", True))
+if total_jobs <= 0:
+    raise SystemExit("No eligible jobs in config")
 max_concurrent = int(reco.get("max_concurrent", 10)) or 10
+if max_concurrent > total_jobs:
+    max_concurrent = total_jobs
 print(total_jobs, max_concurrent, reco.get("time", "48:00:00"), reco.get("mem", "32G"))
 PY
 )
