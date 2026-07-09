@@ -94,11 +94,21 @@ def resolve_baseball_roster(
             raise ValueError("--bbip-extremes requires --season-year.")
         from .baseball_bbip import select_bbip_extreme_pitcher_ids
 
+        eligible_pitcher_ids = tuple(
+            pitcher_id
+            for pitcher_id, _pitch_type, _pitch_count in list_eligible_pitcher_counts(
+                all_data,
+                pitch_types,
+                min_pitches=min_pitches_per_agent,
+                limit=None,
+            )
+        )
         pitcher_ids_resolved = select_bbip_extreme_pitcher_ids(
             all_data,
             season_year=season_year,
             count=bbip_extremes,
             output_dir=output_dir,
+            eligible_pitcher_ids=eligible_pitcher_ids,
         )
         agent_specs = resolve_agent_roster(pitcher_ids_resolved, pitch_types)
         agent_specs, _excluded_before_cap = filter_roster_by_min_pitches(
