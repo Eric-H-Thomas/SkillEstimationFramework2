@@ -24,10 +24,13 @@ from HJEEDS.baseball_convergence import (
     DEFAULT_PITCH_TYPES,
     DEFAULT_PITCHER_IDS,
     aggregate_convergence_across_seeds,
+    aggregate_convergence_results,
     build_baseball_convergence_config_from_args,
     planned_convergence_output_paths,
+    prepare_convergence_roster,
     print_baseball_convergence_dry_run_summary,
     required_min_pitches_for_convergence,
+    run_convergence_agent_index,
     run_single_baseball_convergence_seed,
 )
 from HJEEDS.baseball_pitch import DEFAULT_DELTA, DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MIN
@@ -116,6 +119,27 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         "--plot-only",
         action="store_true",
         help="Regenerate drift_by_N.png from an existing summary_by_N.csv.",
+    )
+    parser.add_argument(
+        "--prepare-roster",
+        action="store_true",
+        help="Write convergence_roster.json and exit (no RNN inference).",
+    )
+    parser.add_argument(
+        "--agent-index",
+        type=int,
+        default=None,
+        help="Build per-agent convergence cache for one roster agent (0-based Slurm array index).",
+    )
+    parser.add_argument(
+        "--aggregate-results",
+        action="store_true",
+        help="Combine per-agent caches and write convergence CSVs and drift_by_N.png.",
+    )
+    parser.add_argument(
+        "--use-prepared-roster",
+        action="store_true",
+        help="Load convergence_roster.json from --output-dir instead of re-resolving roster selectors.",
     )
     return parser.parse_args(argv)
 
@@ -232,12 +256,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.seed is None:
-        if args.dry_run or args.plot_only:
+        if (
+            args.dry_run
+            or args.plot_only
+            or args.prepare_roster
+            or args.aggregate_results
+            or args.agent_index is not None
+        ):
             args.seed = DEFAULT_SEED
         else:
             raise SystemExit(
-                "error: --seed is required unless using --list-eligible-pitchers, --dry-run, or --plot-only"
+                "error: --seed is required unless using --list-eligible-pitchers, --dry-run, "
+                "--plot-only, --prepare-roster, --agent-index, or --aggregate-results"
             )
+
+    if args.prepare_roster:
+        prepare_convergence_roster(args)
+        return 0
 
     config = build_baseball_convergence_config_from_args(args)
 
@@ -247,6 +282,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.plot_only:
         regenerate_plot_from_existing_results(config.base.output_dir)
+        return 0
+
+    if args.aggregate_results:
+        all_agent_results, summary_by_n_rows, summary_overall_rows = aggregate_convergence_results(args)
+        output_paths = planned_convergence_output_paths(config.base.output_dir)
+        write_convergence_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
+        write_convergence_summary_csvs(config.base.output_dir, summary_by_n_rows, summary_overall_rows)
+        plot_drift_by_n(output_paths["drift_plot"], summary_by_n_rows)
+        print(f"[baseball-convergence] Wrote aggregated results to {config.base.output_dir.resolve()}", flush=True)
+        return 0
+
+    if args.agent_index is not None:
+        run_convergence_agent_index(args, args.agent_index)
         return 0
 
     seed_results = []

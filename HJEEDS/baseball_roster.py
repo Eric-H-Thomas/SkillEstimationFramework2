@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 from .baseball_pitch import (
@@ -46,6 +47,27 @@ def load_statcast_for_roster(season_year: int | None) -> "pd.DataFrame":
     return filter_statcast_by_season(all_data, season_year)
 
 
+def validate_roster_selection(
+    *,
+    all_eligible_agents: bool = False,
+    top_pitchers: int | None = None,
+    bbip_extremes: int | None = None,
+) -> None:
+    """Reject ambiguous combinations of roster selector flags."""
+
+    active = []
+    if all_eligible_agents:
+        active.append("--all-eligible-agents")
+    if top_pitchers is not None:
+        active.append("--top-pitchers")
+    if bbip_extremes is not None:
+        active.append("--bbip-extremes")
+    if len(active) > 1:
+        raise ValueError(
+            "Use exactly one roster selector. Received: " + ", ".join(active)
+        )
+
+
 def resolve_baseball_roster(
     *,
     all_data,
@@ -53,13 +75,43 @@ def resolve_baseball_roster(
     pitch_types: Sequence[str],
     pitcher_ids: Sequence[int] | None = None,
     top_pitchers: int | None = None,
+    bbip_extremes: int | None = None,
     all_eligible_agents: bool = False,
     min_pitches_per_agent: int,
     max_agents: int | None = None,
+    output_dir: Path | None = None,
 ) -> BaseballRosterSelection:
     """Resolve a concrete agent roster from CLI-style selection options."""
 
-    if all_eligible_agents:
+    validate_roster_selection(
+        all_eligible_agents=all_eligible_agents,
+        top_pitchers=top_pitchers,
+        bbip_extremes=bbip_extremes,
+    )
+
+    if bbip_extremes is not None:
+        if season_year is None:
+            raise ValueError("--bbip-extremes requires --season-year.")
+        from .baseball_bbip import select_bbip_extreme_pitcher_ids
+
+        pitcher_ids_resolved = select_bbip_extreme_pitcher_ids(
+            all_data,
+            season_year=season_year,
+            count=bbip_extremes,
+            output_dir=output_dir,
+        )
+        agent_specs = resolve_agent_roster(pitcher_ids_resolved, pitch_types)
+        agent_specs, _excluded_before_cap = filter_roster_by_min_pitches(
+            agent_specs,
+            all_data,
+            min_pitches_per_agent,
+        )
+        if max_agents is not None and len(agent_specs) > max_agents:
+            agent_specs = tuple(
+                StatcastAgentSpec(agent_id=index, pitcher_id=spec.pitcher_id, pitch_type=spec.pitch_type)
+                for index, spec in enumerate(agent_specs[:max_agents])
+            )
+    elif all_eligible_agents:
         agent_specs = build_eligible_agent_roster(
             all_data,
             pitch_types,
@@ -137,6 +189,12 @@ def add_common_roster_arguments(parser: argparse.ArgumentParser) -> None:
         help="Select top-N pitchers by pitch count (cartesian product with --pitch-types).",
     )
     parser.add_argument(
+        "--bbip-extremes",
+        type=int,
+        default=None,
+        help="Select top-N and bottom-N pitchers by season BB/IP (requires --season-year).",
+    )
+    parser.add_argument(
         "--max-agents",
         type=int,
         default=None,
@@ -164,7 +222,7 @@ def add_common_roster_arguments(parser: argparse.ArgumentParser) -> None:
 def add_hyperprior_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--hyperprior-preset",
-        choices=("darts", "low-confidence", "calibrated"),
+        choices=("darts", "low-confidence", "baseball-2021-ff", "calibrated"),
         default="low-confidence",
         help="Population hyperprior preset. Default: low-confidence (weak empirical-Bayes prior).",
     )

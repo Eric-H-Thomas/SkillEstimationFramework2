@@ -18,6 +18,8 @@ LOW_CONFIDENCE_COVARIANCE_DIAGONAL = (1.5**2, 4.0**2)
 LOW_CONFIDENCE_LOG_TAU_SD = 1.0
 LOW_CONFIDENCE_S_R = 1.25
 
+DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH = Path(__file__).resolve().parent / "data" / "baseball_hyperpriors_2021_ff.json"
+
 
 def build_low_confidence_hyperpriors(
     *,
@@ -135,6 +137,15 @@ def load_hyperprior_config(path: Path) -> HyperpriorConfig:
     return hyperprior_config_from_dict(payload)
 
 
+def load_default_baseball_hyperpriors_2021_ff() -> HyperpriorConfig:
+    """Bundled low-confidence hyperpriors calibrated on 2021 FF Statcast agents."""
+
+    return load_hyperprior_config(DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH)
+
+
+DEFAULT_BASEBALL_HYPERPRIORS_2021_FF = load_default_baseball_hyperpriors_2021_ff()
+
+
 def write_hyperprior_config(path: Path, config: HyperpriorConfig) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -151,6 +162,8 @@ def resolve_baseball_hyperpriors(
         return DEFAULT_HYPERPRIORS
     if preset == "low-confidence":
         return build_low_confidence_hyperpriors()
+    if preset == "baseball-2021-ff":
+        return DEFAULT_BASEBALL_HYPERPRIORS_2021_FF
     if preset == "calibrated":
         if calibrated_path is None:
             raise ValueError("--hyperprior-config is required when --hyperprior-preset calibrated.")
@@ -158,5 +171,5 @@ def resolve_baseball_hyperpriors(
             raise FileNotFoundError(f"Hyperprior config not found: {calibrated_path}")
         return load_hyperprior_config(calibrated_path)
     raise ValueError(
-        f"Unknown hyperprior preset '{preset}'. Expected darts, low-confidence, or calibrated."
+        f"Unknown hyperprior preset '{preset}'. Expected darts, low-confidence, baseball-2021-ff, or calibrated."
     )

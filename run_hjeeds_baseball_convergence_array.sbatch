@@ -2,10 +2,10 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
 #SBATCH --job-name=hjeeds-baseball-conv
 #SBATCH --qos=normal
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
-#SBATCH --output=slurm-%x-%j.out
+#SBATCH --output=slurm-%x-%A_%a.out
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ python_bin="${PYTHON_BIN:-}"
 if [[ -z "${python_bin}" ]]; then
   if ! command -v module >/dev/null 2>&1; then
     echo "Error: module command not found and PYTHON_BIN is unset." >&2
-    echo "Pass --python-bin to submit_hjeeds_baseball_convergence.sh." >&2
+    echo "Pass --python-bin to submit_hjeeds_baseball_convergence_array.sh." >&2
     exit 1
   fi
   module load miniforge3
@@ -32,51 +32,17 @@ if [[ -z "${python_bin}" ]]; then
 fi
 
 echo "[baseball-convergence] Using python: ${python_bin}" >&2
-"${python_bin}" - <<'PY'
-import sys
-
-required = ("numpy", "pandas", "torch", "scipy")
-missing = []
-for module_name in required:
-    try:
-        __import__(module_name)
-    except ImportError:
-        missing.append(module_name)
-
-if missing:
-    print(
-        "Error: Python environment is missing required packages: "
-        + ", ".join(missing),
-        file=sys.stderr,
-    )
-    print(f"Interpreter: {sys.executable}", file=sys.stderr)
-    print(
-        "Activate conda env skill-estimation on the cluster, or pass "
-        "--python-bin /path/to/python via submit_hjeeds_baseball_convergence.sh.",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
-PY
 
 python_args=(
   -m HJEEDS.baseball_convergence_study
-  --seed "${BASE_SEED:?BASE_SEED is required}"
+  --seed "${BASE_SEED:-default}"
   --num-seeds "${NUM_SEEDS:-1}"
   --convergence-ns "${CONVERGENCE_NS:-5,10,25,50,100}"
-  --output-dir "${OUTPUT_DIR:-HJEEDS/results/baseball_convergence_n100}"
+  --output-dir "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 )
 
 if [[ -n "${SEASON_YEAR:-}" ]]; then
   python_args+=(--season-year "${SEASON_YEAR}")
-fi
-if [[ "${ALL_ELIGIBLE_AGENTS:-0}" == "1" ]]; then
-  python_args+=(--all-eligible-agents)
-elif [[ -n "${TOP_PITCHERS:-}" ]]; then
-  python_args+=(--top-pitchers "${TOP_PITCHERS}")
-elif [[ -n "${BBIP_EXTREMES:-}" ]]; then
-  python_args+=(--bbip-extremes "${BBIP_EXTREMES}")
-elif [[ -n "${PITCHER_IDS:-}" ]]; then
-  python_args+=(--pitcher-ids "${PITCHER_IDS}")
 fi
 if [[ -n "${PITCH_TYPES:-}" ]]; then
   python_args+=(--pitch-types "${PITCH_TYPES}")
@@ -97,12 +63,20 @@ if [[ -n "${BBIP_CACHE_PATH:-}" ]]; then
   export BBIP_CACHE_PATH
 fi
 
+if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
+  python_args+=(--aggregate-results --use-prepared-roster)
+else
+  agent_index="${AGENT_INDEX:-${SLURM_ARRAY_TASK_ID:-0}}"
+  python_args+=(--agent-index "${agent_index}" --use-prepared-roster)
+fi
+
 echo "[baseball-convergence] Starting: ${python_bin} ${python_args[*]}" >&2
 "${python_bin}" "${python_args[@]}"
 
-output_dir="${OUTPUT_DIR:-HJEEDS/results/baseball_convergence_n100}"
-zip_path="${RESULTS_ZIP_PATH:-${output_dir%/}.zip}"
-"${python_bin}" - "${output_dir}" "${zip_path}" <<'PY'
+if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
+  output_dir="${OUTPUT_DIR}"
+  zip_path="${RESULTS_ZIP_PATH:-${output_dir%/}.zip}"
+  "${python_bin}" - "${output_dir}" "${zip_path}" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -128,3 +102,4 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
 
 print(f"[baseball-convergence] Zipped results to {zip_path}", flush=True)
 PY
+fi

@@ -24,6 +24,7 @@ from .baseball_roster import (
     load_statcast_for_roster,
     parse_pitch_types,
     resolve_baseball_roster,
+    validate_roster_selection,
 )
 from .config import (
     DEFAULT_NUM_SEEDS,
@@ -154,13 +155,26 @@ def build_baseball_config_from_args(args: argparse.Namespace) -> BaseballExperim
     )
     all_data = load_statcast_for_roster(args.season_year)
 
-    if args.all_eligible_agents:
-        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None)
+    validate_roster_selection(
+        all_eligible_agents=args.all_eligible_agents,
+        top_pitchers=args.top_pitchers,
+        bbip_extremes=getattr(args, "bbip_extremes", None),
+    )
+
+    if getattr(args, "bbip_extremes", None) is not None:
+        roster_selector = dict(
+            all_eligible_agents=False,
+            pitcher_ids=None,
+            top_pitchers=None,
+            bbip_extremes=args.bbip_extremes,
+        )
+    elif args.all_eligible_agents:
+        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None, bbip_extremes=None)
     elif args.top_pitchers is not None:
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers)
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers, bbip_extremes=None)
     else:
         pitcher_ids = tuple(int(piece.strip()) for piece in args.pitcher_ids.split(",") if piece.strip())
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None)
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None, bbip_extremes=None)
 
     roster = resolve_baseball_roster(
         all_data=all_data,
