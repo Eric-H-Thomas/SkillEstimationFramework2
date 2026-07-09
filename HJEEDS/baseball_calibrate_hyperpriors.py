@@ -38,6 +38,7 @@ from HJEEDS.baseball_roster import (
     parse_pitch_types,
     print_eligible_agents,
     resolve_baseball_roster,
+    validate_roster_selection,
 )
 from HJEEDS.config import ExperimentConfig, TruePopulationConfig, parse_seed_argument
 from HJEEDS.estimation import run_independent_jeeds_baseline
@@ -171,13 +172,26 @@ def _resolve_roster_from_args(args: argparse.Namespace):
     )
     all_data = load_statcast_for_roster(args.season_year)
 
-    if args.all_eligible_agents:
-        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None)
+    validate_roster_selection(
+        all_eligible_agents=args.all_eligible_agents,
+        top_pitchers=args.top_pitchers,
+        bbip_extremes=getattr(args, "bbip_extremes", None),
+    )
+
+    if getattr(args, "bbip_extremes", None) is not None:
+        roster_selector = dict(
+            all_eligible_agents=False,
+            pitcher_ids=None,
+            top_pitchers=None,
+            bbip_extremes=args.bbip_extremes,
+        )
+    elif args.all_eligible_agents:
+        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None, bbip_extremes=None)
     elif args.top_pitchers is not None:
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers)
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers, bbip_extremes=None)
     else:
         pitcher_ids = tuple(int(piece.strip()) for piece in args.pitcher_ids.split(",") if piece.strip())
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None)
+        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None, bbip_extremes=None)
 
     roster = resolve_baseball_roster(
         all_data=all_data,
