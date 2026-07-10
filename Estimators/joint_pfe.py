@@ -92,6 +92,9 @@ class QREMethod_Multi_Particles():
 
         self.ranges["noise"] = noise_list
         self.verbose = bool(otherArgs.get("verbose", False)) if otherArgs else False
+        # When False, skip growing allParticles / allProbs / allNoises history
+        # (Blackhawks production runs). Paper experiments keep the default True.
+        self.retain_history = bool(otherArgs.get("retain_history", True)) if otherArgs else True
         if self.verbose:
             print(self.ranges["noise"])
         # code.interact("...", local=dict(globals(), **locals()))
@@ -510,7 +513,8 @@ class QREMethod_Multi_Particles():
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
         self.probs /= np.sum(self.probs)
-        self.allProbs.append(self.probs.tolist())
+        if self.retain_history:
+            self.allProbs.append(self.probs.tolist())
 
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -640,15 +644,16 @@ class QREMethod_Multi_Particles():
                 self.plotParticles(temp1,temp2,otherArgs["agent"],f"{otherArgs['i']}{label}",[[ees,ers,eps],[self.estimatesXskills[self.names[0]][-1],self.estimatesRhos[self.names[0]][-1],self.estimatesPskills[self.names[0]][-1]]])
 
 
-        if rr:
-            # Save actual noisy version (but remember which
-            # where resampled and which were randomly added)
-            # self.allParticles.append([temp1.tolist(),temp2.tolist()])
-            tempN = int(self.N*self.percent)
-            self.allParticles.append([self.particles[:tempN,:].tolist(),self.particles[tempN:,:].tolist()])
+        if self.retain_history:
+            if rr:
+                # Save actual noisy version (but remember which
+                # where resampled and which were randomly added)
+                # self.allParticles.append([temp1.tolist(),temp2.tolist()])
+                tempN = int(self.N*self.percent)
+                self.allParticles.append([self.particles[:tempN,:].tolist(),self.particles[tempN:,:].tolist()])
 
-        else:
-            self.allParticles.append([self.particles.tolist(),[]])
+            else:
+                self.allParticles.append([self.particles.tolist(),[]])
 
 
         # print("allNoises: ",self.allNoises[-1][:2])
@@ -742,11 +747,11 @@ class QREMethod_Multi_Particles():
         # New set of particles
         self.particles = np.concatenate((temp1,temp2),axis=0)
 
-        self.allParticlesNoNoise.append(deepcopy(self.particles.tolist()))
+        if self.retain_history:
+            self.allParticlesNoNoise.append(deepcopy(self.particles.tolist()))
+            self.allResampledProbs.append(tempProbs.tolist())
 
         # print("allParticlesNoNoise: ",self.allParticlesNoNoise[-1][:2])
-
-        self.allResampledProbs.append(tempProbs.tolist())
 
         # code.interact("...", local=dict(globals(), **locals()))
 
@@ -1059,10 +1064,12 @@ class QREMethod_Multi_Particles():
 
             self.particles[ii] = noisy
 
-            tempAllNoises.append(noises)
+            if self.retain_history:
+                tempAllNoises.append(noises)
 
 
-        self.allNoises.append(tempAllNoises)
+        if self.retain_history:
+            self.allNoises.append(tempAllNoises)
 
         # self.particles = np.round(self.particles,4)
 

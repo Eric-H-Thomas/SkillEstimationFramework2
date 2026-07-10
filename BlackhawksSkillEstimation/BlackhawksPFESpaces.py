@@ -66,6 +66,11 @@ class BlackhawksPFESpaces:
                 fillvalue=0.0,
             )
 
+    def clear_particle_caches(self) -> None:
+        """Drop PDF/EV caches for this shot (safe after the observation is done)."""
+        self.pdfsPerXskill.clear()
+        self.evsPerXskill.clear()
+
     def deleteSpaceParticles(self, each, state) -> None:
         # ``each`` is particle without lambda: [x_y, x_z, rho]
         if len(each) >= 3:

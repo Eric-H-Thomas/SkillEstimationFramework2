@@ -243,19 +243,20 @@ def _build_mcse_estimator(
         bool(resample_neff),
         resampling_method,
         ranges,
-        otherArgs={"verbose": False},
+        otherArgs={"verbose": False, "retain_history": False},
     )
 
 
-def _extract_skill_vectors(results: dict, estimator: QREMethod_Multi_Particles) -> dict[str, object]:
+def _extract_skill_vectors_from_estimator(estimator: QREMethod_Multi_Particles) -> dict[str, object]:
+    """Read latest MAP/EES estimates without materializing particle history."""
     map_name = estimator.names[0]
     ees_name = estimator.names[1]
-    map_skills = results.get(f"{map_name}-xSkills", [])
-    ees_skills = results.get(f"{ees_name}-xSkills", [])
-    map_rhos = results.get(f"{map_name}-rhos", [])
-    ees_rhos = results.get(f"{ees_name}-rhos", [])
-    map_pskills = results.get(f"{map_name}-pSkills", [])
-    ees_pskills = results.get(f"{ees_name}-pSkills", [])
+    map_skills = estimator.estimatesXskills.get(map_name, [])
+    ees_skills = estimator.estimatesXskills.get(ees_name, [])
+    map_rhos = estimator.estimatesRhos.get(map_name, [])
+    ees_rhos = estimator.estimatesRhos.get(ees_name, [])
+    map_pskills = estimator.estimatesPskills.get(map_name, [])
+    ees_pskills = estimator.estimatesPskills.get(ees_name, [])
 
     if not map_skills or not ees_skills:
         return {}
@@ -273,6 +274,12 @@ def _extract_skill_vectors(results: dict, estimator: QREMethod_Multi_Particles) 
         "eps": float(ees_pskills[-1]) if ees_pskills else None,
         "estimator_name": map_name,
     }
+
+
+def _extract_skill_vectors(results: dict, estimator: QREMethod_Multi_Particles) -> dict[str, object]:
+    """Backward-compatible wrapper; prefer ``_extract_skill_vectors_from_estimator``."""
+    del results  # unused; kept for call-site compatibility
+    return _extract_skill_vectors_from_estimator(estimator)
 
 
 def _run_mcse_estimation(
@@ -357,9 +364,11 @@ def _run_mcse_estimation(
             s=str(idx),
             i=idx,
         )
+        # Drop per-shot PDF/EV caches; they are not reused across shots.
+        spaces.clear_particle_caches()
 
         if return_intermediate_estimates or save_intermediate_csv:
-            partial = _extract_skill_vectors(estimator.get_results(), estimator)
+            partial = _extract_skill_vectors_from_estimator(estimator)
             if partial:
                 skill_log.append({
                     "shot_count": idx + 1,
@@ -381,7 +390,7 @@ def _run_mcse_estimation(
                     ),
                 })
 
-    final = _extract_skill_vectors(estimator.get_results(), estimator)
+    final = _extract_skill_vectors_from_estimator(estimator)
     if not final:
         return {
             "status": "estimation_failed",

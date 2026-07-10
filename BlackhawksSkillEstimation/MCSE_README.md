@@ -92,6 +92,9 @@ python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
   --player-file Data/Hockey/forwards23-25.txt \
   --all-seasons \
   --min-shots-per-job 100 \
+  --num-particles 500 \
+  --sbatch-time 48:00:00 \
+  --sbatch-mem 32G \
   --also-write-xgnew \
   --output Data/Hockey/jobs/mcse_forwards_per_season.json
 ```
@@ -102,6 +105,10 @@ This writes:
 |------|-------------|
 | `mcse_forwards_per_season.json` | `Data/Hockey` (legacy) |
 | `mcse_forwards_per_season.xgnew.json` | `Data/Hockey_xg_new` (new xG, eligibility refreshed) |
+
+Cluster defaults: **500 particles**, **48h**, **32G**, **100 concurrent** per array.
+Production MCSE runs set `retain_history=False` (no growing particle-history lists) and clear
+per-shot PDF/EV caches after each observation.
 
 ### Cluster submit
 
@@ -169,8 +176,10 @@ Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE 
 
 ## Defaults
 
-- Particles: 1000
+- Particles: 1000 locally / smoke; **500** for league cluster configs
 - Ranges: x ∈ [0.004, 0.25] per axis, ρ ∈ [-0.75, 0.75], log₁₀λ ∈ [0, 4]
 - Legacy ranges (pre-alignment): x ∈ [0.004, π/4], log₁₀λ ∈ [-3, 1.6] — see `LEGACY_MCSE_RANGES`
-- Data: cluster config uses legacy `Data/Hockey` only
+- Cluster resources: 48h / 32G / 100 concurrent per array
+- Data: cluster config uses legacy `Data/Hockey` only (use `*_both.sbatch` or new-xG wrapper for both)
 - Resample: 90% with NEFF gate, systematic resampling
+- Memory: `retain_history=False` in Blackhawks MCSE; per-shot PDF/EV caches cleared after each observation

@@ -267,11 +267,11 @@ def main() -> None:
         choices=["per_season", "all_selected_seasons_together"],
         default="per_season",
     )
-    parser.add_argument("--min-shots-per-job", type=int, default=50)
-    parser.add_argument("--num-particles", type=int, default=DEFAULT_NUM_PARTICLES)
+    parser.add_argument("--min-shots-per-job", type=int, default=100)
+    parser.add_argument("--num-particles", type=int, default=500)
     parser.add_argument("--generate-convergence-png", action="store_true")
-    parser.add_argument("--sbatch-time", default="24:00:00")
-    parser.add_argument("--sbatch-mem", default="16G")
+    parser.add_argument("--sbatch-time", default="48:00:00")
+    parser.add_argument("--sbatch-mem", default="32G")
     parser.add_argument("--max-concurrent", type=int, default=100)
     parser.add_argument("--rng-seed", type=int, default=0)
     parser.add_argument("--output", type=Path, required=True)
