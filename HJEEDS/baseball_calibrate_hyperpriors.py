@@ -82,7 +82,15 @@ def parse_calibration_args(argv: Sequence[str] | None = None) -> argparse.Namesp
             "Supports local sequential runs, per-agent cluster tasks, and aggregation."
         )
     )
-    parser.add_argument("--seed", type=parse_seed_argument, default=12345)
+    parser.add_argument(
+        "--seed",
+        type=parse_seed_argument,
+        default=12345,
+        help=(
+            "Base seed kept for ExperimentConfig compatibility. Statcast independent JEEDS "
+            "likelihoods are deterministic in seed; prefer a single fixed value."
+        ),
+    )
     parser.add_argument("--pitch-types", type=str, default="FF")
     parser.add_argument(
         "--pitcher-ids",

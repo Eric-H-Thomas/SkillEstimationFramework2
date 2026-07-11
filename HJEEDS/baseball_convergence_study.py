@@ -88,8 +88,25 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
             "reduced pitch counts against a full-data independent JEEDS reference."
         )
     )
-    parser.add_argument("--seed", type=parse_seed_argument, required=False, default=None)
-    parser.add_argument("--num-seeds", type=int, default=1)
+    parser.add_argument(
+        "--seed",
+        type=parse_seed_argument,
+        required=False,
+        default=None,
+        help=(
+            "Base seed (or 'default' for 12345). Kept for CLI compatibility with darts; "
+            "Statcast likelihoods are deterministic in seed, so varying it does not change estimates."
+        ),
+    )
+    parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=1,
+        help=(
+            "Number of consecutive seeds to run (default: 1). For baseball, keep at 1: "
+            "additional seeds repeat the same numerics and do not produce uncertainty bands."
+        ),
+    )
     parser.add_argument(
         "--convergence-ns",
         type=str,

@@ -105,8 +105,22 @@ def build_baseball_skill_grids(config: BaseballExperimentConfig):
 
 def parse_baseball_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=CLI_DESCRIPTION)
-    parser.add_argument("--seed", type=parse_seed_argument, required=False, default=None)
-    parser.add_argument("--num-seeds", type=int, default=1)
+    parser.add_argument(
+        "--seed",
+        type=parse_seed_argument,
+        required=False,
+        default=None,
+        help=(
+            "Base seed (or 'default' for 12345). Kept for CLI compatibility; "
+            "Statcast likelihoods are deterministic in seed."
+        ),
+    )
+    parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=1,
+        help="Keep at 1 for baseball: additional seeds do not change Statcast estimates.",
+    )
     parser.add_argument(
         "--count-buckets",
         type=str,
@@ -262,6 +276,10 @@ def print_baseball_dry_run_summary(config: BaseballExperimentConfig) -> None:
     print(f"Environment: {config.environment}")
     print(f"Season year: {config.season_year or 'all seasons in pickle'}")
     print(f"Seeds: {config.seed_values}")
+    print(
+        "Note: seed does not change Statcast likelihoods (execution PDFs use "
+        "multivariate_normal.pdf; pitch order is newest-first by game_date)."
+    )
     print(f"Agents: {len(config.agent_specs)}")
     print(f"Pitch types: {config.pitch_types}")
     print(f"Use natural pitch counts: {config.use_natural_pitch_counts}")

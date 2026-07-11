@@ -102,6 +102,9 @@ def sample_noisy_action(rng,mean,covMatrix,a,noiseModel=None):
 	return na
 
 def getNormalDistribution(rng,covMatrix,resolution,X,Y):
+	# NOTE (HJEEDS baseball): only N.pdf(...) is used below. Seeded multivariate_normal
+	# construction does not change the PDF values (mean/cov only). Seeds therefore do not
+	# affect Statcast JEEDS/H-JEEDS likelihood grids. Seed would matter for N.rvs() sampling.
 
 	if "XYD" not in globals():
 		global XYD

@@ -15,7 +15,8 @@ Workflow:
   3. Submit one aggregation task (afterok) to fit population MAP and drift.
 
 Experiment options:
-  --seed N|default               Base seed (default: default).
+  --seed N|default               Base seed (default: default). Unused for Statcast numerics;
+                                 kept for CLI compatibility. Prefer a single seed.
   --season-year YEAR             Restrict to one Statcast season (e.g. 2021).
   --pitch-types TYPES            Comma-separated pitch types (default: FF).
   --all-eligible-agents          Use every eligible (pitcher, pitchType) pair.

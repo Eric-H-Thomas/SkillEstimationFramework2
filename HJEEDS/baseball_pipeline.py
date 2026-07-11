@@ -52,7 +52,13 @@ def run_single_baseball_seed(
     config: BaseballExperimentConfig,
     seed: int,
 ) -> BaseballSeedResult:
-    """Run hierarchical-vs-JEEDS inference for one seed on Statcast data."""
+    """Run hierarchical-vs-JEEDS inference for one seed on Statcast data.
+
+    Note: ``seed`` does not change Statcast estimates. Execution-noise PDFs are built via
+    ``multivariate_normal.pdf`` (deterministic given mean/cov); pitch rows are selected by
+    newest ``game_date``, not by RNG. Kept only for shared ExperimentConfig / darts CLI shape.
+    Prefer ``num_seeds=1``.
+    """
 
     rng = np.random.default_rng(seed)
     sigma_grid, log_lambda_grid = build_baseball_skill_grids(config)

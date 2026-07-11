@@ -292,7 +292,14 @@ def run_single_baseball_convergence_seed(
     config: BaseballConvergenceConfig,
     seed: int,
 ) -> BaseballConvergenceSeedResult:
-    """Run the convergence sweep for one seed."""
+    """Run the convergence sweep for one seed.
+
+    Note: ``seed`` is threaded into ``build_baseball_runtime`` for API compatibility with
+    the darts pipeline, but Statcast JEEDS/H-JEEDS likelihoods are unaffected. Execution
+    noise PDFs are evaluated via ``multivariate_normal.pdf`` (deterministic given mean/cov);
+    the RNG would only matter for ``.rvs()`` sampling, which this path never uses. Pitch
+    selection is newest-first by ``game_date``, not random. Prefer ``num_seeds=1``.
+    """
 
     rng = np.random.default_rng(seed)
     sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
@@ -528,6 +535,10 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     print(f"Environment: {config.environment}")
     print(f"Season year: {config.season_year or 'all seasons in pickle'}")
     print(f"Seeds: {config.seed_values}")
+    print(
+        "Note: seed does not change Statcast likelihoods (execution PDFs use "
+        "multivariate_normal.pdf; pitch order is newest-first by game_date)."
+    )
     print(f"Agents: {len(config.agent_specs)}")
     if config.agent_pitch_counts:
         print("Agent pitch counts:")
@@ -926,6 +937,7 @@ def run_single_agent_convergence_cache(
     *,
     all_data=None,
 ) -> dict[str, Any]:
+    # Seed is unused for Statcast likelihood numerics; see run_single_baseball_convergence_seed.
     rng = np.random.default_rng(seed)
     sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
     execution_skills = tuple(float(value) for value in sigma_grid)

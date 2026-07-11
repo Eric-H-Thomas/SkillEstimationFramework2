@@ -13,8 +13,9 @@ Submit one Slurm job that runs HJEEDS.baseball_convergence_study and zips the
 output directory when finished.
 
 Experiment options:
-  --seed N|default               Required base seed. Use default for 12345.
-  --num-seeds N                  Seeds to run (default: 1).
+  --seed N|default               Required base seed (default: 12345). Unused for Statcast
+                                 numerics; kept for CLI compatibility. Prefer a single seed.
+  --num-seeds N                  Keep at 1 for baseball (extra seeds do not change estimates).
   --season-year YEAR             Restrict to one Statcast season (e.g. 2021).
   --top-pitchers N               Select top-N eligible pitchers.
   --bbip-extremes N              Select top-N and bottom-N pitchers by season BB/IP.
