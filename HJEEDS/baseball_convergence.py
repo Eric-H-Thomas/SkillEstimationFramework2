@@ -667,12 +667,14 @@ def write_convergence_roster(
         from .baseball_bbip import build_bbip_manifest
 
         metadata["bbip_extremes"] = bbip_extremes
+        # Rank tiers within the selected roster (eligible extremes), not the full league table.
         metadata["bbip_selection"] = build_bbip_manifest(
             all_data,
             season_year=season_year,
             pitcher_ids=roster.pitcher_ids,
             extremes_count=bbip_extremes,
             output_dir=output_dir,
+            eligible_pitcher_ids=roster.pitcher_ids,
         )
 
     with (output_dir / CONVERGENCE_ROSTER_METADATA_FILENAME).open("w", encoding="utf-8") as handle:

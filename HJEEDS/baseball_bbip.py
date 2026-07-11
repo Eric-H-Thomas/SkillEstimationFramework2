@@ -269,6 +269,43 @@ def compute_bbip_by_pitcher(
     return pd.DataFrame(rows).sort_values("bbip")
 
 
+def label_bbip_tiers_for_pitcher_ids(
+    table: pd.DataFrame,
+    pitcher_ids: Sequence[int],
+    *,
+    extremes_count: int,
+) -> dict[int, str]:
+    """Label selected pitchers as top/bottom by BB/IP rank within the selected set.
+
+    Ranking within ``pitcher_ids`` (not the global league table) matches
+    ``--bbip-extremes`` selection among an eligible subset.
+    """
+
+    if extremes_count <= 0:
+        raise ValueError(f"extremes_count must be positive. Received {extremes_count}.")
+
+    selected = table.loc[table["pitcher_id"].isin({int(pid) for pid in pitcher_ids})].copy()
+    selected = selected.sort_values("bbip")
+    if len(selected) < extremes_count * 2:
+        raise ValueError(
+            f"Need at least {extremes_count * 2} selected pitchers with BB/IP data. "
+            f"Received {len(selected)}."
+        )
+
+    bottom_ids = set(selected.head(extremes_count)["pitcher_id"].astype(int).tolist())
+    top_ids = set(selected.tail(extremes_count)["pitcher_id"].astype(int).tolist())
+    labels: dict[int, str] = {}
+    for pitcher_id in pitcher_ids:
+        pid = int(pitcher_id)
+        if pid in bottom_ids:
+            labels[pid] = "bottom"
+        elif pid in top_ids:
+            labels[pid] = "top"
+        else:
+            labels[pid] = "middle"
+    return labels
+
+
 def build_bbip_manifest(
     all_data: pd.DataFrame,
     *,
@@ -276,22 +313,29 @@ def build_bbip_manifest(
     pitcher_ids: Sequence[int],
     extremes_count: int,
     output_dir: Path | None = None,
+    eligible_pitcher_ids: Sequence[int] | None = None,
 ) -> list[dict[str, object]]:
-    """Return BB/IP metadata for selected pitchers (bottom/top tiers)."""
+    """Return BB/IP metadata for selected pitchers (bottom/top tiers).
+
+    Tiers are assigned by BB/IP rank among the selected pitchers (or among
+    ``eligible_pitcher_ids`` when provided for selection consistency), not among
+    the unrestricted league table.
+    """
 
     table = compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir)
-    bottom_ids = set(table.head(extremes_count)["pitcher_id"].astype(int).tolist())
-    top_ids = set(table.tail(extremes_count)["pitcher_id"].astype(int).tolist())
-    selected = table.loc[table["pitcher_id"].isin(pitcher_ids)].copy()
+    if eligible_pitcher_ids is not None:
+        eligible = {int(pitcher_id) for pitcher_id in eligible_pitcher_ids}
+        table = table.loc[table["pitcher_id"].isin(eligible)].copy()
+
+    tier_by_id = label_bbip_tiers_for_pitcher_ids(
+        table,
+        pitcher_ids,
+        extremes_count=extremes_count,
+    )
+    selected = table.loc[table["pitcher_id"].isin({int(pid) for pid in pitcher_ids})].copy()
     manifest: list[dict[str, object]] = []
     for _, row in selected.iterrows():
         pitcher_id = int(row["pitcher_id"])
-        if pitcher_id in bottom_ids:
-            tier = "bottom"
-        elif pitcher_id in top_ids:
-            tier = "top"
-        else:
-            tier = "middle"
         manifest.append(
             {
                 "pitcher_id": pitcher_id,
@@ -299,7 +343,7 @@ def build_bbip_manifest(
                 "walks": int(row["walks"]),
                 "innings_pitched": float(row["innings_pitched"]),
                 "bbip": float(row["bbip"]),
-                "tier": tier,
+                "tier": tier_by_id.get(pitcher_id, "middle"),
             }
         )
     manifest.sort(key=lambda row: (str(row["tier"]), float(row["bbip"])))
