@@ -68,38 +68,36 @@ CONVERGENCE_AGENT_LEVEL_HEADER = [
 DRIFT_METRIC_PANELS = (
     (
         "abs_sigma_drift_vs_full",
-        r"Convergence of $\hat{\sigma}$ toward JEEDS reference",
-        r"$|\hat{\sigma}_N - \hat{\sigma}_{\mathrm{ref}}|$",
+        r"Execution skill ($\hat{\sigma}$)",
+        r"$|\hat{\sigma}_N - \hat{\sigma}_{N_{\max}}|$",
         "No rows for execution skill drift",
     ),
     (
         "abs_log_lambda_drift_vs_full",
-        r"Convergence of $\widehat{\log\lambda}$ toward JEEDS reference",
-        r"$|\widehat{\log\lambda}_N - \widehat{\log\lambda}_{\mathrm{ref}}|$",
+        r"Decision skill ($\widehat{\log\lambda}$)",
+        r"$|\widehat{\log\lambda}_N - \widehat{\log\lambda}_{N_{\max}}|$",
         "No rows for log decision skill drift",
     ),
 )
 
-# Distinct from shared METHOD_COLORS (teal/magenta error-vs-truth figures).
+# MLB palette shared with per-agent intermediate-estimate plots.
 CONVERGENCE_METHOD_STYLES = {
     "jeeds": {
-        "label": "Independent JEEDS",
-        "color": "#1B4F72",
+        "label": "JEEDS",
+        "color": "#002D72",
         "marker": "^",
-        "linestyle": "--",
     },
     "hierarchical": {
         "label": "H-JEEDS",
-        "color": "#B9770E",
+        "color": "#D50032",
         "marker": "D",
-        "linestyle": "-",
     },
 }
 
 # Solid lines for per-agent intermediate-estimate plots (checkpoints only).
 AGENT_ESTIMATE_METHOD_STYLES = {
     "jeeds": {
-        "label": "Independent JEEDS",
+        "label": "JEEDS",
         "color": "#002D72",
         "marker": "^",
     },
@@ -115,7 +113,7 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     parser = argparse.ArgumentParser(
         description=(
             "Convergence study on Statcast baseball: compare JEEDS and HJEEDS at "
-            "reduced pitch counts against a full-data independent JEEDS reference."
+            "reduced pitch counts, each against that method's own estimate at max N."
         )
     )
     parser.add_argument(
@@ -141,7 +139,7 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         "--convergence-ns",
         type=str,
         default=",".join(str(value) for value in DEFAULT_CONVERGENCE_NS),
-        help="Comma-separated cumulative pitch-count values (newest-first prefix per agent).",
+        help="Comma-separated cumulative pitch-count checkpoints (newest-first per agent).",
     )
     parser.add_argument("--delta", type=float, default=DEFAULT_DELTA)
     parser.add_argument("--num-sigma-grid", type=int, default=DEFAULT_NUM_SIGMA_GRID)
@@ -165,7 +163,7 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     parser.add_argument(
         "--plot-only",
         action="store_true",
-        help="Regenerate drift_by_N.png from an existing summary_by_N.csv.",
+        help="Regenerate summary CSVs and drift plots from an existing agent-level CSV.",
     )
     parser.add_argument(
         "--plot-agent-estimates",
@@ -269,8 +267,179 @@ def write_convergence_summary_csvs(
         writer.writerows(summary_overall_rows)
 
 
-def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any]]) -> None:
-    """Plot prefix-N drift toward the full-window JEEDS reference (not error-vs-truth)."""
+def _float_or_none(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def recompute_self_reference_drifts_in_agent_rows(
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rewrite drift columns so each method references its own estimate at max N."""
+
+    from collections import defaultdict
+
+    grouped: dict[tuple[Any, Any], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(row.get("seed"), row.get("agent_id"))].append(dict(row))
+
+    rewritten: list[dict[str, Any]] = []
+    for group_rows in grouped.values():
+        ns = [int(row["convergence_n"]) for row in group_rows]
+        max_n = max(ns)
+        final_row = next(row for row in group_rows if int(row["convergence_n"]) == max_n)
+        jeeds_ref_sigma = _float_or_none(final_row.get("jeeds_posterior_mean_sigma"))
+        jeeds_ref_log_lambda = _float_or_none(final_row.get("jeeds_posterior_mean_log_lambda"))
+        hier_ref_sigma = _float_or_none(final_row.get("hierarchical_posterior_mean_sigma"))
+        hier_ref_log_lambda = _float_or_none(final_row.get("hierarchical_posterior_mean_log_lambda"))
+
+        for row in sorted(group_rows, key=lambda item: int(item["convergence_n"])):
+            jeeds_sigma = _float_or_none(row.get("jeeds_posterior_mean_sigma"))
+            jeeds_log_lambda = _float_or_none(row.get("jeeds_posterior_mean_log_lambda"))
+            hier_sigma = _float_or_none(row.get("hierarchical_posterior_mean_sigma"))
+            hier_log_lambda = _float_or_none(row.get("hierarchical_posterior_mean_log_lambda"))
+
+            jeeds_sigma_drift = (
+                abs(jeeds_sigma - jeeds_ref_sigma)
+                if jeeds_sigma is not None and jeeds_ref_sigma is not None
+                else None
+            )
+            jeeds_lambda_drift = (
+                abs(jeeds_log_lambda - jeeds_ref_log_lambda)
+                if jeeds_log_lambda is not None and jeeds_ref_log_lambda is not None
+                else None
+            )
+            hier_sigma_drift = (
+                abs(hier_sigma - hier_ref_sigma)
+                if hier_sigma is not None and hier_ref_sigma is not None
+                else None
+            )
+            hier_lambda_drift = (
+                abs(hier_log_lambda - hier_ref_log_lambda)
+                if hier_log_lambda is not None and hier_ref_log_lambda is not None
+                else None
+            )
+
+            row["jeeds_abs_sigma_drift_vs_full"] = (
+                "" if jeeds_sigma_drift is None else jeeds_sigma_drift
+            )
+            row["jeeds_abs_log_lambda_drift_vs_full"] = (
+                "" if jeeds_lambda_drift is None else jeeds_lambda_drift
+            )
+            row["hierarchical_abs_sigma_drift_vs_full"] = (
+                "" if hier_sigma_drift is None else hier_sigma_drift
+            )
+            row["hierarchical_abs_log_lambda_drift_vs_full"] = (
+                "" if hier_lambda_drift is None else hier_lambda_drift
+            )
+            if jeeds_sigma_drift is not None and hier_sigma_drift is not None:
+                row["hierarchical_closer_sigma"] = hier_sigma_drift < jeeds_sigma_drift
+            else:
+                row["hierarchical_closer_sigma"] = ""
+            if jeeds_lambda_drift is not None and hier_lambda_drift is not None:
+                row["hierarchical_closer_log_lambda"] = hier_lambda_drift < jeeds_lambda_drift
+            else:
+                row["hierarchical_closer_log_lambda"] = ""
+            rewritten.append(row)
+
+    rewritten.sort(key=lambda row: (int(row["agent_id"]), int(row["convergence_n"])))
+    return rewritten
+
+
+def summarize_drift_rows_from_agent_csv_rows(
+    rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build summary_by_N / summary_overall tables from agent-level drift columns."""
+
+    import numpy as np
+
+    bucket_metrics: dict[tuple[str, str, int], list[float]] = {}
+    overall_metrics: dict[tuple[str, str], list[float]] = {}
+
+    method_columns = {
+        "jeeds": (
+            "jeeds_abs_sigma_drift_vs_full",
+            "jeeds_abs_log_lambda_drift_vs_full",
+        ),
+        "hierarchical": (
+            "hierarchical_abs_sigma_drift_vs_full",
+            "hierarchical_abs_log_lambda_drift_vs_full",
+        ),
+    }
+
+    for row in rows:
+        convergence_n = int(row["convergence_n"])
+        for method_name, (sigma_col, lambda_col) in method_columns.items():
+            sigma_drift = _float_or_none(row.get(sigma_col))
+            lambda_drift = _float_or_none(row.get(lambda_col))
+            if sigma_drift is not None:
+                bucket_metrics.setdefault(
+                    (method_name, "abs_sigma_drift_vs_full", convergence_n), []
+                ).append(sigma_drift)
+                overall_metrics.setdefault(
+                    (method_name, "abs_sigma_drift_vs_full"), []
+                ).append(sigma_drift)
+            if lambda_drift is not None:
+                bucket_metrics.setdefault(
+                    (method_name, "abs_log_lambda_drift_vs_full", convergence_n), []
+                ).append(lambda_drift)
+                overall_metrics.setdefault(
+                    (method_name, "abs_log_lambda_drift_vs_full"), []
+                ).append(lambda_drift)
+
+    summary_by_n_rows: list[dict[str, Any]] = []
+    for (method_name, metric_name, convergence_n), values in sorted(bucket_metrics.items()):
+        summary_by_n_rows.append(
+            {
+                "method": method_name,
+                "metric": metric_name,
+                "count_bucket": convergence_n,
+                "num_agents": len(values),
+                "mean": float(np.mean(values)),
+                "ci_lower": "",
+                "ci_upper": "",
+                "notes": (
+                    "Mean absolute self-reference drift over agents. "
+                    "Baseball Statcast estimates are deterministic in seed; no CI."
+                ),
+            }
+        )
+
+    summary_overall_rows: list[dict[str, Any]] = []
+    for (method_name, metric_name), values in sorted(overall_metrics.items()):
+        summary_overall_rows.append(
+            {
+                "method": method_name,
+                "metric": metric_name,
+                "num_agents": len(values),
+                "mean": float(np.mean(values)),
+                "ci_lower": "",
+                "ci_upper": "",
+                "notes": (
+                    "Mean absolute self-reference drift over agents x N. "
+                    "Baseball Statcast estimates are deterministic in seed; no CI."
+                ),
+            }
+        )
+
+    return summary_by_n_rows, summary_overall_rows
+
+
+def plot_drift_by_n(
+    output_path: Path,
+    summary_by_n_rows: Sequence[dict[str, Any]],
+    *,
+    x_scale: str = "categorical",
+) -> None:
+    """Plot drift of each method toward its own max-N estimate.
+
+    ``x_scale`` is ``"categorical"`` (equal spacing) or ``"proportional"``
+    (true pitch-count spacing on a linear axis).
+    """
 
     import matplotlib
 
@@ -280,18 +449,24 @@ def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any
 
     from HJEEDS.artifacts import METHOD_ORDER, _parse_bucket_summary_rows
 
+    if x_scale not in {"categorical", "proportional"}:
+        raise ValueError(f"Unsupported x_scale={x_scale!r}")
+
     parsed_rows = _parse_bucket_summary_rows(summary_by_n_rows)
     bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
-    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
     figure_size = error_metric_figure_size(len(DRIFT_METRIC_PANELS))
     figure, axes = plt.subplots(1, len(DRIFT_METRIC_PANELS), figsize=figure_size, sharex=True)
     axes_array = np.atleast_1d(axes)
+    handles = []
+    labels = []
 
-    for axis, (metric_name, title, ylabel, missing_message) in zip(axes_array, DRIFT_METRIC_PANELS):
+    for axis_index, (axis, (metric_name, title, ylabel, missing_message)) in enumerate(
+        zip(axes_array, DRIFT_METRIC_PANELS)
+    ):
         axis.set_title(title)
-        axis.set_xlabel("Prefix pitch-count checkpoint")
+        axis.set_xlabel(r"Pitch-count checkpoint $N$")
         axis.set_ylabel(ylabel)
-        axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.55)
+        axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.45)
 
         metric_rows = [row for row in parsed_rows if row["metric"] == metric_name]
         methods = sorted(
@@ -303,52 +478,39 @@ def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any
             for method in methods:
                 style = CONVERGENCE_METHOD_STYLES.get(
                     method,
-                    {"label": method, "color": "#555555", "marker": "o", "linestyle": "-"},
+                    {"label": method, "color": "#555555", "marker": "o"},
                 )
                 method_rows = sorted(
                     [row for row in metric_rows if row["method"] == method],
-                    key=lambda row: bucket_positions[row["count_bucket"]],
+                    key=lambda row: row["count_bucket"],
                 )
-                x_values: list[int] = []
-                y_values: list[float] = []
-                lower_errors: list[float] = []
-                upper_errors: list[float] = []
-                for row in method_rows:
-                    mean = row["mean"]
-                    ci_lower = row["ci_lower"]
-                    ci_upper = row["ci_upper"]
-                    x_values.append(bucket_positions[row["count_bucket"]])
-                    y_values.append(mean)
-                    lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
-                    upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
+                if x_scale == "categorical":
+                    x_values = [bucket_values.index(row["count_bucket"]) for row in method_rows]
+                else:
+                    x_values = [float(row["count_bucket"]) for row in method_rows]
+                y_values = [row["mean"] for row in method_rows]
 
-                axis.errorbar(
+                (line,) = axis.plot(
                     x_values,
                     y_values,
-                    yerr=np.array([lower_errors, upper_errors], dtype=float),
                     color=style["color"],
                     marker=style["marker"],
-                    markersize=5.5,
-                    linestyle=style["linestyle"],
-                    capsize=4,
+                    markersize=6,
+                    linestyle="-",
                     linewidth=2.0,
                     label=style["label"],
                 )
+                if axis_index == 0:
+                    handles.append(line)
+                    labels.append(style["label"])
 
-            axis.set_xticks(list(bucket_positions.values()))
-            axis.set_xticklabels([str(bucket) for bucket in bucket_values])
-            axis.legend(title="Estimator", loc="best", fontsize=8)
-            if bucket_values:
-                ref_n = max(bucket_values)
-                axis.annotate(
-                    f"ref = JEEDS @ {ref_n}",
-                    xy=(0.98, 0.02),
-                    xycoords="axes fraction",
-                    ha="right",
-                    va="bottom",
-                    fontsize=7.5,
-                    color="0.35",
-                )
+            if x_scale == "categorical":
+                axis.set_xticks(list(range(len(bucket_values))))
+                axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+            else:
+                axis.set_xticks(bucket_values)
+                axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+                axis.set_xlim(0, max(bucket_values) * 1.05)
         else:
             axis.text(
                 0.5,
@@ -359,11 +521,22 @@ def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any
                 transform=axis.transAxes,
             )
 
+    if handles:
+        figure.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=len(handles),
+            frameon=False,
+            fontsize=9,
+            bbox_to_anchor=(0.5, 1.02),
+        )
+
+    ref_n = max(bucket_values) if bucket_values else r"N_{\max}"
     figure.suptitle(
-        "Prefix-N estimates vs fixed full-window independent JEEDS reference "
-        "(not ground-truth error; JEEDS at the final checkpoint is the reference by construction)",
-        fontsize=9.5,
-        y=1.02,
+        rf"Distance to each method's own estimate at $N={ref_n}$ (not ground truth)",
+        fontsize=10,
+        y=1.08,
     )
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,15 +544,45 @@ def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any
     plt.close(figure)
 
 
-def regenerate_plot_from_existing_results(output_dir: Path) -> None:
+def write_drift_plots(output_dir: Path, summary_by_n_rows: Sequence[dict[str, Any]]) -> None:
     paths = planned_convergence_output_paths(output_dir)
-    summary_path = paths["summary_by_n_csv"]
-    if not summary_path.exists():
-        raise FileNotFoundError(f"Cannot regenerate plot because summary CSV is missing: {summary_path}")
-    with summary_path.open("r", newline="") as handle:
-        summary_by_n_rows = list(csv.DictReader(handle))
-    plot_drift_by_n(paths["drift_plot"], summary_by_n_rows)
-    print(f"[baseball-convergence] Regenerated plot at {paths['drift_plot'].resolve()}", flush=True)
+    plot_drift_by_n(paths["drift_plot"], summary_by_n_rows, x_scale="categorical")
+    plot_drift_by_n(
+        paths["drift_plot_proportional"],
+        summary_by_n_rows,
+        x_scale="proportional",
+    )
+
+
+def regenerate_plot_from_existing_results(output_dir: Path) -> None:
+    """Recompute dual self-reference drifts from agent CSV, then rewrite summaries/plots."""
+
+    paths = planned_convergence_output_paths(output_dir)
+    agent_path = paths["agent_level_csv"]
+    if not agent_path.exists():
+        raise FileNotFoundError(
+            f"Cannot regenerate plots because agent-level CSV is missing: {agent_path}"
+        )
+
+    with agent_path.open("r", newline="") as handle:
+        agent_rows = list(csv.DictReader(handle))
+    if not agent_rows:
+        raise ValueError(f"No rows in {agent_path}")
+
+    updated_rows = recompute_self_reference_drifts_in_agent_rows(agent_rows)
+    with agent_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CONVERGENCE_AGENT_LEVEL_HEADER)
+        writer.writeheader()
+        writer.writerows(updated_rows)
+
+    summary_by_n_rows, summary_overall_rows = summarize_drift_rows_from_agent_csv_rows(updated_rows)
+    write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
+    write_drift_plots(output_dir, summary_by_n_rows)
+    print(
+        f"[baseball-convergence] Regenerated dual-reference summaries and plots under "
+        f"{output_dir.resolve()}",
+        flush=True,
+    )
 
 
 def _load_pitcher_name_lookup(output_dir: Path) -> dict[int, str]:
@@ -432,17 +635,33 @@ def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
     )
 
     for agent_id, agent_frame in frame.groupby("agent_id", sort=True):
-        agent_frame = agent_frame.sort_values("convergence_n")
+        agent_frame = agent_frame.sort_values("convergence_n").copy()
         ns = agent_frame["convergence_n"].astype(int).tolist()
         pitcher_id = int(agent_frame["pitcher_id"].iloc[0])
         pitch_type = str(agent_frame["pitch_type"].iloc[0])
         player_name = name_lookup.get(pitcher_id, f"pitcher {pitcher_id}")
         final_n = max(ns)
 
+        for jeeds_col, hier_col, _ylabel, _key in metric_panels:
+            agent_frame[jeeds_col] = pd.to_numeric(agent_frame[jeeds_col], errors="coerce")
+            agent_frame[hier_col] = pd.to_numeric(agent_frame[hier_col], errors="coerce")
+
+        usable = False
+        for jeeds_col, hier_col, _ylabel, _key in metric_panels:
+            if agent_frame[jeeds_col].notna().any() or agent_frame[hier_col].notna().any():
+                usable = True
+                break
+        if not usable:
+            print(
+                f"[baseball-convergence] Skipping agent {agent_id}: no numeric posterior means",
+                flush=True,
+            )
+            continue
+
         figure, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True)
         for axis, (jeeds_col, hier_col, ylabel, _key) in zip(axes, metric_panels):
-            jeeds_y = agent_frame[jeeds_col].astype(float).tolist()
-            hier_y = agent_frame[hier_col].astype(float).tolist()
+            jeeds_y = agent_frame[jeeds_col].tolist()
+            hier_y = agent_frame[hier_col].tolist()
             jeeds_style = AGENT_ESTIMATE_METHOD_STYLES["jeeds"]
             hier_style = AGENT_ESTIMATE_METHOD_STYLES["hierarchical"]
 
@@ -468,23 +687,27 @@ def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
             )
 
             final_row = agent_frame.loc[agent_frame["convergence_n"] == final_n].iloc[0]
-            axis.axhline(
-                float(final_row[jeeds_col]),
-                color=jeeds_style["color"],
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.85,
-                label=f"JEEDS @ {final_n}",
-            )
-            axis.axhline(
-                float(final_row[hier_col]),
-                color=hier_style["color"],
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.85,
-                label=f"H-JEEDS @ {final_n}",
-            )
-            axis.set_xlabel("Prefix pitch count $N$")
+            jeeds_ref = final_row[jeeds_col]
+            hier_ref = final_row[hier_col]
+            if pd.notna(jeeds_ref):
+                axis.axhline(
+                    float(jeeds_ref),
+                    color=jeeds_style["color"],
+                    linestyle="--",
+                    linewidth=1.5,
+                    alpha=0.85,
+                    label=f"JEEDS @ {final_n}",
+                )
+            if pd.notna(hier_ref):
+                axis.axhline(
+                    float(hier_ref),
+                    color=hier_style["color"],
+                    linestyle="--",
+                    linewidth=1.5,
+                    alpha=0.85,
+                    label=f"H-JEEDS @ {final_n}",
+                )
+            axis.set_xlabel(r"Pitch-count checkpoint $N$")
             axis.set_ylabel(ylabel)
             axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.55)
             axis.set_xticks(ns)
@@ -565,7 +788,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_paths = planned_convergence_output_paths(config.base.output_dir)
         write_convergence_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
         write_convergence_summary_csvs(config.base.output_dir, summary_by_n_rows, summary_overall_rows)
-        plot_drift_by_n(output_paths["drift_plot"], summary_by_n_rows)
+        write_drift_plots(config.base.output_dir, summary_by_n_rows)
         print(f"[baseball-convergence] Wrote aggregated results to {config.base.output_dir.resolve()}", flush=True)
         return 0
 
@@ -587,7 +810,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_paths = planned_convergence_output_paths(config.base.output_dir)
     write_convergence_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
     write_convergence_summary_csvs(config.base.output_dir, summary_by_n_rows, summary_overall_rows)
-    plot_drift_by_n(output_paths["drift_plot"], summary_by_n_rows)
+    write_drift_plots(config.base.output_dir, summary_by_n_rows)
     print(f"[baseball-convergence] Wrote results to {config.base.output_dir.resolve()}", flush=True)
     return 0
 

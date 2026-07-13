@@ -272,7 +272,12 @@ class BaseballSeedResult:
 
 @dataclass(frozen=True)
 class StatcastConvergenceAgentResult:
-    """Agent-level convergence outputs vs a full-data independent JEEDS reference."""
+    """Agent-level convergence outputs with per-method self-references at max N.
+
+    Drift for JEEDS is |estimate_N - JEEDS_at_max_N|; drift for H-JEEDS is
+    |estimate_N - HJEEDS_at_max_N|. The ``reference`` field still stores the
+    independent JEEDS fit on the full reference window for metadata/compat.
+    """
 
     seed: int
     agent_id: int

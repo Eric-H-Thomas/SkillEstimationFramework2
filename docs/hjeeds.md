@@ -319,13 +319,13 @@ Primary output: `agent_level_results.csv` under the chosen `--output-dir`.
 
 ### Phase 2: Convergence study
 
-On real Statcast data there is no simulated ground truth. Phase 2 measures how quickly **independent JEEDS** and **hierarchical H-JEEDS** converge toward a **full-data independent JEEDS posterior mean** when pitch counts are reduced.
+On real Statcast data there is no simulated ground truth. Phase 2 measures how quickly **independent JEEDS** and **hierarchical H-JEEDS** each settle toward **that method's own estimate at max `N`** (e.g. JEEDS→JEEDS@100, H-JEEDS→H-JEEDS@100) when pitch counts are reduced.
 
 For each agent and each `N` in `--convergence-ns`, the pipeline:
 
-1. Takes the **newest N pitches** (`game_date` descending; cumulative prefix, not disjoint chunks).
-2. Fits independent JEEDS and H-JEEDS on that prefix.
-3. Compares both to the per-agent full-data independent JEEDS reference.
+1. Takes the **newest N pitches** (`game_date` descending; cumulative, not disjoint chunks).
+2. Fits independent JEEDS and H-JEEDS on those pitches.
+3. Records absolute drift of each method relative to that method's estimate at `max(convergence_ns)`.
 
 Dry run:
 
@@ -382,8 +382,9 @@ Useful options: `--time`, `--mem`, `--partition`, `--account`, `--pitcher-ids` (
 Primary outputs under `--output-dir`:
 
 - `convergence_agent_level_results.csv` — per-agent drift metrics at each `N`
-- `summary_by_N.csv` — mean drift (and 95% CI across seeds) by method and `N`
-- `drift_by_N.png` — drift vs `N` plot (JEEDS vs H-JEEDS)
+- `summary_by_N.csv` — mean self-reference drift by method and `N`
+- `drift_by_N.png` — categorical-spacing drift plot
+- `drift_by_N_proportional.png` — same series with true pitch-count x-spacing
 
 Likelihood parity test (HJEEDS vs `JointMethodQRE` baseball-multi):
 

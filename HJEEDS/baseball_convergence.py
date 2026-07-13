@@ -517,6 +517,7 @@ def planned_convergence_output_paths(output_dir: Path) -> dict[str, Path]:
         "summary_by_n_csv": output_dir / "summary_by_N.csv",
         "summary_overall_csv": output_dir / "summary_overall.csv",
         "drift_plot": output_dir / "drift_by_N.png",
+        "drift_plot_proportional": output_dir / "drift_by_N_proportional.png",
     }
 
 
@@ -549,10 +550,12 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
         for pitcher_id, pitch_type, pitch_count in config.excluded_agents:
             print(f"  pitcher={pitcher_id} pitch_type={pitch_type} count={pitch_count}")
     print(f"Min pitches per agent: {config.min_pitches_per_agent}")
-    print(f"Convergence N values (prefix pitch counts): {config.convergence_ns}")
+    print(f"Convergence N values (pitch counts): {config.convergence_ns}")
     print(f"Hyperprior centers (log sigma, log lambda): {config.base.hyperpriors.mean_vector}")
     print(
-        "Reference: independent JEEDS posterior mean on "
+        f"References: each method's own estimate at N={max_n} "
+        f"(JEEDS→JEEDS@{max_n}, H-JEEDS→H-JEEDS@{max_n}). "
+        "Optional independent JEEDS full-window fit uses "
         f"{'all available' if config.max_reference_pitches is None else config.max_reference_pitches} "
         "pitches per agent."
     )
@@ -567,11 +570,17 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     print("Planned pipeline:")
     print("  1. Load ProcessedData-From-GivenFiles.pkl")
     print("  2. Per agent, build pitch surfaces once for max(N) (and reference cap if set)")
-    print("  3. Fit full-data independent JEEDS reference per agent")
-    print("  4. For each N, subsample prefix-N pitches (game_date descending)")
-    print("  5. Fit independent JEEDS + hierarchical HJEEDS on the same prefix")
-    print("  6. Record drift |estimate_N - reference_full| for sigma and log-lambda")
-    print("  7. Write convergence_agent_level_results.csv, summary_by_N.csv, drift_by_N.png")
+    print("  3. Fit full-window independent JEEDS per agent (compat / metadata)")
+    print("  4. For each N, take newest-N pitches (game_date descending)")
+    print("  5. Fit independent JEEDS + hierarchical HJEEDS on the same N pitches")
+    print(
+        f"  6. Record drift |method_N - method_{max_n}| for sigma and log-lambda "
+        "(per-method self-reference)"
+    )
+    print(
+        "  7. Write convergence_agent_level_results.csv, summary_by_N.csv, "
+        "drift_by_N.png (+ proportional companion)"
+    )
     print()
     print(
         f"Upper-bound pitch-surface builds (no cache reuse): ~{pitch_builds} "
@@ -820,13 +829,35 @@ def run_convergence_from_agent_caches(
     seed: int,
     agent_caches: Sequence[dict[str, Any]],
 ) -> BaseballConvergenceSeedResult:
-    """Run population MAP + hierarchical passes from per-agent cached grids."""
+    """Run population MAP + hierarchical passes from per-agent cached grids.
+
+    Drift for each method is relative to that method's own estimate at
+    ``max(convergence_ns)`` (JEEDS→JEEDS@N_max, H-JEEDS→H-JEEDS@N_max).
+    """
 
     sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
+    max_n = max(config.convergence_ns)
     seed_result = BaseballConvergenceSeedResult(
         seed=seed,
-        notes="Statcast baseball convergence study (full-data JEEDS reference).",
+        notes=(
+            "Statcast baseball convergence study "
+            f"(per-method self-reference at N={max_n})."
+        ),
     )
+
+    # (agent_id, N) -> packed estimate metadata used after both methods are known at max N.
+    pending: list[
+        tuple[
+            StatcastAgentSpec,
+            int,
+            int,
+            MethodEstimate,
+            MethodEstimate,
+            MethodEstimate,
+            int,
+        ]
+    ] = []
+    final_estimates: dict[int, tuple[MethodEstimate, MethodEstimate]] = {}
 
     for convergence_n in config.convergence_ns:
         key = str(convergence_n)
@@ -892,8 +923,40 @@ def run_convergence_from_agent_caches(
                 sigma_grid=sigma_grid,
                 log_lambda_grid=log_lambda_grid,
             )
-            jeeds_sigma_drift, jeeds_lambda_drift = _abs_drift(jeeds_estimate, reference_estimate)
-            hier_sigma_drift, hier_lambda_drift = _abs_drift(hierarchical_estimate, reference_estimate)
+            pending.append(
+                (
+                    agent_spec,
+                    convergence_n,
+                    take_n,
+                    jeeds_estimate,
+                    hierarchical_estimate,
+                    reference_estimate,
+                    num_reference_observations,
+                )
+            )
+            if convergence_n == max_n:
+                final_estimates[agent_spec.agent_id] = (jeeds_estimate, hierarchical_estimate)
+
+    for (
+        agent_spec,
+        convergence_n,
+        take_n,
+        jeeds_estimate,
+        hierarchical_estimate,
+        reference_estimate,
+        num_reference_observations,
+    ) in pending:
+        finals = final_estimates.get(agent_spec.agent_id)
+        if finals is None:
+            jeeds_sigma_drift = jeeds_lambda_drift = None
+            hier_sigma_drift = hier_lambda_drift = None
+            hierarchical_closer_sigma = hierarchical_closer_log_lambda = None
+        else:
+            jeeds_at_max, hierarchical_at_max = finals
+            jeeds_sigma_drift, jeeds_lambda_drift = _abs_drift(jeeds_estimate, jeeds_at_max)
+            hier_sigma_drift, hier_lambda_drift = _abs_drift(
+                hierarchical_estimate, hierarchical_at_max
+            )
             hierarchical_closer_sigma = None
             hierarchical_closer_log_lambda = None
             if jeeds_sigma_drift is not None and hier_sigma_drift is not None:
@@ -901,30 +964,30 @@ def run_convergence_from_agent_caches(
             if jeeds_lambda_drift is not None and hier_lambda_drift is not None:
                 hierarchical_closer_log_lambda = hier_lambda_drift < jeeds_lambda_drift
 
-            seed_result.agent_results.append(
-                StatcastConvergenceAgentResult(
-                    seed=seed,
-                    agent_id=agent_spec.agent_id,
-                    pitcher_id=agent_spec.pitcher_id,
-                    pitch_type=agent_spec.pitch_type,
-                    convergence_n=convergence_n,
-                    num_observations=take_n,
-                    num_reference_observations=num_reference_observations,
-                    reference=reference_estimate,
-                    jeeds=jeeds_estimate,
-                    hierarchical=hierarchical_estimate,
-                    abs_sigma_drift_vs_full_jeeds=jeeds_sigma_drift,
-                    abs_log_lambda_drift_vs_full_jeeds=jeeds_lambda_drift,
-                    abs_sigma_drift_vs_full_hierarchical=hier_sigma_drift,
-                    abs_log_lambda_drift_vs_full_hierarchical=hier_lambda_drift,
-                    hierarchical_closer_sigma=hierarchical_closer_sigma,
-                    hierarchical_closer_log_lambda=hierarchical_closer_log_lambda,
-                    notes=(
-                        f"Pitcher {agent_spec.pitcher_id} {agent_spec.pitch_type}; "
-                        f"N={take_n}; reference pitches={num_reference_observations}."
-                    ),
-                )
+        seed_result.agent_results.append(
+            StatcastConvergenceAgentResult(
+                seed=seed,
+                agent_id=agent_spec.agent_id,
+                pitcher_id=agent_spec.pitcher_id,
+                pitch_type=agent_spec.pitch_type,
+                convergence_n=convergence_n,
+                num_observations=take_n,
+                num_reference_observations=num_reference_observations,
+                reference=reference_estimate,
+                jeeds=jeeds_estimate,
+                hierarchical=hierarchical_estimate,
+                abs_sigma_drift_vs_full_jeeds=jeeds_sigma_drift,
+                abs_log_lambda_drift_vs_full_jeeds=jeeds_lambda_drift,
+                abs_sigma_drift_vs_full_hierarchical=hier_sigma_drift,
+                abs_log_lambda_drift_vs_full_hierarchical=hier_lambda_drift,
+                hierarchical_closer_sigma=hierarchical_closer_sigma,
+                hierarchical_closer_log_lambda=hierarchical_closer_log_lambda,
+                notes=(
+                    f"Pitcher {agent_spec.pitcher_id} {agent_spec.pitch_type}; "
+                    f"N={take_n}; self-reference at N={max_n}."
+                ),
             )
+        )
 
     seed_result.summary_by_n_rows, seed_result.summary_overall_rows = summarize_convergence_seed(
         seed_result
