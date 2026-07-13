@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from HJEEDS.artifacts import _plot_bucket_error_panels, error_metric_figure_size
+from HJEEDS.artifacts import error_metric_figure_size
 from HJEEDS.baseball_convergence import (
     DEFAULT_CONVERGENCE_NS,
     DEFAULT_LAMBDA_MAX,
@@ -68,17 +68,47 @@ CONVERGENCE_AGENT_LEVEL_HEADER = [
 DRIFT_METRIC_PANELS = (
     (
         "abs_sigma_drift_vs_full",
-        "Execution Skill Drift vs Full-Data JEEDS",
-        r"Absolute drift ($|\hat{\sigma}_N - \hat{\sigma}_{\mathrm{full}}|$)",
+        r"Convergence of $\hat{\sigma}$ toward JEEDS reference",
+        r"$|\hat{\sigma}_N - \hat{\sigma}_{\mathrm{ref}}|$",
         "No rows for execution skill drift",
     ),
     (
         "abs_log_lambda_drift_vs_full",
-        "Log Decision Skill Drift vs Full-Data JEEDS",
-        r"Absolute drift ($|\widehat{\log\lambda}_N - \widehat{\log\lambda}_{\mathrm{full}}|$)",
+        r"Convergence of $\widehat{\log\lambda}$ toward JEEDS reference",
+        r"$|\widehat{\log\lambda}_N - \widehat{\log\lambda}_{\mathrm{ref}}|$",
         "No rows for log decision skill drift",
     ),
 )
+
+# Distinct from shared METHOD_COLORS (teal/magenta error-vs-truth figures).
+CONVERGENCE_METHOD_STYLES = {
+    "jeeds": {
+        "label": "Independent JEEDS",
+        "color": "#1B4F72",
+        "marker": "^",
+        "linestyle": "--",
+    },
+    "hierarchical": {
+        "label": "H-JEEDS",
+        "color": "#B9770E",
+        "marker": "D",
+        "linestyle": "-",
+    },
+}
+
+# Solid lines for per-agent intermediate-estimate plots (checkpoints only).
+AGENT_ESTIMATE_METHOD_STYLES = {
+    "jeeds": {
+        "label": "Independent JEEDS",
+        "color": "#002D72",
+        "marker": "^",
+    },
+    "hierarchical": {
+        "label": "H-JEEDS",
+        "color": "#D50032",
+        "marker": "D",
+    },
+}
 
 
 def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -136,6 +166,14 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         "--plot-only",
         action="store_true",
         help="Regenerate drift_by_N.png from an existing summary_by_N.csv.",
+    )
+    parser.add_argument(
+        "--plot-agent-estimates",
+        action="store_true",
+        help=(
+            "Write per-agent intermediate-estimate PNGs under output_dir/agents/ "
+            "from an existing convergence_agent_level_results.csv."
+        ),
     )
     parser.add_argument(
         "--prepare-roster",
@@ -232,12 +270,105 @@ def write_convergence_summary_csvs(
 
 
 def plot_drift_by_n(output_path: Path, summary_by_n_rows: Sequence[dict[str, Any]]) -> None:
-    _plot_bucket_error_panels(
-        output_path,
-        summary_by_n_rows,
-        DRIFT_METRIC_PANELS,
-        figure_size=error_metric_figure_size(len(DRIFT_METRIC_PANELS)),
+    """Plot prefix-N drift toward the full-window JEEDS reference (not error-vs-truth)."""
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from HJEEDS.artifacts import METHOD_ORDER, _parse_bucket_summary_rows
+
+    parsed_rows = _parse_bucket_summary_rows(summary_by_n_rows)
+    bucket_values = sorted({row["count_bucket"] for row in parsed_rows})
+    bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
+    figure_size = error_metric_figure_size(len(DRIFT_METRIC_PANELS))
+    figure, axes = plt.subplots(1, len(DRIFT_METRIC_PANELS), figsize=figure_size, sharex=True)
+    axes_array = np.atleast_1d(axes)
+
+    for axis, (metric_name, title, ylabel, missing_message) in zip(axes_array, DRIFT_METRIC_PANELS):
+        axis.set_title(title)
+        axis.set_xlabel("Prefix pitch-count checkpoint")
+        axis.set_ylabel(ylabel)
+        axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.55)
+
+        metric_rows = [row for row in parsed_rows if row["metric"] == metric_name]
+        methods = sorted(
+            {row["method"] for row in metric_rows},
+            key=lambda method: (METHOD_ORDER.get(method, len(METHOD_ORDER)), method),
+        )
+
+        if metric_rows and bucket_values:
+            for method in methods:
+                style = CONVERGENCE_METHOD_STYLES.get(
+                    method,
+                    {"label": method, "color": "#555555", "marker": "o", "linestyle": "-"},
+                )
+                method_rows = sorted(
+                    [row for row in metric_rows if row["method"] == method],
+                    key=lambda row: bucket_positions[row["count_bucket"]],
+                )
+                x_values: list[int] = []
+                y_values: list[float] = []
+                lower_errors: list[float] = []
+                upper_errors: list[float] = []
+                for row in method_rows:
+                    mean = row["mean"]
+                    ci_lower = row["ci_lower"]
+                    ci_upper = row["ci_upper"]
+                    x_values.append(bucket_positions[row["count_bucket"]])
+                    y_values.append(mean)
+                    lower_errors.append(max(0.0, mean - ci_lower) if ci_lower is not None else 0.0)
+                    upper_errors.append(max(0.0, ci_upper - mean) if ci_upper is not None else 0.0)
+
+                axis.errorbar(
+                    x_values,
+                    y_values,
+                    yerr=np.array([lower_errors, upper_errors], dtype=float),
+                    color=style["color"],
+                    marker=style["marker"],
+                    markersize=5.5,
+                    linestyle=style["linestyle"],
+                    capsize=4,
+                    linewidth=2.0,
+                    label=style["label"],
+                )
+
+            axis.set_xticks(list(bucket_positions.values()))
+            axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+            axis.legend(title="Estimator", loc="best", fontsize=8)
+            if bucket_values:
+                ref_n = max(bucket_values)
+                axis.annotate(
+                    f"ref = JEEDS @ {ref_n}",
+                    xy=(0.98, 0.02),
+                    xycoords="axes fraction",
+                    ha="right",
+                    va="bottom",
+                    fontsize=7.5,
+                    color="0.35",
+                )
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                missing_message,
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+            )
+
+    figure.suptitle(
+        "Prefix-N estimates vs fixed full-window independent JEEDS reference "
+        "(not ground-truth error; JEEDS at the final checkpoint is the reference by construction)",
+        fontsize=9.5,
+        y=1.02,
     )
+    figure.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(figure)
 
 
 def regenerate_plot_from_existing_results(output_dir: Path) -> None:
@@ -249,6 +380,124 @@ def regenerate_plot_from_existing_results(output_dir: Path) -> None:
         summary_by_n_rows = list(csv.DictReader(handle))
     plot_drift_by_n(paths["drift_plot"], summary_by_n_rows)
     print(f"[baseball-convergence] Regenerated plot at {paths['drift_plot'].resolve()}", flush=True)
+
+
+def _load_pitcher_name_lookup(output_dir: Path) -> dict[int, str]:
+    import json
+
+    metadata_path = output_dir / "convergence_roster_metadata.json"
+    if not metadata_path.is_file():
+        return {}
+    payload = json.loads(metadata_path.read_text())
+    names: dict[int, str] = {}
+    for row in payload.get("bbip_selection", []):
+        try:
+            names[int(row["pitcher_id"])] = str(row["player_name"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return names
+
+
+def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
+    """Plot JEEDS/H-JEEDS checkpoint estimates per agent into ``agents/*.png``."""
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    paths = planned_convergence_output_paths(output_dir)
+    agent_csv = paths["agent_level_csv"]
+    if not agent_csv.is_file():
+        raise FileNotFoundError(f"Missing agent-level CSV: {agent_csv}")
+
+    frame = pd.read_csv(agent_csv)
+    if frame.empty:
+        raise ValueError(f"No rows in {agent_csv}")
+
+    agents_dir = output_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    name_lookup = _load_pitcher_name_lookup(output_dir)
+    written: list[Path] = []
+
+    metric_panels = (
+        ("jeeds_posterior_mean_sigma", "hierarchical_posterior_mean_sigma", r"$\hat{\sigma}$", "sigma"),
+        (
+            "jeeds_posterior_mean_log_lambda",
+            "hierarchical_posterior_mean_log_lambda",
+            r"$\widehat{\log\lambda}$",
+            "log_lambda",
+        ),
+    )
+
+    for agent_id, agent_frame in frame.groupby("agent_id", sort=True):
+        agent_frame = agent_frame.sort_values("convergence_n")
+        ns = agent_frame["convergence_n"].astype(int).tolist()
+        pitcher_id = int(agent_frame["pitcher_id"].iloc[0])
+        pitch_type = str(agent_frame["pitch_type"].iloc[0])
+        player_name = name_lookup.get(pitcher_id, f"pitcher {pitcher_id}")
+        final_n = max(ns)
+
+        figure, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True)
+        for axis, (jeeds_col, hier_col, ylabel, _key) in zip(axes, metric_panels):
+            jeeds_y = agent_frame[jeeds_col].astype(float).tolist()
+            hier_y = agent_frame[hier_col].astype(float).tolist()
+            jeeds_style = AGENT_ESTIMATE_METHOD_STYLES["jeeds"]
+            hier_style = AGENT_ESTIMATE_METHOD_STYLES["hierarchical"]
+
+            axis.plot(
+                ns,
+                jeeds_y,
+                color=jeeds_style["color"],
+                marker=jeeds_style["marker"],
+                linestyle="-",
+                linewidth=2.0,
+                markersize=6,
+                label=jeeds_style["label"],
+            )
+            axis.plot(
+                ns,
+                hier_y,
+                color=hier_style["color"],
+                marker=hier_style["marker"],
+                linestyle="-",
+                linewidth=2.0,
+                markersize=6,
+                label=hier_style["label"],
+            )
+
+            final_row = agent_frame.loc[agent_frame["convergence_n"] == final_n].iloc[0]
+            axis.axhline(
+                float(final_row[jeeds_col]),
+                color=jeeds_style["color"],
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.85,
+                label=f"JEEDS @ {final_n}",
+            )
+            axis.axhline(
+                float(final_row[hier_col]),
+                color=hier_style["color"],
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.85,
+                label=f"H-JEEDS @ {final_n}",
+            )
+            axis.set_xlabel("Prefix pitch count $N$")
+            axis.set_ylabel(ylabel)
+            axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.55)
+            axis.set_xticks(ns)
+
+        axes[0].legend(loc="best", fontsize=8)
+        figure.suptitle(f"{player_name} ({pitcher_id}, {pitch_type})", fontsize=11)
+        figure.tight_layout()
+        output_path = agents_dir / f"agent_{int(agent_id):04d}.png"
+        figure.savefig(output_path, dpi=150, bbox_inches="tight")
+        plt.close(figure)
+        written.append(output_path)
+
+    return written
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -276,6 +525,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if (
             args.dry_run
             or args.plot_only
+            or args.plot_agent_estimates
             or args.prepare_roster
             or args.aggregate_results
             or args.agent_index is not None
@@ -284,11 +534,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             raise SystemExit(
                 "error: --seed is required unless using --list-eligible-pitchers, --dry-run, "
-                "--plot-only, --prepare-roster, --agent-index, or --aggregate-results"
+                "--plot-only, --plot-agent-estimates, --prepare-roster, --agent-index, or --aggregate-results"
             )
 
     if args.prepare_roster:
         prepare_convergence_roster(args)
+        return 0
+
+    if args.plot_agent_estimates:
+        written = plot_agent_intermediate_estimates(Path(args.output_dir))
+        print(
+            f"[baseball-convergence] Wrote {len(written)} agent estimate plots under "
+            f"{(Path(args.output_dir) / 'agents').resolve()}",
+            flush=True,
+        )
         return 0
 
     config = build_baseball_convergence_config_from_args(args)
