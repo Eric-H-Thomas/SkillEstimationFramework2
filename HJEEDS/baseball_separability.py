@@ -244,19 +244,23 @@ def plot_separability_by_n(output_path: Path, rows: Sequence[dict[str, Any]]) ->
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
+    # Keep visual language aligned with baseball drift / intermediate-estimate plots.
+    from HJEEDS.baseball_convergence_study import CONVERGENCE_METHOD_STYLES
+
     figure, axes = plt.subplots(1, 2, figsize=(11.0, 4.2), sharex=True)
     panels = (
-        ("auc", "BB/IP Separability (AUC)", "AUC (top vs bottom BB/IP)"),
-        ("mean_gap_top_minus_bottom", "Mean Skill Gap (top − bottom)", "Mean gap"),
+        ("auc", "BB/IP separability (AUC)", "AUC (top vs bottom BB/IP)"),
+        (
+            "mean_gap_top_minus_bottom",
+            r"Mean $\hat{\sigma}$ gap (top $-$ bottom)",
+            r"Mean $\hat{\sigma}$ gap",
+        ),
     )
-    method_styles = {
-        "jeeds": {"label": "JEEDS", "marker": "o", "color": "#2a9d8f"},
-        "hierarchical": {"label": "H-JEEDS", "marker": "s", "color": "#9b2226"},
-    }
 
     sigma_rows = [row for row in rows if row["metric"] == "sigma"]
     for axis, (y_key, title, ylabel) in zip(axes, panels):
-        for method_name, style in method_styles.items():
+        for method_name in ("jeeds", "hierarchical"):
+            style = CONVERGENCE_METHOD_STYLES[method_name]
             method_rows = sorted(
                 (row for row in sigma_rows if row["method"] == method_name),
                 key=lambda row: int(row["convergence_n"]),
@@ -265,21 +269,39 @@ def plot_separability_by_n(output_path: Path, rows: Sequence[dict[str, Any]]) ->
                 continue
             xs = [int(row["convergence_n"]) for row in method_rows]
             ys = [float(row[y_key]) for row in method_rows]
-            axis.plot(xs, ys, marker=style["marker"], color=style["color"], label=style["label"])
+            axis.plot(
+                xs,
+                ys,
+                color=style["color"],
+                marker=style["marker"],
+                linestyle="-",
+                linewidth=2.0,
+                markersize=6,
+                label=style["label"],
+            )
         if y_key == "auc":
             axis.axhline(0.5, color="0.5", linestyle="--", linewidth=1.0, label="Chance")
-            axis.axhline(DEFAULT_AUC_THRESHOLD, color="0.35", linestyle=":", linewidth=1.0, label=f"AUC={DEFAULT_AUC_THRESHOLD}")
+            axis.axhline(
+                DEFAULT_AUC_THRESHOLD,
+                color="0.35",
+                linestyle=":",
+                linewidth=1.0,
+                label=f"AUC={DEFAULT_AUC_THRESHOLD}",
+            )
             axis.set_ylim(0.0, 1.05)
         axis.set_title(title)
-        axis.set_xlabel("Observation count N")
+        axis.set_xlabel(r"Pitch-count checkpoint $N$")
         axis.set_ylabel(ylabel)
-        axis.grid(True, alpha=0.3)
+        axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.45)
         axis.legend(loc="best", fontsize=8)
 
-    figure.suptitle("Execution skill (σ) vs BB/IP top/bottom groups", fontsize=11)
+    figure.suptitle(
+        r"Execution skill ($\hat{\sigma}$) vs BB/IP top/bottom groups",
+        fontsize=11,
+    )
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(output_path, dpi=300)
+    figure.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(figure)
 
 
