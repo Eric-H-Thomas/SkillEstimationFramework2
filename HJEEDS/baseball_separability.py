@@ -24,6 +24,7 @@ ROSTER_FILENAME = "convergence_roster.json"
 METADATA_FILENAME = "convergence_roster_metadata.json"
 SEPARABILITY_CSV = "separability_by_N.csv"
 SEPARABILITY_PLOT = "separability_by_N.png"
+SEPARABILITY_PLOT_PROPORTIONAL = "separability_by_N_proportional.png"
 SEPARABILITY_SUMMARY = "separability_summary.json"
 TIER_TABLE_CSV = "bbip_tiers_corrected.csv"
 
@@ -238,18 +239,25 @@ def write_separability_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
-def plot_separability_by_n(output_path: Path, rows: Sequence[dict[str, Any]]) -> None:
+def plot_separability_by_n(
+    output_path: Path,
+    rows: Sequence[dict[str, Any]],
+    *,
+    x_scale: str = "categorical",
+) -> None:
     import matplotlib
 
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
-    # Keep visual language aligned with baseball drift / intermediate-estimate plots.
-    from HJEEDS.baseball_convergence_study import CONVERGENCE_METHOD_STYLES
+    from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
+
+    if x_scale not in {"categorical", "proportional"}:
+        raise ValueError(f"Unsupported x_scale={x_scale!r}")
 
     figure, axes = plt.subplots(1, 2, figsize=(11.0, 4.2), sharex=True)
     panels = (
-        ("auc", "BB/IP separability (AUC)", "AUC (top vs bottom BB/IP)"),
+        ("auc", "Separability (AUC)", "AUC (top vs bottom BB/IP)"),
         (
             "mean_gap_top_minus_bottom",
             r"Mean $\hat{\sigma}$ gap (top $-$ bottom)",
@@ -258,18 +266,26 @@ def plot_separability_by_n(output_path: Path, rows: Sequence[dict[str, Any]]) ->
     )
 
     sigma_rows = [row for row in rows if row["metric"] == "sigma"]
-    for axis, (y_key, title, ylabel) in zip(axes, panels):
+    bucket_values = sorted({int(row["convergence_n"]) for row in sigma_rows})
+    handles = []
+    labels = []
+
+    for axis_index, (axis, (y_key, title, ylabel)) in enumerate(zip(axes, panels)):
         for method_name in ("jeeds", "hierarchical"):
-            style = CONVERGENCE_METHOD_STYLES[method_name]
+            style = BASEBALL_METHOD_STYLES[method_name]
             method_rows = sorted(
                 (row for row in sigma_rows if row["method"] == method_name),
                 key=lambda row: int(row["convergence_n"]),
             )
             if not method_rows:
                 continue
-            xs = [int(row["convergence_n"]) for row in method_rows]
+            ns = [int(row["convergence_n"]) for row in method_rows]
+            if x_scale == "categorical":
+                xs = [bucket_values.index(n) for n in ns]
+            else:
+                xs = [float(n) for n in ns]
             ys = [float(row[y_key]) for row in method_rows]
-            axis.plot(
+            (line,) = axis.plot(
                 xs,
                 ys,
                 color=style["color"],
@@ -279,30 +295,78 @@ def plot_separability_by_n(output_path: Path, rows: Sequence[dict[str, Any]]) ->
                 markersize=6,
                 label=style["label"],
             )
+            if axis_index == 0:
+                handles.append(line)
+                labels.append(style["label"])
+
         if y_key == "auc":
-            axis.axhline(0.5, color="0.5", linestyle="--", linewidth=1.0, label="Chance")
-            axis.axhline(
-                DEFAULT_AUC_THRESHOLD,
-                color="0.35",
-                linestyle=":",
-                linewidth=1.0,
-                label=f"AUC={DEFAULT_AUC_THRESHOLD}",
-            )
+            axis.axhline(0.5, color="0.5", linestyle="--", linewidth=1.0)
+            axis.axhline(DEFAULT_AUC_THRESHOLD, color="0.35", linestyle=":", linewidth=1.0)
             axis.set_ylim(0.0, 1.05)
+            axis.annotate(
+                "chance",
+                xy=(1.0, 0.5),
+                xycoords=("axes fraction", "data"),
+                xytext=(4, 0),
+                textcoords="offset points",
+                va="center",
+                ha="left",
+                fontsize=8,
+                color="0.45",
+            )
+            axis.annotate(
+                f"{DEFAULT_AUC_THRESHOLD:g}",
+                xy=(1.0, DEFAULT_AUC_THRESHOLD),
+                xycoords=("axes fraction", "data"),
+                xytext=(4, 0),
+                textcoords="offset points",
+                va="center",
+                ha="left",
+                fontsize=8,
+                color="0.35",
+            )
+        else:
+            axis.axhline(0.0, color="0.5", linestyle="--", linewidth=1.0)
+
+        if bucket_values:
+            if x_scale == "categorical":
+                axis.set_xticks(list(range(len(bucket_values))))
+                axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+            else:
+                axis.set_xticks(bucket_values)
+                axis.set_xticklabels([str(bucket) for bucket in bucket_values])
+                axis.set_xlim(0, max(bucket_values) * 1.05)
+
         axis.set_title(title)
         axis.set_xlabel(r"Pitch-count checkpoint $N$")
         axis.set_ylabel(ylabel)
         axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.45)
-        axis.legend(loc="best", fontsize=8)
 
-    figure.suptitle(
-        r"Execution skill ($\hat{\sigma}$) vs BB/IP top/bottom groups",
-        fontsize=11,
-    )
+    if handles:
+        figure.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=len(handles),
+            frameon=False,
+            fontsize=9,
+            bbox_to_anchor=(0.5, 1.02),
+        )
+
+    figure.suptitle("Execution skill estimates vs BB/IP groups", fontsize=11, y=1.08)
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(figure)
+
+
+def write_separability_plots(output_dir: Path, rows: Sequence[dict[str, Any]]) -> None:
+    plot_separability_by_n(output_dir / SEPARABILITY_PLOT, rows, x_scale="categorical")
+    plot_separability_by_n(
+        output_dir / SEPARABILITY_PLOT_PROPORTIONAL,
+        rows,
+        x_scale="proportional",
+    )
 
 
 def build_summary(
@@ -364,7 +428,7 @@ def run_separability_analysis(
     agent_rows = load_agent_level_rows(agent_path)
     separability_rows = compute_separability_rows(agent_rows, tiers)
     write_separability_csv(output_dir / SEPARABILITY_CSV, separability_rows)
-    plot_separability_by_n(output_dir / SEPARABILITY_PLOT, separability_rows)
+    write_separability_plots(output_dir, separability_rows)
     summary = build_summary(separability_rows, auc_threshold=auc_threshold)
     summary["num_bottom"] = sum(1 for info in tiers.values() if info["tier"] == "bottom")
     summary["num_top"] = sum(1 for info in tiers.values() if info["tier"] == "top")

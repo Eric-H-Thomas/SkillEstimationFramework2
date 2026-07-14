@@ -34,6 +34,7 @@ from HJEEDS.baseball_convergence import (
     run_single_baseball_convergence_seed,
 )
 from HJEEDS.baseball_pitch import DEFAULT_DELTA, DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MIN
+from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
 from HJEEDS.baseball_roster import add_common_roster_arguments, add_hyperprior_arguments, print_eligible_agents
 from HJEEDS.config import DEFAULT_SEED, SUMMARY_BY_BUCKET_CSV_HEADER, SUMMARY_OVERALL_CSV_HEADER, parse_seed_argument
 from HJEEDS.models import StatcastConvergenceAgentResult
@@ -80,33 +81,9 @@ DRIFT_METRIC_PANELS = (
     ),
 )
 
-# MLB palette shared with per-agent intermediate-estimate plots.
-CONVERGENCE_METHOD_STYLES = {
-    "jeeds": {
-        "label": "JEEDS",
-        "color": "#002D72",
-        "marker": "^",
-    },
-    "hierarchical": {
-        "label": "H-JEEDS",
-        "color": "#D50032",
-        "marker": "D",
-    },
-}
-
-# Solid lines for per-agent intermediate-estimate plots (checkpoints only).
-AGENT_ESTIMATE_METHOD_STYLES = {
-    "jeeds": {
-        "label": "JEEDS",
-        "color": "#002D72",
-        "marker": "^",
-    },
-    "hierarchical": {
-        "label": "H-JEEDS",
-        "color": "#D50032",
-        "marker": "D",
-    },
-}
+# MLB palette shared with per-agent intermediate-estimate and separability plots.
+CONVERGENCE_METHOD_STYLES = BASEBALL_METHOD_STYLES
+AGENT_ESTIMATE_METHOD_STYLES = BASEBALL_METHOD_STYLES
 
 
 def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
