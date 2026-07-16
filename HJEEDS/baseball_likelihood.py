@@ -1,4 +1,4 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# This file has been fully reviewed by a human researcher as of 07/16/26 at 1:45 PM MDT.
 """Baseball log-likelihood grid for HJEEDS (``joint.py`` baseball-multi parity)."""
 
 from __future__ import annotations
@@ -26,6 +26,9 @@ def compute_baseball_log_likelihood_grid(
     Mirrors ``JointMethodQRE._compute_pdfs_and_evs`` + ``_perform_update`` for
     ``baseball-multi``: per-pitch precomputed EV surfaces, ``computePDF`` at the
     observed action, and ``pdfs * delta**2`` scaling.
+
+    Each observation contributes ``log(update)``; multiple pitches sum those
+    terms (independent observations under the same skill hypotheses).
     """
 
     if not pitch_observations:
@@ -41,6 +44,7 @@ def compute_baseball_log_likelihood_grid(
         key = baseball_execution_skill_key(float(sigma_hypothesis))
         if key not in all_covs:
             continue
+
         cov = all_covs[key]
         cov_stack = np.array([cov] * len(target_means))
 
@@ -50,11 +54,13 @@ def compute_baseball_log_likelihood_grid(
             if key not in observation.evs_per_execution_skill:
                 pdfs_per_observation = []
                 break
-            evs = observation.evs_per_execution_skill[key].reshape(-1)
+            evs = observation.evs_per_execution_skill[key].flatten()
             action = executed_actions[observation_index]
+            # Match joint.py baseball-multi: computePDF then scale by delta**2.
             pdfs = computePDF(x=action, means=target_means, covs=cov_stack)
             pdfs = np.multiply(pdfs, np.square(delta))
-            if np.sum(pdfs) == 0.0 or not np.all(np.isfinite(pdfs)):
+            # Same skip condition as JointMethodQRE._perform_update.
+            if np.sum(pdfs) == 0.0 or np.isnan(np.sum(pdfs)):
                 pdfs_per_observation = []
                 break
             pdfs_per_observation.append(pdfs)
@@ -64,18 +70,18 @@ def compute_baseball_log_likelihood_grid(
             continue
 
         for lambda_index, lambda_hypothesis in enumerate(raw_lambda_grid):
+            # Softmax-of-EV update from JointMethodQRE._perform_update, in log space.
             log_likelihood = 0.0
             valid = True
             for pdfs, evs in zip(pdfs_per_observation, evs_per_observation):
-                shifted = evs * float(lambda_hypothesis)
-                max_shifted = float(np.max(shifted))
-                exponentiated = np.exp(shifted - max_shifted)
-                denominator = float(np.sum(exponentiated))
-                if denominator <= 0.0 or not np.isfinite(denominator):
+                # Same norm trick as joint.py: b = max(evs * lambda).
+                b = float(np.max(evs * float(lambda_hypothesis)))
+                expev = np.exp(evs * float(lambda_hypothesis) - b)
+                sum_exponents = float(np.sum(expev))
+                if sum_exponents <= 0.0 or not np.isfinite(sum_exponents):
                     valid = False
                     break
-                numerator = float(np.sum(exponentiated * pdfs))
-                update = numerator / denominator
+                update = float(np.sum(expev * pdfs) / sum_exponents)
                 if update <= 0.0 or not np.isfinite(update):
                     valid = False
                     break
