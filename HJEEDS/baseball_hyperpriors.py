@@ -1,5 +1,12 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""Baseball-specific hyperprior presets and calibration helpers."""
+# This file has been fully reviewed by a human researcher as of 07/16/26 at 2:15 PM MDT.
+"""Baseball-specific hyperprior presets and calibration helpers.
+
+Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
+loads these values via ``--hyperprior-preset calibrated`` pointing at
+``HJEEDS/results/baseball_hyperprior_calib_2021_ff/suggested_hyperpriors.json``,
+which is identical to the bundled ``baseball-2021-ff`` JSON: JEEDS-calibrated
+centers with low-confidence prior widths.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +25,59 @@ LOW_CONFIDENCE_COVARIANCE_DIAGONAL = (1.5**2, 4.0**2)
 LOW_CONFIDENCE_LOG_TAU_SD = 1.0
 LOW_CONFIDENCE_S_R = 1.25
 
-DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH = Path(__file__).resolve().parent / "data" / "baseball_hyperpriors_2021_ff.json"
+DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH = (
+    Path(__file__).resolve().parent / "data" / "baseball_hyperpriors_2021_ff.json"
+)
+
+_RESOLVE_PRESETS = ("darts", "low-confidence", "baseball-2021-ff", "calibrated")
+
+# Confidence presets only change prior widths / correlation concentration.
+# Centers and log-tau means are always supplied by the caller.
+# Values: (covariance_diagonal, log_tau_eta_sd, log_tau_rho_sd, s_r)
+_CONFIDENCE_WIDTHS: dict[str, tuple[tuple[float, float], float, float, float]] = {
+    "low": (
+        LOW_CONFIDENCE_COVARIANCE_DIAGONAL,
+        LOW_CONFIDENCE_LOG_TAU_SD,
+        LOW_CONFIDENCE_LOG_TAU_SD,
+        LOW_CONFIDENCE_S_R,
+    ),
+    "darts": (
+        DEFAULT_HYPERPRIORS.covariance_diagonal,
+        DEFAULT_HYPERPRIORS.log_tau_eta_sd,
+        DEFAULT_HYPERPRIORS.log_tau_rho_sd,
+        DEFAULT_HYPERPRIORS.s_r,
+    ),
+}
+
+
+def _apply_confidence_widths(
+    *,
+    mean_vector: tuple[float, float],
+    log_tau_eta_mean: float,
+    log_tau_rho_mean: float,
+    m_r: float,
+    confidence: str,
+) -> HyperpriorConfig:
+    """Attach prior widths for a confidence preset; centers stay caller-chosen."""
+
+    try:
+        covariance_diagonal, log_tau_eta_sd, log_tau_rho_sd, s_r = _CONFIDENCE_WIDTHS[confidence]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown confidence preset '{confidence}'. "
+            f"Expected one of {tuple(_CONFIDENCE_WIDTHS)}."
+        ) from exc
+
+    return HyperpriorConfig(
+        mean_vector=mean_vector,
+        covariance_diagonal=covariance_diagonal,
+        log_tau_eta_mean=log_tau_eta_mean,
+        log_tau_eta_sd=log_tau_eta_sd,
+        log_tau_rho_mean=log_tau_rho_mean,
+        log_tau_rho_sd=log_tau_rho_sd,
+        m_r=m_r,
+        s_r=s_r,
+    )
 
 
 def build_low_confidence_hyperpriors(
@@ -27,16 +86,12 @@ def build_low_confidence_hyperpriors(
 ) -> HyperpriorConfig:
     """Return darts-aligned centers with deliberately weak baseball confidence."""
 
-    centers = mean_vector or DEFAULT_HYPERPRIORS.mean_vector
-    return HyperpriorConfig(
-        mean_vector=centers,
-        covariance_diagonal=LOW_CONFIDENCE_COVARIANCE_DIAGONAL,
+    return _apply_confidence_widths(
+        mean_vector=mean_vector or DEFAULT_HYPERPRIORS.mean_vector,
         log_tau_eta_mean=DEFAULT_HYPERPRIORS.log_tau_eta_mean,
-        log_tau_eta_sd=LOW_CONFIDENCE_LOG_TAU_SD,
         log_tau_rho_mean=DEFAULT_HYPERPRIORS.log_tau_rho_mean,
-        log_tau_rho_sd=LOW_CONFIDENCE_LOG_TAU_SD,
         m_r=DEFAULT_HYPERPRIORS.m_r,
-        s_r=LOW_CONFIDENCE_S_R,
+        confidence="low",
     )
 
 
@@ -69,43 +124,26 @@ def build_hyperpriors_from_jeeds_estimates(
     log_lambda_array = np.asarray(log_lambdas, dtype=float)
     mean_vector = (float(np.mean(log_sigma_array)), float(np.mean(log_lambda_array)))
 
+    # Floor sample SDs so log(tau) stays defined and EB can still move a little.
     tau_eta = max(float(np.std(log_sigma_array, ddof=1)), 0.05)
     tau_rho = max(float(np.std(log_lambda_array, ddof=1)), 0.05)
-    correlation_matrix = np.corrcoef(log_sigma_array, log_lambda_array)
-    correlation = float(correlation_matrix[0, 1])
+    correlation = float(np.corrcoef(log_sigma_array, log_lambda_array)[0, 1])
     if not math.isfinite(correlation):
         correlation = math.tanh(float(DEFAULT_HYPERPRIORS.m_r))
-
     correlation = float(np.clip(correlation, -0.95, 0.95))
 
-    if confidence == "low":
-        return HyperpriorConfig(
-            mean_vector=mean_vector,
-            covariance_diagonal=LOW_CONFIDENCE_COVARIANCE_DIAGONAL,
-            log_tau_eta_mean=math.log(tau_eta),
-            log_tau_eta_sd=LOW_CONFIDENCE_LOG_TAU_SD,
-            log_tau_rho_mean=math.log(tau_rho),
-            log_tau_rho_sd=LOW_CONFIDENCE_LOG_TAU_SD,
-            m_r=math.atanh(correlation),
-            s_r=LOW_CONFIDENCE_S_R,
-        )
-
-    if confidence == "darts":
-        return HyperpriorConfig(
-            mean_vector=mean_vector,
-            covariance_diagonal=DEFAULT_HYPERPRIORS.covariance_diagonal,
-            log_tau_eta_mean=math.log(tau_eta),
-            log_tau_eta_sd=DEFAULT_HYPERPRIORS.log_tau_eta_sd,
-            log_tau_rho_mean=math.log(tau_rho),
-            log_tau_rho_sd=DEFAULT_HYPERPRIORS.log_tau_rho_sd,
-            m_r=math.atanh(correlation),
-            s_r=DEFAULT_HYPERPRIORS.s_r,
-        )
-
-    raise ValueError(f"Unknown confidence preset '{confidence}'. Expected 'low' or 'darts'.")
+    return _apply_confidence_widths(
+        mean_vector=mean_vector,
+        log_tau_eta_mean=math.log(tau_eta),
+        log_tau_rho_mean=math.log(tau_rho),
+        m_r=math.atanh(correlation),
+        confidence=confidence,
+    )
 
 
 def hyperprior_config_to_dict(config: HyperpriorConfig) -> dict[str, Any]:
+    """Serialize for JSON; tuples become lists to match on-disk artifacts."""
+
     return {
         "mean_vector": list(config.mean_vector),
         "covariance_diagonal": list(config.covariance_diagonal),
@@ -138,7 +176,7 @@ def load_hyperprior_config(path: Path) -> HyperpriorConfig:
 
 
 def load_default_baseball_hyperpriors_2021_ff() -> HyperpriorConfig:
-    """Bundled low-confidence hyperpriors calibrated on 2021 FF Statcast agents."""
+    """Bundled JEEDS-calibrated centers with low-confidence prior widths (2021 FF)."""
 
     return load_hyperprior_config(DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH)
 
@@ -171,5 +209,5 @@ def resolve_baseball_hyperpriors(
             raise FileNotFoundError(f"Hyperprior config not found: {calibrated_path}")
         return load_hyperprior_config(calibrated_path)
     raise ValueError(
-        f"Unknown hyperprior preset '{preset}'. Expected darts, low-confidence, baseball-2021-ff, or calibrated."
+        f"Unknown hyperprior preset '{preset}'. Expected one of {_RESOLVE_PRESETS}."
     )
