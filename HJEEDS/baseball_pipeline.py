@@ -1,9 +1,19 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""Statcast baseball seed pipeline for HJEEDS."""
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 1:40 PM MDT.
+"""Statcast baseball seed pipeline for hierarchical vs independent JEEDS.
+
+Used by ``baseball_hierarchical_vs_jeeds`` (Phase 1 / exploratory Statcast runs).
+Paper BBIP convergence uses ``baseball_convergence`` /
+``submit_hjeeds_baseball_convergence_paper_bbip.sh`` instead — this module does
+not drive that path.
+
+Per seed: load Statcast, build per-agent likelihood grids and JEEDS baselines,
+fit one shared hierarchical prior, then write hierarchical posteriors.
+"""
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import NamedTuple, Sequence
 
 import numpy as np
 
@@ -13,7 +23,7 @@ from .baseball_pitch import (
     PitchObservation,
     StatcastAgentSpec,
     build_baseball_runtime,
-    build_pitch_observation,
+    build_pitch_observations_for_rows,
     get_agent_pitch_rows,
 )
 from .baseball_roster import load_statcast_for_roster
@@ -27,25 +37,55 @@ from .models import BaseballSeedResult, MethodEstimate, StatcastAgentResult
 from .sampling import assign_observation_counts
 
 
-def _build_pitch_observations_for_agent(
-    agent_rows,
-    runtime,
-    execution_skills: Sequence[float],
-) -> list[PitchObservation]:
-    observations: list[PitchObservation] = []
-    for _, row in agent_rows.iterrows():
-        observations.append(build_pitch_observation(row, runtime, execution_skills))
-    return observations
+class _AgentInferenceRecord(NamedTuple):
+    """Per-agent JEEDS pass held until the shared hierarchical prior is fit."""
+
+    agent_spec: StatcastAgentSpec
+    count_bucket: int
+    pitch_observations: list[PitchObservation]
+    log_likelihood_grid: np.ndarray
+    jeeds_estimate: MethodEstimate
 
 
-def _observation_target_for_agent(
+def _no_data_estimates() -> tuple[MethodEstimate, MethodEstimate]:
+    note = "No Statcast rows for this agent."
+    return (
+        MethodEstimate(method_name="jeeds", status="no_data", notes=note),
+        MethodEstimate(method_name="hierarchical", status="no_data", notes=note),
+    )
+
+
+def _pitch_take_limit(
+    config: BaseballExperimentConfig,
+    agent_spec: StatcastAgentSpec,
+    observation_counts: Sequence[int],
+) -> int | None:
+    """Newest-first row cap for one agent, or ``None`` to keep all available pitches."""
+
+    limit: int | None = (
+        None if config.use_natural_pitch_counts else int(observation_counts[agent_spec.agent_id])
+    )
+    cap = config.max_pitches_per_agent
+    if cap is None:
+        return limit
+    cap_i = int(cap)
+    return cap_i if limit is None else min(limit, cap_i)
+
+
+def _count_bucket_for_agent(
     config: BaseballExperimentConfig,
     agent_spec: StatcastAgentSpec,
     observation_counts: Sequence[int],
 ) -> int:
+    """Design bucket label for CSV/reporting (not the realized pitch count).
+
+    Natural-count runs use ``0`` to match ``count_buckets=(0,)`` in config.
+    Realized pitch totals belong in ``num_observations``.
+    """
+
     if config.use_natural_pitch_counts:
-        return 10**9
-    return observation_counts[agent_spec.agent_id]
+        return 0
+    return int(observation_counts[agent_spec.agent_id])
 
 
 def run_single_baseball_seed(
@@ -71,47 +111,34 @@ def run_single_baseball_seed(
         seed=seed,
         notes="Statcast baseball HJEEDS seed result (grid JEEDS baseline).",
     )
-    agent_records: list[
-        tuple[StatcastAgentSpec, int, list[PitchObservation], np.ndarray, MethodEstimate]
-    ] = []
+    agent_records: list[_AgentInferenceRecord] = []
 
     for agent_spec in config.agent_specs:
-        target_count = _observation_target_for_agent(config, agent_spec, observation_counts)
+        count_bucket = _count_bucket_for_agent(config, agent_spec, observation_counts)
         agent_rows = get_agent_pitch_rows(
             all_data,
             agent_spec.pitcher_id,
             agent_spec.pitch_type,
+            max_rows=_pitch_take_limit(config, agent_spec, observation_counts),
         )
         if len(agent_rows) == 0:
+            jeeds_estimate, hierarchical_estimate = _no_data_estimates()
             seed_result.agent_results.append(
                 StatcastAgentResult(
                     seed=seed,
                     agent_id=agent_spec.agent_id,
                     pitcher_id=agent_spec.pitcher_id,
                     pitch_type=agent_spec.pitch_type,
-                    count_bucket=0,
+                    count_bucket=count_bucket,
                     num_observations=0,
-                    jeeds=MethodEstimate(
-                        method_name="jeeds",
-                        status="no_data",
-                        notes="No Statcast rows for this agent.",
-                    ),
-                    hierarchical=MethodEstimate(
-                        method_name="hierarchical",
-                        status="no_data",
-                        notes="No Statcast rows for this agent.",
-                    ),
+                    jeeds=jeeds_estimate,
+                    hierarchical=hierarchical_estimate,
                     notes="Agent skipped due to missing data.",
                 )
             )
             continue
 
-        take_n = min(target_count, len(agent_rows))
-        if config.max_pitches_per_agent is not None:
-            take_n = min(take_n, config.max_pitches_per_agent)
-        agent_rows = agent_rows.iloc[:take_n, :]
-
-        pitch_observations = _build_pitch_observations_for_agent(
+        pitch_observations = build_pitch_observations_for_rows(
             agent_rows,
             runtime,
             execution_skills,
@@ -130,31 +157,37 @@ def run_single_baseball_seed(
             log_lambda_grid=log_lambda_grid,
         )
         agent_records.append(
-            (agent_spec, len(pitch_observations), pitch_observations, log_likelihood_grid, jeeds_estimate)
+            _AgentInferenceRecord(
+                agent_spec=agent_spec,
+                count_bucket=count_bucket,
+                pitch_observations=pitch_observations,
+                log_likelihood_grid=log_likelihood_grid,
+                jeeds_estimate=jeeds_estimate,
+            )
         )
 
-    if agent_records:
-        fitted_hyperparameters = fit_population_hyperparameters_map(
-            config=config.base,
-            agent_log_likelihoods=[record[3] for record in agent_records],
-            sigma_grid=sigma_grid,
-            log_lambda_grid=log_lambda_grid,
-        )
-        discrete_hierarchical_prior = build_discrete_hierarchical_prior(
-            fitted_hyperparameters=fitted_hyperparameters,
-            sigma_grid=sigma_grid,
-            log_lambda_grid=log_lambda_grid,
-        )
-        seed_result.notes = (
-            f"Hierarchical fit converged={fitted_hyperparameters.get('converged')}; "
-            f"objective={fitted_hyperparameters.get('objective_value')}."
-        )
-    else:
-        discrete_hierarchical_prior = None
+    if not agent_records:
+        return seed_result
 
-    for agent_spec, count_bucket, pitch_observations, log_likelihood_grid, jeeds_estimate in agent_records:
+    fitted_hyperparameters = fit_population_hyperparameters_map(
+        config=config.base,
+        agent_log_likelihoods=[record.log_likelihood_grid for record in agent_records],
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+    )
+    discrete_hierarchical_prior = build_discrete_hierarchical_prior(
+        fitted_hyperparameters=fitted_hyperparameters,
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+    )
+    seed_result.notes = (
+        f"Hierarchical fit converged={fitted_hyperparameters.get('converged')}; "
+        f"objective={fitted_hyperparameters.get('objective_value')}."
+    )
+
+    for record in agent_records:
         hierarchical_estimate = run_hierarchical_estimator(
-            log_likelihood_grid=log_likelihood_grid,
+            log_likelihood_grid=record.log_likelihood_grid,
             discrete_prior=discrete_hierarchical_prior,
             sigma_grid=sigma_grid,
             log_lambda_grid=log_lambda_grid,
@@ -162,16 +195,16 @@ def run_single_baseball_seed(
         seed_result.agent_results.append(
             StatcastAgentResult(
                 seed=seed,
-                agent_id=agent_spec.agent_id,
-                pitcher_id=agent_spec.pitcher_id,
-                pitch_type=agent_spec.pitch_type,
-                count_bucket=count_bucket,
-                num_observations=len(pitch_observations),
-                jeeds=jeeds_estimate,
+                agent_id=record.agent_spec.agent_id,
+                pitcher_id=record.agent_spec.pitcher_id,
+                pitch_type=record.agent_spec.pitch_type,
+                count_bucket=record.count_bucket,
+                num_observations=len(record.pitch_observations),
+                jeeds=record.jeeds_estimate,
                 hierarchical=hierarchical_estimate,
                 notes=(
-                    f"Pitcher {agent_spec.pitcher_id} {agent_spec.pitch_type}; "
-                    f"{len(pitch_observations)} pitches."
+                    f"Pitcher {record.agent_spec.pitcher_id} {record.agent_spec.pitch_type}; "
+                    f"{len(record.pitch_observations)} pitches."
                 ),
             )
         )

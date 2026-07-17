@@ -27,7 +27,7 @@ from .baseball_pitch import (
     PitchObservation,
     StatcastAgentSpec,
     build_baseball_runtime,
-    build_pitch_observation,
+    build_pitch_observations_for_rows,
     count_agent_pitch_rows,
     filter_roster_by_min_pitches,
     get_agent_pitch_rows,
@@ -119,9 +119,7 @@ def _build_pitch_observations(
     runtime,
     execution_skills: Sequence[float],
 ) -> list[PitchObservation]:
-    return [
-        build_pitch_observation(row, runtime, execution_skills) for _, row in agent_rows.iterrows()
-    ]
+    return build_pitch_observations_for_rows(agent_rows, runtime, execution_skills)
 
 
 def _compute_log_likelihood_grid(

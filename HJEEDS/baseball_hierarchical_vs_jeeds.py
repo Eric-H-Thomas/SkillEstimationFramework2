@@ -1,5 +1,15 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
-# Baseball HJEEDS entry point — Statcast real-data hierarchical vs JEEDS comparison.
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 1:40 PM MDT.
+"""Run hierarchical vs independent JEEDS on Statcast baseball data.
+
+Public CLI for Phase 1 / exploratory Statcast runs: resolve a roster via
+``baseball_config``, call ``run_single_baseball_seed`` for each configured
+seed, and write ``agent_level_results.csv``.
+
+Paper BBIP convergence uses ``baseball_convergence_study`` /
+``submit_hjeeds_baseball_convergence_paper_bbip.sh``, not this entry point.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -11,15 +21,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from HJEEDS.artifacts import _value_or_blank
 from HJEEDS.baseball_config import (
     DEFAULT_MIN_PITCHES_PER_AGENT,
     build_baseball_config_from_args,
     parse_baseball_args,
     print_baseball_dry_run_summary,
 )
-from HJEEDS.baseball_roster import print_eligible_agents, parse_pitch_types
-from HJEEDS.config import DEFAULT_SEED, planned_output_paths
 from HJEEDS.baseball_pipeline import run_single_baseball_seed
+from HJEEDS.baseball_roster import parse_pitch_types, print_eligible_agents
+from HJEEDS.config import DEFAULT_SEED, planned_output_paths
 from HJEEDS.models import StatcastAgentResult
 
 BASEBALL_AGENT_LEVEL_HEADER = [
@@ -42,12 +53,6 @@ BASEBALL_AGENT_LEVEL_HEADER = [
     "hierarchical_status",
     "notes",
 ]
-
-
-def _value_or_blank(value: Any) -> Any:
-    if value is None:
-        return ""
-    return value
 
 
 def _statcast_result_to_row(result: StatcastAgentResult) -> dict[str, Any]:
@@ -108,7 +113,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.dry_run:
             args.seed = DEFAULT_SEED
         else:
-            raise SystemExit("error: --seed is required unless using --list-eligible-pitchers or --dry-run")
+            raise SystemExit(
+                "error: --seed is required unless using --list-eligible-pitchers or --dry-run"
+            )
 
     config = build_baseball_config_from_args(args)
 

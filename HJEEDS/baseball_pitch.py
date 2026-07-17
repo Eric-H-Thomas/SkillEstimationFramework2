@@ -339,6 +339,19 @@ def build_pitch_observation(
     )
 
 
+def build_pitch_observations_for_rows(
+    agent_rows: pd.DataFrame,
+    runtime: BaseballRuntime,
+    execution_skills: Sequence[float],
+) -> list[PitchObservation]:
+    """Build pitch observations for every row in a Statcast agent slice."""
+
+    return [
+        build_pitch_observation(row, runtime, execution_skills)
+        for _, row in agent_rows.iterrows()
+    ]
+
+
 def _agent_pitch_subset(
     all_data: pd.DataFrame,
     pitcher_id: int,
