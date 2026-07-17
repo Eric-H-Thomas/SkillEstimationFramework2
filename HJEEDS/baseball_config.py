@@ -1,15 +1,28 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""CLI and configuration for baseball HJEEDS experiments."""
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:30 PM MDT.
+"""CLI and configuration for baseball HJEEDS (hierarchical vs independent JEEDS).
+
+Paper BBIP convergence uses ``baseball_convergence_study`` /
+``submit_hjeeds_baseball_convergence_paper_bbip.sh``, not this entry point.
+This module builds ``BaseballExperimentConfig`` for
+``baseball_hierarchical_vs_jeeds``: same Statcast roster helpers, skill grids,
+and hyperprior presets as the convergence path.
+
+Default skill grids match baseball-multi (dense+tail sigma via
+``build_execution_skill_grid`` when endpoints are untouched). Statcast runs
+have no simulated ground truth; ``true_population`` is a shim from hyperprior
+centers for the shared ``ExperimentConfig`` API.
+"""
 
 from __future__ import annotations
 
 import argparse
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from .baseball_hyperpriors import resolve_baseball_hyperpriors
+import numpy as np
+
+from .baseball_hyperpriors import resolve_baseball_hyperpriors, true_population_from_hyperpriors
 from .baseball_pitch import (
     DEFAULT_DELTA,
     DEFAULT_EXECUTION_SKILL_MAX,
@@ -24,12 +37,9 @@ from .baseball_roster import (
     load_statcast_for_roster,
     parse_pitch_types,
     resolve_baseball_roster,
-    validate_roster_selection,
+    roster_selector_kwargs_from_args,
 )
 from .config import (
-    DEFAULT_NUM_SEEDS,
-    DEFAULT_OUTPUT_DIR,
-    TruePopulationConfig,
     _parse_count_buckets,
     parse_seed_argument,
     planned_output_paths,
@@ -79,9 +89,12 @@ class BaseballExperimentConfig:
 
 
 def build_baseball_skill_grids(config: BaseballExperimentConfig):
-    """Build execution-skill and log-lambda grids for baseball."""
+    """Build execution-skill and log-lambda grids for baseball.
 
-    import numpy as np
+    When sigma endpoints and grid size match the classic baseball-multi defaults,
+    use the dense+tail ``build_execution_skill_grid``; otherwise linspace the
+    requested endpoints (smoke / sensitivity overrides).
+    """
 
     if config.base.num_sigma_grid == DEFAULT_NUM_SIGMA_GRID and (
         config.base.sigma_min == DEFAULT_EXECUTION_SKILL_MIN
@@ -167,36 +180,16 @@ def build_baseball_config_from_args(args: argparse.Namespace) -> BaseballExperim
         if args.min_pitches_per_agent is not None
         else DEFAULT_MIN_PITCHES_PER_AGENT
     )
+    output_dir = Path(args.output_dir)
     all_data = load_statcast_for_roster(args.season_year)
-
-    validate_roster_selection(
-        all_eligible_agents=args.all_eligible_agents,
-        top_pitchers=args.top_pitchers,
-        bbip_extremes=getattr(args, "bbip_extremes", None),
-    )
-
-    if getattr(args, "bbip_extremes", None) is not None:
-        roster_selector = dict(
-            all_eligible_agents=False,
-            pitcher_ids=None,
-            top_pitchers=None,
-            bbip_extremes=args.bbip_extremes,
-        )
-    elif args.all_eligible_agents:
-        roster_selector = dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None, bbip_extremes=None)
-    elif args.top_pitchers is not None:
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers, bbip_extremes=None)
-    else:
-        pitcher_ids = tuple(int(piece.strip()) for piece in args.pitcher_ids.split(",") if piece.strip())
-        roster_selector = dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None, bbip_extremes=None)
-
     roster = resolve_baseball_roster(
         all_data=all_data,
         season_year=args.season_year,
         pitch_types=pitch_types,
         min_pitches_per_agent=min_pitches_per_agent,
         max_agents=args.max_agents,
-        **roster_selector,
+        output_dir=output_dir,
+        **roster_selector_kwargs_from_args(args),
     )
 
     use_natural = args.use_natural_pitch_counts or args.all_eligible_agents
@@ -220,7 +213,6 @@ def build_baseball_config_from_args(args: argparse.Namespace) -> BaseballExperim
         preset=args.hyperprior_preset,
         calibrated_path=Path(args.hyperprior_config) if args.hyperprior_config else None,
     )
-    output_dir = Path(args.output_dir)
     base = ExperimentConfig(
         environment="baseball",
         seed=args.seed,
@@ -242,13 +234,7 @@ def build_baseball_config_from_args(args: argparse.Namespace) -> BaseballExperim
         max_success_regions=6,
         min_region_width=0.25,
         hyperpriors=hyperpriors,
-        true_population=TruePopulationConfig(
-            mean_log_sigma=hyperpriors.mean_vector[0],
-            mean_log_lambda=hyperpriors.mean_vector[1],
-            tau_eta=math.exp(hyperpriors.log_tau_eta_mean),
-            tau_rho=math.exp(hyperpriors.log_tau_rho_mean),
-            correlation=math.tanh(hyperpriors.m_r),
-        ),
+        true_population=true_population_from_hyperpriors(hyperpriors),
     )
     config = BaseballExperimentConfig(
         base=base,

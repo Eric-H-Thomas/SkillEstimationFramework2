@@ -1,5 +1,15 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""Convergence study: JEEDS vs HJEEDS drift toward full-data independent JEEDS."""
+"""Convergence study: JEEDS vs HJEEDS drift vs each method's own estimate at max N.
+
+Paper BBIP run (``submit_hjeeds_baseball_convergence_paper_bbip.sh``):
+``--bbip-extremes 10``, ``--season-year 2021``, ``--pitch-types FF``,
+``min_pitches_per_agent=100``, ``convergence_ns=5,10,25,50,100``,
+``max_reference_pitches=100``, ``--hyperprior-preset calibrated``. Login-node
+``--prepare-roster`` writes the BB/IP cache + ``convergence_roster.json``;
+Slurm workers use ``--use-prepared-roster`` so roster selection is frozen.
+
+Statcast likelihoods are deterministic in seed; prefer ``num_seeds=1``.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +22,7 @@ import numpy as np
 
 from .baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
 from .baseball_likelihood import compute_baseball_log_likelihood_grid
-from .baseball_hyperpriors import resolve_baseball_hyperpriors
+from .baseball_hyperpriors import resolve_baseball_hyperpriors, true_population_from_hyperpriors
 from .baseball_pitch import (
     PitchObservation,
     StatcastAgentSpec,
@@ -27,9 +37,9 @@ from .baseball_roster import (
     load_statcast_for_roster,
     parse_pitch_types,
     resolve_baseball_roster,
-    validate_roster_selection,
+    roster_selector_kwargs_from_args,
 )
-from .config import TruePopulationConfig, _parse_count_buckets
+from .config import _parse_count_buckets
 from .estimation import (
     build_discrete_hierarchical_prior,
     fit_population_hyperparameters_map,
@@ -343,27 +353,6 @@ def build_baseball_skill_grids_from_convergence(
     return _build(shim)
 
 
-def _roster_selector_from_args(args) -> dict[str, Any]:
-    validate_roster_selection(
-        all_eligible_agents=args.all_eligible_agents,
-        top_pitchers=args.top_pitchers,
-        bbip_extremes=getattr(args, "bbip_extremes", None),
-    )
-    if getattr(args, "bbip_extremes", None) is not None:
-        return dict(
-            all_eligible_agents=False,
-            pitcher_ids=None,
-            top_pitchers=None,
-            bbip_extremes=args.bbip_extremes,
-        )
-    if args.all_eligible_agents:
-        return dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None, bbip_extremes=None)
-    if args.top_pitchers is not None:
-        return dict(all_eligible_agents=False, pitcher_ids=None, top_pitchers=args.top_pitchers, bbip_extremes=None)
-    pitcher_ids = tuple(int(piece.strip()) for piece in args.pitcher_ids.split(",") if piece.strip())
-    return dict(all_eligible_agents=False, pitcher_ids=pitcher_ids, top_pitchers=None, bbip_extremes=None)
-
-
 def _load_prepared_roster_selection(
     output_dir: Path,
     *,
@@ -436,7 +425,7 @@ def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConf
     else:
         if getattr(args, "bbip_extremes", None) is not None:
             _ensure_bbip_cache_for_args(args)
-        roster_selector = _roster_selector_from_args(args)
+        roster_selector = roster_selector_kwargs_from_args(args)
         roster = resolve_baseball_roster(
             all_data=all_data,
             season_year=args.season_year,
@@ -471,13 +460,7 @@ def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConf
         max_success_regions=6,
         min_region_width=0.25,
         hyperpriors=hyperpriors,
-        true_population=TruePopulationConfig(
-            mean_log_sigma=hyperpriors.mean_vector[0],
-            mean_log_lambda=hyperpriors.mean_vector[1],
-            tau_eta=math.exp(hyperpriors.log_tau_eta_mean),
-            tau_rho=math.exp(hyperpriors.log_tau_rho_mean),
-            correlation=math.tanh(hyperpriors.m_r),
-        ),
+        true_population=true_population_from_hyperpriors(hyperpriors),
     )
     return BaseballConvergenceConfig(
         base=base,
@@ -1021,6 +1004,14 @@ def run_single_agent_convergence_cache(
 
 
 def prepare_convergence_roster(args) -> Path:
+    """Write BB/IP cache (if needed) and freeze ``convergence_roster.json``.
+
+    Reuses the roster already resolved inside
+    ``build_baseball_convergence_config_from_args`` so prepare-roster and later
+    ``--use-prepared-roster`` workers share one selection path (including
+    ``output_dir`` for the BB/IP innings cache).
+    """
+
     if getattr(args, "bbip_extremes", None) is not None:
         if args.season_year is None:
             raise ValueError("--bbip-extremes requires --season-year.")
@@ -1030,15 +1021,16 @@ def prepare_convergence_roster(args) -> Path:
         print(f"[baseball-convergence] Wrote BB/IP innings cache to {cache_path.resolve()}", flush=True)
 
     config = build_baseball_convergence_config_from_args(args)
-    all_data = load_statcast_for_roster(args.season_year)
-    roster = resolve_baseball_roster(
-        all_data=all_data,
-        season_year=args.season_year,
+    roster = BaseballRosterSelection(
+        season_year=config.season_year,
         pitch_types=config.pitch_types,
-        min_pitches_per_agent=config.min_pitches_per_agent,
-        max_agents=args.max_agents,
-        **_roster_selector_from_args(args),
+        pitcher_ids=config.pitcher_ids,
+        agent_specs=config.agent_specs,
+        agent_pitch_counts=config.agent_pitch_counts,
+        excluded_agents=config.excluded_agents,
     )
+    # Needed for BB/IP selection metadata in convergence_roster_metadata.json.
+    all_data = load_statcast_for_roster(args.season_year)
     path = write_convergence_roster(
         config.base.output_dir,
         roster,
@@ -1047,7 +1039,7 @@ def prepare_convergence_roster(args) -> Path:
         min_pitches_per_agent=config.min_pitches_per_agent,
         max_reference_pitches=config.max_reference_pitches,
         convergence_ns=config.convergence_ns,
-        roster_selector=_roster_selector_from_args(args),
+        roster_selector=roster_selector_kwargs_from_args(args),
         all_data=all_data,
     )
     print(

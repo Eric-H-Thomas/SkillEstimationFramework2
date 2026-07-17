@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:08 PM MDT.
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:30 PM MDT.
 """Shared Statcast roster selection for baseball HJEEDS entry points.
 
 Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
@@ -10,6 +10,8 @@ to (pitcher, pitchType) agents, then drops any agent below the pitch floor.
 Exactly one roster selector is allowed among ``--all-eligible-agents``,
 ``--top-pitchers``, and ``--bbip-extremes``; otherwise pass ``--pitcher-ids``.
 ``--max-agents`` caps the resolved list after selection (smoke tests only).
+
+CLI entry points should map flags via ``roster_selector_kwargs_from_args``.
 """
 
 from __future__ import annotations
@@ -78,6 +80,52 @@ def validate_roster_selection(
         raise ValueError(
             "Use exactly one roster selector. Received: " + ", ".join(active)
         )
+
+
+def roster_selector_kwargs_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """Map CLI roster flags to ``resolve_baseball_roster`` keyword arguments.
+
+    Exactly one of ``all_eligible_agents`` / ``top_pitchers`` / ``bbip_extremes``
+    may be active; otherwise ``pitcher_ids`` is taken from ``--pitcher-ids``.
+    """
+
+    all_eligible_agents = bool(getattr(args, "all_eligible_agents", False))
+    top_pitchers = getattr(args, "top_pitchers", None)
+    bbip_extremes = getattr(args, "bbip_extremes", None)
+    validate_roster_selection(
+        all_eligible_agents=all_eligible_agents,
+        top_pitchers=top_pitchers,
+        bbip_extremes=bbip_extremes,
+    )
+    if bbip_extremes is not None:
+        return dict(
+            all_eligible_agents=False,
+            pitcher_ids=None,
+            top_pitchers=None,
+            bbip_extremes=bbip_extremes,
+        )
+    if all_eligible_agents:
+        return dict(all_eligible_agents=True, pitcher_ids=None, top_pitchers=None, bbip_extremes=None)
+    if top_pitchers is not None:
+        return dict(
+            all_eligible_agents=False,
+            pitcher_ids=None,
+            top_pitchers=top_pitchers,
+            bbip_extremes=None,
+        )
+    raw_pitcher_ids = getattr(args, "pitcher_ids", "") or ""
+    if isinstance(raw_pitcher_ids, str):
+        pitcher_ids = tuple(
+            int(piece.strip()) for piece in raw_pitcher_ids.split(",") if piece.strip()
+        )
+    else:
+        pitcher_ids = tuple(int(pitcher_id) for pitcher_id in raw_pitcher_ids)
+    return dict(
+        all_eligible_agents=False,
+        pitcher_ids=pitcher_ids,
+        top_pitchers=None,
+        bbip_extremes=None,
+    )
 
 
 def _cap_agent_specs(

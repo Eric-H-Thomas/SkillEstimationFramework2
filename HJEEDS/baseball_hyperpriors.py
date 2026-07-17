@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 07/16/26 at 2:15 PM MDT.
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:30 PM MDT.
 """Baseball-specific hyperprior presets and calibration helpers.
 
 Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
@@ -6,6 +6,10 @@ loads these values via ``--hyperprior-preset calibrated`` pointing at
 ``HJEEDS/results/baseball_hyperprior_calib_2021_ff/suggested_hyperpriors.json``,
 which is identical to the bundled ``baseball-2021-ff`` JSON: JEEDS-calibrated
 centers with low-confidence prior widths.
+
+``true_population_from_hyperpriors`` is a Statcast-only shim: there is no
+simulated ground truth, but ``ExperimentConfig`` still requires a
+``TruePopulationConfig``.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from .config import DEFAULT_HYPERPRIORS
-from .models import HyperpriorConfig, MethodEstimate
+from .models import HyperpriorConfig, MethodEstimate, TruePopulationConfig
 
 # Wider than darts defaults so empirical Bayes can move on real Statcast data.
 LOW_CONFIDENCE_COVARIANCE_DIAGONAL = (1.5**2, 4.0**2)
@@ -210,4 +214,20 @@ def resolve_baseball_hyperpriors(
         return load_hyperprior_config(calibrated_path)
     raise ValueError(
         f"Unknown hyperprior preset '{preset}'. Expected one of {HYPERPRIOR_PRESET_CHOICES}."
+    )
+
+
+def true_population_from_hyperpriors(hyperpriors: HyperpriorConfig) -> TruePopulationConfig:
+    """Shim TruePopulationConfig from hyperprior centers for ExperimentConfig.
+
+    Statcast runs have no simulated ground truth; this only satisfies the shared
+    ``ExperimentConfig`` / hierarchical estimation API.
+    """
+
+    return TruePopulationConfig(
+        mean_log_sigma=hyperpriors.mean_vector[0],
+        mean_log_lambda=hyperpriors.mean_vector[1],
+        tau_eta=math.exp(hyperpriors.log_tau_eta_mean),
+        tau_rho=math.exp(hyperpriors.log_tau_rho_mean),
+        correlation=math.tanh(hyperpriors.m_r),
     )
