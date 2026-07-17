@@ -1,12 +1,23 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""BB/IP-based pitcher selection for baseball HJEEDS rosters."""
+"""BB/IP-based pitcher selection for baseball HJEEDS rosters.
+
+Paper run ``submit_hjeeds_baseball_convergence_paper_bbip.sh`` selects
+``--bbip-extremes 10`` (top 10 + bottom 10) among FF-eligible 2021 pitchers
+with ``min_pitches_per_agent=100``. Login-node submit scripts write
+``bbip_innings_cache.json`` via ``--write-cache``; compute nodes read that
+cache (or ``BBIP_CACHE_PATH``) without network access.
+
+BB/IP here is Statcast walk events in the loaded season slice divided by
+season innings pitched from Baseball Reference / FanGraphs / bundled JSON.
+Pitchers with zero Statcast walks or unmatched names are dropped from the
+ranking table (not assigned BB/IP = 0).
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import unicodedata
 from pathlib import Path
 from typing import Sequence
@@ -35,10 +46,6 @@ def canonical_player_name(name: str) -> str:
         first = " ".join(parts[:-1])
         return f"{last} {first}"
     return name
-
-
-def _normalize_player_name(name: str) -> str:
-    return canonical_player_name(name)
 
 
 def parse_innings_pitched(raw_value: object) -> float:
@@ -79,6 +86,20 @@ def resolve_bbip_cache_path(*, output_dir: Path | None = None) -> Path | None:
     return None
 
 
+def load_bbip_innings_cache(path: Path) -> tuple[int, dict[str, float], str]:
+    """Load ``(season_year, innings_by_name, source)`` from a cache JSON file."""
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    season_year = int(payload["season_year"])
+    innings_by_name = {
+        str(name): float(innings)
+        for name, innings in payload["innings_by_name"].items()
+    }
+    source = str(payload.get("source", f"cache:{path.name}"))
+    return season_year, innings_by_name, source
+
+
 def _innings_dict_from_stats_frame(stats: pd.DataFrame, *, source: str) -> dict[str, float]:
     if stats is None or len(stats) == 0:
         raise ValueError(f"No pitching stats returned from {source}.")
@@ -114,19 +135,16 @@ def _load_bundled_innings_pitched(season_year: int) -> tuple[dict[str, float], s
     path = bundled_innings_path_for(season_year)
     if not path.is_file():
         raise FileNotFoundError(f"No bundled innings cache for season_year={season_year}: {path}")
-    cached_season_year, innings_by_name = load_bbip_innings_cache(path)
+    cached_season_year, innings_by_name, source = load_bbip_innings_cache(path)
     if cached_season_year != season_year:
         raise ValueError(
             f"Bundled innings cache season_year={cached_season_year} does not match {season_year}."
         )
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    source = str(payload.get("source", f"bundled:{path.name}"))
     return innings_by_name, source
 
 
 def fetch_innings_pitched_by_name(season_year: int) -> tuple[dict[str, float], str]:
-    """Fetch season IP by normalized player name, with network fallbacks then bundled data."""
+    """Fetch season IP by normalized player name: BRef, then FanGraphs, then bundled data."""
 
     errors: list[str] = []
     for fetcher in (_fetch_innings_from_bref, _fetch_innings_from_fangraphs):
@@ -145,37 +163,12 @@ def fetch_innings_pitched_by_name(season_year: int) -> tuple[dict[str, float], s
     )
 
 
-def load_bbip_innings_cache(path: Path) -> tuple[int, dict[str, float]]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    season_year = int(payload["season_year"])
-    innings_by_name = {
-        str(name): float(innings)
-        for name, innings in payload["innings_by_name"].items()
-    }
-    return season_year, innings_by_name
-
-
 def write_bbip_innings_cache(output_dir: Path, *, season_year: int) -> Path:
-    """Write innings cache for offline compute nodes (network fetch or bundled fallback)."""
+    """Write innings cache for offline compute nodes (network fetch with bundled fallback)."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
     path = bbip_cache_path_for(output_dir)
-
-    try:
-        innings_by_name, source = fetch_innings_pitched_by_name(season_year)
-    except Exception:
-        bundled_path = bundled_innings_path_for(season_year)
-        if not bundled_path.is_file():
-            raise
-        shutil.copyfile(bundled_path, path)
-        os.environ["BBIP_CACHE_PATH"] = str(path.resolve())
-        print(
-            f"[baseball-bbip] Network fetch unavailable; copied bundled innings cache from {bundled_path}",
-            flush=True,
-        )
-        return path
-
+    innings_by_name, source = fetch_innings_pitched_by_name(season_year)
     payload = {
         "season_year": season_year,
         "source": source,
@@ -195,7 +188,7 @@ def _innings_pitched_by_name(
 ) -> dict[str, float]:
     cache_path = resolve_bbip_cache_path(output_dir=output_dir)
     if cache_path is not None:
-        cached_season_year, innings_by_name = load_bbip_innings_cache(cache_path)
+        cached_season_year, innings_by_name, _source = load_bbip_innings_cache(cache_path)
         if cached_season_year != season_year:
             raise ValueError(
                 f"BB/IP cache season_year={cached_season_year} does not match requested "
@@ -212,7 +205,7 @@ def _innings_pitched_by_name(
             "On a network-enabled host, run:\n"
             f"  python -m HJEEDS.baseball_bbip --write-cache --season-year {season_year} "
             f"--output-dir <experiment_output_dir>\n"
-            "Submit scripts copy bundled season data automatically when remote fetch is blocked."
+            "Submit scripts write this cache (with bundled fallback) before Slurm compute."
         ) from exc
 
 
@@ -222,13 +215,11 @@ def _walk_count_by_pitcher(all_data: pd.DataFrame) -> pd.Series:
 
 
 def _pitcher_name_map(all_data: pd.DataFrame) -> dict[int, str]:
-    names: dict[int, str] = {}
-    for pitcher_id in all_data["pitcher"].unique():
-        rows = all_data.loc[all_data["pitcher"] == pitcher_id, "player_name"]
-        if len(rows) == 0:
-            continue
-        names[int(pitcher_id)] = str(rows.iloc[0])
-    return names
+    subset = all_data.drop_duplicates(subset=["pitcher"], keep="first")
+    return {
+        int(pitcher_id): str(player_name)
+        for pitcher_id, player_name in zip(subset["pitcher"], subset["player_name"])
+    }
 
 
 def compute_bbip_by_pitcher(
@@ -245,11 +236,12 @@ def compute_bbip_by_pitcher(
 
     rows: list[dict[str, object]] = []
     for pitcher_id, player_name in name_map.items():
-        normalized = _normalize_player_name(player_name)
+        normalized = canonical_player_name(player_name)
         innings = innings_by_name.get(normalized)
         if innings is None or innings <= 0:
             continue
         walks = int(walk_counts.get(pitcher_id, 0))
+        # Exclude zero-walk pitchers rather than ranking them at BB/IP = 0.
         if walks == 0:
             continue
         rows.append(
@@ -269,6 +261,48 @@ def compute_bbip_by_pitcher(
     return pd.DataFrame(rows).sort_values("bbip")
 
 
+def _filter_bbip_table(
+    table: pd.DataFrame,
+    eligible_pitcher_ids: Sequence[int] | None,
+) -> pd.DataFrame:
+    if eligible_pitcher_ids is None:
+        return table
+    eligible = {int(pitcher_id) for pitcher_id in eligible_pitcher_ids}
+    return table.loc[table["pitcher_id"].isin(eligible)].copy()
+
+
+def _require_extremes_capacity(table: pd.DataFrame, extremes_count: int, *, label: str) -> None:
+    if extremes_count <= 0:
+        raise ValueError(f"extremes_count must be positive. Received {extremes_count}.")
+    if len(table) < extremes_count * 2:
+        raise ValueError(
+            f"Need at least {extremes_count * 2} {label} with BB/IP data. "
+            f"Received {len(table)}."
+        )
+
+
+def _extreme_pitcher_id_lists(
+    table: pd.DataFrame,
+    extremes_count: int,
+    *,
+    label: str = "pitchers",
+) -> tuple[list[int], list[int]]:
+    """Return (lowest-BB/IP ids, highest-BB/IP ids) from a BB/IP table.
+
+    Always sorts by ``bbip`` with a stable algorithm: callers may pass an
+    already-sorted compute table (selection) or a tier-ordered manifest table
+    (``baseball_separability.resolve_bbip_tiers``). Stable sort preserves tie
+    order from ``compute_bbip_by_pitcher``, matching historical ``head``/``tail``
+    on that sorted frame.
+    """
+
+    ordered = table.sort_values("bbip", kind="mergesort")
+    _require_extremes_capacity(ordered, extremes_count, label=label)
+    bottom = ordered.head(extremes_count)["pitcher_id"].astype(int).tolist()
+    top = ordered.tail(extremes_count)["pitcher_id"].astype(int).tolist()
+    return bottom, top
+
+
 def label_bbip_tiers_for_pitcher_ids(
     table: pd.DataFrame,
     pitcher_ids: Sequence[int],
@@ -281,25 +315,20 @@ def label_bbip_tiers_for_pitcher_ids(
     ``--bbip-extremes`` selection among an eligible subset.
     """
 
-    if extremes_count <= 0:
-        raise ValueError(f"extremes_count must be positive. Received {extremes_count}.")
-
     selected = table.loc[table["pitcher_id"].isin({int(pid) for pid in pitcher_ids})].copy()
-    selected = selected.sort_values("bbip")
-    if len(selected) < extremes_count * 2:
-        raise ValueError(
-            f"Need at least {extremes_count * 2} selected pitchers with BB/IP data. "
-            f"Received {len(selected)}."
-        )
-
-    bottom_ids = set(selected.head(extremes_count)["pitcher_id"].astype(int).tolist())
-    top_ids = set(selected.tail(extremes_count)["pitcher_id"].astype(int).tolist())
+    bottom_ids, top_ids = _extreme_pitcher_id_lists(
+        selected,
+        extremes_count,
+        label="selected pitchers",
+    )
+    bottom_set = set(bottom_ids)
+    top_set = set(top_ids)
     labels: dict[int, str] = {}
     for pitcher_id in pitcher_ids:
         pid = int(pitcher_id)
-        if pid in bottom_ids:
+        if pid in bottom_set:
             labels[pid] = "bottom"
-        elif pid in top_ids:
+        elif pid in top_set:
             labels[pid] = "top"
         else:
             labels[pid] = "middle"
@@ -315,18 +344,17 @@ def build_bbip_manifest(
     output_dir: Path | None = None,
     eligible_pitcher_ids: Sequence[int] | None = None,
 ) -> list[dict[str, object]]:
-    """Return BB/IP metadata for selected pitchers (bottom/top tiers).
+    """Return BB/IP metadata for selected pitchers (bottom/top/middle tiers).
 
-    Tiers are assigned by BB/IP rank among the selected pitchers (or among
-    ``eligible_pitcher_ids`` when provided for selection consistency), not among
-    the unrestricted league table.
+    ``eligible_pitcher_ids`` only restricts which rows enter the BB/IP table
+    (same filter as ``select_bbip_extreme_pitcher_ids``). Tier labels are always
+    assigned by rank among ``pitcher_ids`` present in that table.
     """
 
-    table = compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir)
-    if eligible_pitcher_ids is not None:
-        eligible = {int(pitcher_id) for pitcher_id in eligible_pitcher_ids}
-        table = table.loc[table["pitcher_id"].isin(eligible)].copy()
-
+    table = _filter_bbip_table(
+        compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir),
+        eligible_pitcher_ids,
+    )
     tier_by_id = label_bbip_tiers_for_pitcher_ids(
         table,
         pitcher_ids,
@@ -360,20 +388,12 @@ def select_bbip_extreme_pitcher_ids(
 ) -> tuple[int, ...]:
     """Return top-N and bottom-N pitcher IDs by season BB/IP (deduplicated)."""
 
-    if count <= 0:
-        raise ValueError(f"count must be positive. Received {count}.")
-
-    table = compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir)
-    if eligible_pitcher_ids is not None:
-        eligible = {int(pitcher_id) for pitcher_id in eligible_pitcher_ids}
-        table = table.loc[table["pitcher_id"].isin(eligible)].copy()
-    if len(table) < count * 2:
-        raise ValueError(
-            f"Need at least {count * 2} eligible pitchers with BB/IP data. Received {len(table)}."
-        )
-
-    bottom = table.head(count)["pitcher_id"].astype(int).tolist()
-    top = table.tail(count)["pitcher_id"].astype(int).tolist()
+    table = _filter_bbip_table(
+        compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir),
+        eligible_pitcher_ids,
+    )
+    label = "eligible pitchers" if eligible_pitcher_ids is not None else "pitchers"
+    bottom, top = _extreme_pitcher_id_lists(table, count, label=label)
     ordered: list[int] = []
     for pitcher_id in bottom + top:
         if pitcher_id not in ordered:
