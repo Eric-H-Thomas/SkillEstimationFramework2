@@ -4,7 +4,8 @@
 Paper BBIP run (``submit_hjeeds_baseball_convergence_paper_bbip.sh``):
 ``--bbip-extremes 10``, ``--season-year 2021``, ``--pitch-types FF``,
 ``min_pitches_per_agent=100``, ``convergence_ns=5,10,25,50,100``,
-``max_reference_pitches=100``, ``--hyperprior-preset calibrated``. Login-node
+``max_reference_pitches=100``, ``--hyperprior-preset baseball-2021-ff``
+(committed ``HJEEDS/data/baseball_hyperpriors_2021_ff.json``). Login-node
 ``--prepare-roster`` writes the BB/IP cache + ``convergence_roster.json``;
 Slurm workers use ``--use-prepared-roster`` so roster selection is frozen.
 

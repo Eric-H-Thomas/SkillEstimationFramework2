@@ -2,10 +2,11 @@
 """Baseball-specific hyperprior presets and calibration helpers.
 
 Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
-loads these values via ``--hyperprior-preset calibrated`` pointing at
-``HJEEDS/results/baseball_hyperprior_calib_2021_ff/suggested_hyperpriors.json``,
-which is identical to the bundled ``baseball-2021-ff`` JSON: JEEDS-calibrated
-centers with low-confidence prior widths.
+loads JEEDS-calibrated centers with low-confidence prior widths via
+``--hyperprior-preset baseball-2021-ff``, which reads the committed file
+``HJEEDS/data/baseball_hyperpriors_2021_ff.json``. Use ``calibrated`` only when
+pointing ``--hyperprior-config`` at a freshly aggregated calibration JSON
+under ``HJEEDS/results/`` (gitignored).
 
 ``true_population_from_hyperpriors`` is a Statcast-only shim: there is no
 simulated ground truth, but ``ExperimentConfig`` still requires a

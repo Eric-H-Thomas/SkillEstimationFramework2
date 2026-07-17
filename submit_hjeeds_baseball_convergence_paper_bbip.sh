@@ -15,8 +15,7 @@ exec "${script_dir}/submit_hjeeds_baseball_convergence_array.sh" \
   --min-pitches-per-agent 100 \
   --convergence-ns 5,10,25,50,100 \
   --max-reference-pitches 100 \
-  --hyperprior-preset calibrated \
-  --hyperprior-config HJEEDS/results/baseball_hyperprior_calib_2021_ff/suggested_hyperpriors.json \
+  --hyperprior-preset baseball-2021-ff \
   --output-dir HJEEDS/results/baseball_convergence_paper_bbip20_calibrated \
   --time 12:00:00 \
   --agg-time 01:00:00 \

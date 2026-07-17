@@ -1,4 +1,3 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
 # This file has been fully reviewed by a human researcher as of 07/17/26 at 1:40 PM MDT.
 """Statcast baseball seed pipeline for hierarchical vs independent JEEDS.
 
