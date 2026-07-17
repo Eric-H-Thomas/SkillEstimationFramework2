@@ -29,7 +29,7 @@ DEFAULT_BASEBALL_HYPERPRIORS_2021_FF_PATH = (
     Path(__file__).resolve().parent / "data" / "baseball_hyperpriors_2021_ff.json"
 )
 
-_RESOLVE_PRESETS = ("darts", "low-confidence", "baseball-2021-ff", "calibrated")
+HYPERPRIOR_PRESET_CHOICES = ("darts", "low-confidence", "baseball-2021-ff", "calibrated")
 
 # Confidence presets only change prior widths / correlation concentration.
 # Centers and log-tau means are always supplied by the caller.
@@ -209,5 +209,5 @@ def resolve_baseball_hyperpriors(
             raise FileNotFoundError(f"Hyperprior config not found: {calibrated_path}")
         return load_hyperprior_config(calibrated_path)
     raise ValueError(
-        f"Unknown hyperprior preset '{preset}'. Expected one of {_RESOLVE_PRESETS}."
+        f"Unknown hyperprior preset '{preset}'. Expected one of {HYPERPRIOR_PRESET_CHOICES}."
     )

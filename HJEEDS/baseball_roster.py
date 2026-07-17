@@ -1,5 +1,16 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""Shared Statcast roster selection for baseball HJEEDS entry points."""
+# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:08 PM MDT.
+"""Shared Statcast roster selection for baseball HJEEDS entry points.
+
+Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
+calls ``resolve_baseball_roster`` with ``--bbip-extremes 10``, ``--season-year
+2021``, ``--pitch-types FF``, and ``min_pitches_per_agent=100``. That path
+selects top-10 + bottom-10 BB/IP pitchers among FF-eligible pitchers, expands
+to (pitcher, pitchType) agents, then drops any agent below the pitch floor.
+
+Exactly one roster selector is allowed among ``--all-eligible-agents``,
+``--top-pitchers``, and ``--bbip-extremes``; otherwise pass ``--pitcher-ids``.
+``--max-agents`` caps the resolved list after selection (smoke tests only).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+import pandas as pd
+
+from .baseball_hyperpriors import HYPERPRIOR_PRESET_CHOICES
 from .baseball_pitch import (
     StatcastAgentSpec,
     build_eligible_agent_roster,
@@ -40,9 +54,7 @@ def parse_pitch_types(raw_value: str) -> tuple[str, ...]:
     return pitch_types
 
 
-def load_statcast_for_roster(season_year: int | None) -> "pd.DataFrame":
-    import pandas as pd
-
+def load_statcast_for_roster(season_year: int | None) -> pd.DataFrame:
     all_data = load_processed_statcast()
     return filter_statcast_by_season(all_data, season_year)
 
@@ -53,7 +65,7 @@ def validate_roster_selection(
     top_pitchers: int | None = None,
     bbip_extremes: int | None = None,
 ) -> None:
-    """Reject ambiguous combinations of roster selector flags."""
+    """Reject ambiguous combinations of mutually exclusive roster selector flags."""
 
     active = []
     if all_eligible_agents:
@@ -68,9 +80,43 @@ def validate_roster_selection(
         )
 
 
+def _cap_agent_specs(
+    agent_specs: Sequence[StatcastAgentSpec],
+    max_agents: int | None,
+) -> tuple[StatcastAgentSpec, ...]:
+    """Keep at most ``max_agents`` specs and renumber ``agent_id`` from 0."""
+
+    capped = tuple(agent_specs)
+    if max_agents is not None and len(capped) > max_agents:
+        capped = capped[:max_agents]
+    return tuple(
+        StatcastAgentSpec(agent_id=index, pitcher_id=spec.pitcher_id, pitch_type=spec.pitch_type)
+        for index, spec in enumerate(capped)
+    )
+
+
+def _specs_from_pitcher_ids(
+    pitcher_ids: Sequence[int],
+    pitch_types: Sequence[str],
+    all_data: pd.DataFrame,
+    *,
+    min_pitches_per_agent: int,
+    max_agents: int | None,
+) -> tuple[tuple[StatcastAgentSpec, ...], tuple[tuple[int, str, int], ...]]:
+    """Expand pitcher×pitch-type, drop agents below the pitch floor, then cap."""
+
+    agent_specs = resolve_agent_roster(pitcher_ids, pitch_types)
+    agent_specs, excluded_agents = filter_roster_by_min_pitches(
+        agent_specs,
+        all_data,
+        min_pitches_per_agent,
+    )
+    return _cap_agent_specs(agent_specs, max_agents), excluded_agents
+
+
 def resolve_baseball_roster(
     *,
-    all_data,
+    all_data: pd.DataFrame,
     season_year: int | None,
     pitch_types: Sequence[str],
     pitcher_ids: Sequence[int] | None = None,
@@ -89,11 +135,14 @@ def resolve_baseball_roster(
         bbip_extremes=bbip_extremes,
     )
 
+    excluded_agents: tuple[tuple[int, str, int], ...] = ()
+
     if bbip_extremes is not None:
         if season_year is None:
             raise ValueError("--bbip-extremes requires --season-year.")
         from .baseball_bbip import select_bbip_extreme_pitcher_ids
 
+        # Eligibility is per (pitcher, pitchType); BB/IP extremes are pitcher-level.
         eligible_pitcher_ids = tuple(
             pitcher_id
             for pitcher_id, _pitch_type, _pitch_count in list_eligible_pitcher_counts(
@@ -110,70 +159,65 @@ def resolve_baseball_roster(
             output_dir=output_dir,
             eligible_pitcher_ids=eligible_pitcher_ids,
         )
-        agent_specs = resolve_agent_roster(pitcher_ids_resolved, pitch_types)
-        agent_specs, _excluded_before_cap = filter_roster_by_min_pitches(
-            agent_specs,
+        agent_specs, excluded_agents = _specs_from_pitcher_ids(
+            pitcher_ids_resolved,
+            pitch_types,
             all_data,
-            min_pitches_per_agent,
+            min_pitches_per_agent=min_pitches_per_agent,
+            max_agents=max_agents,
         )
-        if max_agents is not None and len(agent_specs) > max_agents:
-            agent_specs = tuple(
-                StatcastAgentSpec(agent_id=index, pitcher_id=spec.pitcher_id, pitch_type=spec.pitch_type)
-                for index, spec in enumerate(agent_specs[:max_agents])
-            )
     elif all_eligible_agents:
+        # Already applies min_pitches and optional max_agents inside pitch helpers.
         agent_specs = build_eligible_agent_roster(
             all_data,
             pitch_types,
             min_pitches=min_pitches_per_agent,
             max_agents=max_agents,
         )
-    else:
-        if top_pitchers is not None:
-            pitcher_ids_resolved = select_top_pitchers_by_pitch_count(
-                all_data,
-                pitch_types,
-                min_pitches=min_pitches_per_agent,
-                count=top_pitchers,
-            )
-        elif pitcher_ids:
-            pitcher_ids_resolved = tuple(int(pitcher_id) for pitcher_id in pitcher_ids)
-        else:
-            raise ValueError(
-                "Specify one roster selector: --all-eligible-agents, --top-pitchers, or --pitcher-ids."
-            )
-
-        agent_specs = resolve_agent_roster(pitcher_ids_resolved, pitch_types)
-        agent_specs, excluded_before_cap = filter_roster_by_min_pitches(
-            agent_specs,
+    elif top_pitchers is not None:
+        pitcher_ids_resolved = select_top_pitchers_by_pitch_count(
             all_data,
-            min_pitches_per_agent,
+            pitch_types,
+            min_pitches=min_pitches_per_agent,
+            count=top_pitchers,
         )
-        if max_agents is not None and len(agent_specs) > max_agents:
-            agent_specs = tuple(
-                StatcastAgentSpec(agent_id=index, pitcher_id=spec.pitcher_id, pitch_type=spec.pitch_type)
-                for index, spec in enumerate(agent_specs[:max_agents])
-            )
+        agent_specs, excluded_agents = _specs_from_pitcher_ids(
+            pitcher_ids_resolved,
+            pitch_types,
+            all_data,
+            min_pitches_per_agent=min_pitches_per_agent,
+            max_agents=max_agents,
+        )
+    elif pitcher_ids:
+        pitcher_ids_resolved = tuple(int(pitcher_id) for pitcher_id in pitcher_ids)
+        agent_specs, excluded_agents = _specs_from_pitcher_ids(
+            pitcher_ids_resolved,
+            pitch_types,
+            all_data,
+            min_pitches_per_agent=min_pitches_per_agent,
+            max_agents=max_agents,
+        )
+    else:
+        raise ValueError(
+            "Specify one roster selector: --all-eligible-agents, --top-pitchers, "
+            "--bbip-extremes, or --pitcher-ids."
+        )
 
-    agent_specs, excluded_agents = filter_roster_by_min_pitches(
-        agent_specs,
-        all_data,
-        min_pitches_per_agent,
-    )
     if not agent_specs:
         raise ValueError(
-            f"No agents meet min_pitches_per_agent={min_pitches_per_agent}. Excluded: {excluded_agents}."
+            f"No agents meet min_pitches_per_agent={min_pitches_per_agent}. "
+            f"Excluded: {excluded_agents}."
         )
 
     agent_pitch_counts = tuple(
         (spec.pitcher_id, spec.pitch_type, count_agent_pitch_rows(all_data, spec.pitcher_id, spec.pitch_type))
         for spec in agent_specs
     )
-    pitcher_ids_resolved = tuple(dict.fromkeys(spec.pitcher_id for spec in agent_specs))
+    pitcher_ids_final = tuple(dict.fromkeys(spec.pitcher_id for spec in agent_specs))
     return BaseballRosterSelection(
         season_year=season_year,
         pitch_types=tuple(pitch_types),
-        pitcher_ids=pitcher_ids_resolved,
+        pitcher_ids=pitcher_ids_final,
         agent_specs=agent_specs,
         agent_pitch_counts=agent_pitch_counts,
         excluded_agents=excluded_agents,
@@ -232,7 +276,7 @@ def add_common_roster_arguments(parser: argparse.ArgumentParser) -> None:
 def add_hyperprior_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--hyperprior-preset",
-        choices=("darts", "low-confidence", "baseball-2021-ff", "calibrated"),
+        choices=HYPERPRIOR_PRESET_CHOICES,
         default="low-confidence",
         help="Population hyperprior preset. Default: low-confidence (weak empirical-Bayes prior).",
     )
@@ -249,7 +293,7 @@ def print_eligible_agents(
     season_year: int | None,
     pitch_types: Sequence[str],
     min_pitches: int,
-    limit: int,
+    limit: int | None,
 ) -> None:
     all_data = load_statcast_for_roster(season_year)
     all_rows = list_eligible_pitcher_counts(
