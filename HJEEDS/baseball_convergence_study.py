@@ -1,11 +1,27 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""CLI entry point for the Statcast baseball convergence study (Phase 2)."""
+# This file has been fully reviewed by a human researcher as of 07/18/26 at 10:34 AM MDT.
+"""CLI entry point for Statcast baseball convergence (Phase 2 / paper BBIP).
+
+Public CLI over ``baseball_convergence``: argparse, CSV/plot writers, and
+Slurm mode dispatch (``--prepare-roster`` / ``--agent-index`` /
+``--aggregate-results``). Estimation lives in ``baseball_convergence``;
+this module does not change likelihoods or roster selection.
+
+Paper BBIP: ``submit_hjeeds_baseball_convergence_paper_bbip.sh`` →
+``submit_hjeeds_baseball_convergence_array.sh`` → this module with
+``--bbip-extremes 10``, ``--season-year 2021``, ``--pitch-types FF``,
+``min_pitches_per_agent=100``, ``convergence_ns=5,10,25,50,100``,
+``max_reference_pitches=100``, ``--hyperprior-preset baseball-2021-ff``.
+
+Drift is self-reference (JEEDS→JEEDS@N_max, H-JEEDS→H-JEEDS@N_max), not
+ground truth. Statcast estimates are deterministic in seed.
+"""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -13,19 +29,27 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from HJEEDS.artifacts import error_metric_figure_size
-from HJEEDS.baseball_convergence import (
-    DEFAULT_CONVERGENCE_NS,
+from HJEEDS.artifacts import (
+    _abs_difference_or_blank,
+    _value_or_blank,
+    _write_dict_rows,
+    error_metric_figure_size,
+)
+from HJEEDS.baseball_config import (
     DEFAULT_LAMBDA_MAX,
     DEFAULT_LAMBDA_MIN,
     DEFAULT_NUM_LAMBDA_GRID,
     DEFAULT_NUM_SIGMA_GRID,
-    DEFAULT_OUTPUT_DIR_CONVERGENCE,
     DEFAULT_PITCH_TYPES,
+)
+from HJEEDS.baseball_convergence import (
+    DEFAULT_CONVERGENCE_NS,
+    DEFAULT_OUTPUT_DIR_CONVERGENCE,
     DEFAULT_PITCHER_IDS,
     aggregate_convergence_across_seeds,
     aggregate_convergence_results,
     build_baseball_convergence_config_from_args,
+    build_drift_summary_tables,
     planned_convergence_output_paths,
     prepare_convergence_roster,
     print_baseball_convergence_dry_run_summary,
@@ -35,8 +59,19 @@ from HJEEDS.baseball_convergence import (
 )
 from HJEEDS.baseball_pitch import DEFAULT_DELTA, DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MIN
 from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
-from HJEEDS.baseball_roster import add_common_roster_arguments, add_hyperprior_arguments, print_eligible_agents
-from HJEEDS.config import DEFAULT_SEED, SUMMARY_BY_BUCKET_CSV_HEADER, SUMMARY_OVERALL_CSV_HEADER, parse_seed_argument
+from HJEEDS.baseball_roster import (
+    add_common_roster_arguments,
+    add_hyperprior_arguments,
+    parse_pitch_types,
+    print_eligible_agents,
+)
+from HJEEDS.config import (
+    DEFAULT_SEED,
+    SUMMARY_BY_BUCKET_CSV_HEADER,
+    SUMMARY_OVERALL_CSV_HEADER,
+    _parse_count_buckets,
+    parse_seed_argument,
+)
 from HJEEDS.models import StatcastConvergenceAgentResult
 
 CONVERGENCE_AGENT_LEVEL_HEADER = [
@@ -80,10 +115,6 @@ DRIFT_METRIC_PANELS = (
         "No rows for log decision skill drift",
     ),
 )
-
-# MLB palette shared with per-agent intermediate-estimate and separability plots.
-CONVERGENCE_METHOD_STYLES = BASEBALL_METHOD_STYLES
-AGENT_ESTIMATE_METHOD_STYLES = BASEBALL_METHOD_STYLES
 
 
 def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -174,12 +205,6 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     return parser.parse_args(argv)
 
 
-def _value_or_blank(value: Any) -> Any:
-    if value is None:
-        return ""
-    return value
-
-
 def _convergence_result_to_row(result: StatcastConvergenceAgentResult) -> dict[str, Any]:
     return {
         "seed": result.seed,
@@ -233,15 +258,23 @@ def write_convergence_summary_csvs(
     summary_overall_rows: Sequence[dict[str, Any]],
 ) -> None:
     paths = planned_convergence_output_paths(output_dir)
-    paths["summary_by_n_csv"].parent.mkdir(parents=True, exist_ok=True)
-    with paths["summary_by_n_csv"].open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SUMMARY_BY_BUCKET_CSV_HEADER)
-        writer.writeheader()
-        writer.writerows(summary_by_n_rows)
-    with paths["summary_overall_csv"].open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SUMMARY_OVERALL_CSV_HEADER)
-        writer.writeheader()
-        writer.writerows(summary_overall_rows)
+    _write_dict_rows(paths["summary_by_n_csv"], SUMMARY_BY_BUCKET_CSV_HEADER, summary_by_n_rows)
+    _write_dict_rows(paths["summary_overall_csv"], SUMMARY_OVERALL_CSV_HEADER, summary_overall_rows)
+
+
+def write_convergence_outputs(
+    output_dir: Path,
+    agent_results: Sequence[StatcastConvergenceAgentResult],
+    summary_by_n_rows: Sequence[dict[str, Any]],
+    summary_overall_rows: Sequence[dict[str, Any]],
+) -> dict[str, Path]:
+    """Write agent CSV, summary CSVs, and both drift plots."""
+
+    paths = planned_convergence_output_paths(output_dir)
+    write_convergence_agent_level_csv(paths["agent_level_csv"], agent_results)
+    write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
+    write_drift_plots(output_dir, summary_by_n_rows)
+    return paths
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -257,8 +290,6 @@ def recompute_self_reference_drifts_in_agent_rows(
     rows: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Rewrite drift columns so each method references its own estimate at max N."""
-
-    from collections import defaultdict
 
     grouped: dict[tuple[Any, Any], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -280,39 +311,22 @@ def recompute_self_reference_drifts_in_agent_rows(
             hier_sigma = _float_or_none(row.get("hierarchical_posterior_mean_sigma"))
             hier_log_lambda = _float_or_none(row.get("hierarchical_posterior_mean_log_lambda"))
 
-            jeeds_sigma_drift = (
-                abs(jeeds_sigma - jeeds_ref_sigma)
-                if jeeds_sigma is not None and jeeds_ref_sigma is not None
-                else None
+            row["jeeds_abs_sigma_drift_vs_full"] = _abs_difference_or_blank(
+                jeeds_sigma, jeeds_ref_sigma
             )
-            jeeds_lambda_drift = (
-                abs(jeeds_log_lambda - jeeds_ref_log_lambda)
-                if jeeds_log_lambda is not None and jeeds_ref_log_lambda is not None
-                else None
+            row["jeeds_abs_log_lambda_drift_vs_full"] = _abs_difference_or_blank(
+                jeeds_log_lambda, jeeds_ref_log_lambda
             )
-            hier_sigma_drift = (
-                abs(hier_sigma - hier_ref_sigma)
-                if hier_sigma is not None and hier_ref_sigma is not None
-                else None
+            row["hierarchical_abs_sigma_drift_vs_full"] = _abs_difference_or_blank(
+                hier_sigma, hier_ref_sigma
             )
-            hier_lambda_drift = (
-                abs(hier_log_lambda - hier_ref_log_lambda)
-                if hier_log_lambda is not None and hier_ref_log_lambda is not None
-                else None
+            row["hierarchical_abs_log_lambda_drift_vs_full"] = _abs_difference_or_blank(
+                hier_log_lambda, hier_ref_log_lambda
             )
-
-            row["jeeds_abs_sigma_drift_vs_full"] = (
-                "" if jeeds_sigma_drift is None else jeeds_sigma_drift
-            )
-            row["jeeds_abs_log_lambda_drift_vs_full"] = (
-                "" if jeeds_lambda_drift is None else jeeds_lambda_drift
-            )
-            row["hierarchical_abs_sigma_drift_vs_full"] = (
-                "" if hier_sigma_drift is None else hier_sigma_drift
-            )
-            row["hierarchical_abs_log_lambda_drift_vs_full"] = (
-                "" if hier_lambda_drift is None else hier_lambda_drift
-            )
+            jeeds_sigma_drift = _float_or_none(row["jeeds_abs_sigma_drift_vs_full"])
+            hier_sigma_drift = _float_or_none(row["hierarchical_abs_sigma_drift_vs_full"])
+            jeeds_lambda_drift = _float_or_none(row["jeeds_abs_log_lambda_drift_vs_full"])
+            hier_lambda_drift = _float_or_none(row["hierarchical_abs_log_lambda_drift_vs_full"])
             if jeeds_sigma_drift is not None and hier_sigma_drift is not None:
                 row["hierarchical_closer_sigma"] = hier_sigma_drift < jeeds_sigma_drift
             else:
@@ -331,8 +345,6 @@ def summarize_drift_rows_from_agent_csv_rows(
     rows: Sequence[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build summary_by_N / summary_overall tables from agent-level drift columns."""
-
-    import numpy as np
 
     bucket_metrics: dict[tuple[str, str, int], list[float]] = {}
     overall_metrics: dict[tuple[str, str], list[float]] = {}
@@ -368,42 +380,18 @@ def summarize_drift_rows_from_agent_csv_rows(
                     (method_name, "abs_log_lambda_drift_vs_full"), []
                 ).append(lambda_drift)
 
-    summary_by_n_rows: list[dict[str, Any]] = []
-    for (method_name, metric_name, convergence_n), values in sorted(bucket_metrics.items()):
-        summary_by_n_rows.append(
-            {
-                "method": method_name,
-                "metric": metric_name,
-                "count_bucket": convergence_n,
-                "num_agents": len(values),
-                "mean": float(np.mean(values)),
-                "ci_lower": "",
-                "ci_upper": "",
-                "notes": (
-                    "Mean absolute self-reference drift over agents. "
-                    "Baseball Statcast estimates are deterministic in seed; no CI."
-                ),
-            }
-        )
-
-    summary_overall_rows: list[dict[str, Any]] = []
-    for (method_name, metric_name), values in sorted(overall_metrics.items()):
-        summary_overall_rows.append(
-            {
-                "method": method_name,
-                "metric": metric_name,
-                "num_agents": len(values),
-                "mean": float(np.mean(values)),
-                "ci_lower": "",
-                "ci_upper": "",
-                "notes": (
-                    "Mean absolute self-reference drift over agents x N. "
-                    "Baseball Statcast estimates are deterministic in seed; no CI."
-                ),
-            }
-        )
-
-    return summary_by_n_rows, summary_overall_rows
+    return build_drift_summary_tables(
+        bucket_metrics,
+        overall_metrics,
+        by_n_notes=(
+            "Mean absolute self-reference drift over agents. "
+            "Baseball Statcast estimates are deterministic in seed; no CI."
+        ),
+        overall_notes=(
+            "Mean absolute self-reference drift over agents x N. "
+            "Baseball Statcast estimates are deterministic in seed; no CI."
+        ),
+    )
 
 
 def plot_drift_by_n(
@@ -453,7 +441,7 @@ def plot_drift_by_n(
 
         if metric_rows and bucket_values:
             for method in methods:
-                style = CONVERGENCE_METHOD_STYLES.get(
+                style = BASEBALL_METHOD_STYLES.get(
                     method,
                     {"label": method, "color": "#555555", "marker": "o"},
                 )
@@ -639,8 +627,8 @@ def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
         for axis, (jeeds_col, hier_col, ylabel, _key) in zip(axes, metric_panels):
             jeeds_y = agent_frame[jeeds_col].tolist()
             hier_y = agent_frame[hier_col].tolist()
-            jeeds_style = AGENT_ESTIMATE_METHOD_STYLES["jeeds"]
-            hier_style = AGENT_ESTIMATE_METHOD_STYLES["hierarchical"]
+            jeeds_style = BASEBALL_METHOD_STYLES["jeeds"]
+            hier_style = BASEBALL_METHOD_STYLES["hierarchical"]
 
             axis.plot(
                 ns,
@@ -704,10 +692,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_convergence_args(argv)
 
     if args.list_eligible_pitchers:
-        from HJEEDS.config import _parse_count_buckets
-
         convergence_ns = _parse_count_buckets(args.convergence_ns)
-        pitch_types = tuple(piece.strip() for piece in args.pitch_types.split(",") if piece.strip())
         min_pitches = (
             args.min_pitches_per_agent
             if args.min_pitches_per_agent is not None
@@ -715,7 +700,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print_eligible_agents(
             season_year=args.season_year,
-            pitch_types=pitch_types,
+            pitch_types=parse_pitch_types(args.pitch_types),
             min_pitches=min_pitches,
             limit=args.list_eligible_limit,
         )
@@ -762,10 +747,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.aggregate_results:
         all_agent_results, summary_by_n_rows, summary_overall_rows = aggregate_convergence_results(args)
-        output_paths = planned_convergence_output_paths(config.base.output_dir)
-        write_convergence_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
-        write_convergence_summary_csvs(config.base.output_dir, summary_by_n_rows, summary_overall_rows)
-        write_drift_plots(config.base.output_dir, summary_by_n_rows)
+        write_convergence_outputs(
+            config.base.output_dir,
+            all_agent_results,
+            summary_by_n_rows,
+            summary_overall_rows,
+        )
         print(f"[baseball-convergence] Wrote aggregated results to {config.base.output_dir.resolve()}", flush=True)
         return 0
 
@@ -783,11 +770,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     all_agent_results = [result for seed_result in seed_results for result in seed_result.agent_results]
     summary_by_n_rows, summary_overall_rows = aggregate_convergence_across_seeds(seed_results)
-
-    output_paths = planned_convergence_output_paths(config.base.output_dir)
-    write_convergence_agent_level_csv(output_paths["agent_level_csv"], all_agent_results)
-    write_convergence_summary_csvs(config.base.output_dir, summary_by_n_rows, summary_overall_rows)
-    write_drift_plots(config.base.output_dir, summary_by_n_rows)
+    write_convergence_outputs(
+        config.base.output_dir,
+        all_agent_results,
+        summary_by_n_rows,
+        summary_overall_rows,
+    )
     print(f"[baseball-convergence] Wrote results to {config.base.output_dir.resolve()}", flush=True)
     return 0
 

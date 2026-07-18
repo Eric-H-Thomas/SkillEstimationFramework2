@@ -31,16 +31,7 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
-from .baseball_config import (
-    # Re-exported for ``baseball_convergence_study`` CLI defaults.
-    DEFAULT_LAMBDA_MAX,
-    DEFAULT_LAMBDA_MIN,
-    DEFAULT_NUM_LAMBDA_GRID,
-    DEFAULT_NUM_SIGMA_GRID,
-    DEFAULT_PITCH_TYPES,
-    BaseballExperimentConfig,
-    build_baseball_skill_grids,
-)
+from .baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
 from .baseball_likelihood import compute_baseball_log_likelihood_grid
 from .baseball_hyperpriors import resolve_baseball_hyperpriors, true_population_from_hyperpriors
 from .baseball_pitch import (
@@ -133,6 +124,47 @@ def _abs_drift(estimate: MethodEstimate, reference: MethodEstimate) -> tuple[flo
     )
 
 
+def build_drift_summary_tables(
+    bucket_metrics: dict[tuple[str, str, int], list[float]],
+    overall_metrics: dict[tuple[str, str], list[float]],
+    *,
+    by_n_notes: str,
+    overall_notes: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Turn collected drift values into summary_by_N / summary_overall row dicts."""
+
+    summary_by_n_rows: list[dict[str, Any]] = []
+    for (method_name, metric_name, convergence_n), values in sorted(bucket_metrics.items()):
+        summary_by_n_rows.append(
+            {
+                "method": method_name,
+                "metric": metric_name,
+                "count_bucket": convergence_n,
+                "num_agents": len(values),
+                "mean": float(np.mean(values)),
+                "ci_lower": "",
+                "ci_upper": "",
+                "notes": by_n_notes,
+            }
+        )
+
+    summary_overall_rows: list[dict[str, Any]] = []
+    for (method_name, metric_name), values in sorted(overall_metrics.items()):
+        summary_overall_rows.append(
+            {
+                "method": method_name,
+                "metric": metric_name,
+                "num_agents": len(values),
+                "mean": float(np.mean(values)),
+                "ci_lower": "",
+                "ci_upper": "",
+                "notes": overall_notes,
+            }
+        )
+
+    return summary_by_n_rows, summary_overall_rows
+
+
 def summarize_convergence_seed(
     seed_result: BaseballConvergenceSeedResult,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -167,42 +199,18 @@ def summarize_convergence_seed(
                     lambda_drift,
                 )
 
-    summary_by_n_rows: list[dict[str, Any]] = []
-    for (method_name, metric_name, convergence_n), values in sorted(bucket_metrics.items()):
-        summary_by_n_rows.append(
-            {
-                "method": method_name,
-                "metric": metric_name,
-                "count_bucket": convergence_n,
-                "num_agents": len(values),
-                "mean": float(np.mean(values)),
-                "ci_lower": "",
-                "ci_upper": "",
-                "notes": (
-                    "Seed-level mean over agents with valid drift metrics. "
-                    "Confidence intervals are added during across-seed aggregation."
-                ),
-            }
-        )
-
-    summary_overall_rows: list[dict[str, Any]] = []
-    for (method_name, metric_name), values in sorted(overall_metrics.items()):
-        summary_overall_rows.append(
-            {
-                "method": method_name,
-                "metric": metric_name,
-                "num_agents": len(values),
-                "mean": float(np.mean(values)),
-                "ci_lower": "",
-                "ci_upper": "",
-                "notes": (
-                    "Seed-level overall mean over agents with valid drift metrics. "
-                    "Confidence intervals are added during across-seed aggregation."
-                ),
-            }
-        )
-
-    return summary_by_n_rows, summary_overall_rows
+    return build_drift_summary_tables(
+        bucket_metrics,
+        overall_metrics,
+        by_n_notes=(
+            "Seed-level mean over agents with valid drift metrics. "
+            "Confidence intervals are added during across-seed aggregation."
+        ),
+        overall_notes=(
+            "Seed-level overall mean over agents with valid drift metrics. "
+            "Confidence intervals are added during across-seed aggregation."
+        ),
+    )
 
 
 def aggregate_convergence_across_seeds(
