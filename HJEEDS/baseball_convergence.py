@@ -1,31 +1,49 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""Convergence study: JEEDS vs HJEEDS drift vs each method's own estimate at max N.
+# This file has been fully reviewed by a human researcher as of 07/18/26 at 10:08 AM MDT.
+"""Statcast baseball convergence: JEEDS vs H-JEEDS drift vs each method at max N.
 
-Paper BBIP run (``submit_hjeeds_baseball_convergence_paper_bbip.sh``):
+Core library for Phase 2 / paper BBIP convergence. CLI lives in
+``baseball_convergence_study``; Slurm entry is
+``submit_hjeeds_baseball_convergence_paper_bbip.sh``.
+
+Paper BBIP knobs (do not change lightly — regenerates results):
 ``--bbip-extremes 10``, ``--season-year 2021``, ``--pitch-types FF``,
 ``min_pitches_per_agent=100``, ``convergence_ns=5,10,25,50,100``,
 ``max_reference_pitches=100``, ``--hyperprior-preset baseball-2021-ff``
-(committed ``HJEEDS/data/baseball_hyperpriors_2021_ff.json``). Login-node
-``--prepare-roster`` writes the BB/IP cache + ``convergence_roster.json``;
-Slurm workers use ``--use-prepared-roster`` so roster selection is frozen.
+(committed ``HJEEDS/data/baseball_hyperpriors_2021_ff.json``).
+
+Modes (``submit_hjeeds_baseball_convergence_array.sh``):
+  ``--prepare-roster`` → per-agent ``--agent-index`` array → ``--aggregate-results``.
+Workers pass ``--use-prepared-roster`` so roster selection stays frozen.
+Local sequential: omit those flags and call ``run_single_baseball_convergence_seed``.
 
 Statcast likelihoods are deterministic in seed; prefer ``num_seeds=1``.
 """
 
 from __future__ import annotations
 
+import json
 import math
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+import pandas as pd
 
-from .baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
+from .baseball_config import (
+    # Re-exported for ``baseball_convergence_study`` CLI defaults.
+    DEFAULT_LAMBDA_MAX,
+    DEFAULT_LAMBDA_MIN,
+    DEFAULT_NUM_LAMBDA_GRID,
+    DEFAULT_NUM_SIGMA_GRID,
+    DEFAULT_PITCH_TYPES,
+    BaseballExperimentConfig,
+    build_baseball_skill_grids,
+)
 from .baseball_likelihood import compute_baseball_log_likelihood_grid
 from .baseball_hyperpriors import resolve_baseball_hyperpriors, true_population_from_hyperpriors
 from .baseball_pitch import (
-    PitchObservation,
     StatcastAgentSpec,
     build_baseball_runtime,
     build_pitch_observations_for_rows,
@@ -57,12 +75,12 @@ from .models import (
 
 DEFAULT_OUTPUT_DIR_CONVERGENCE = Path("HJEEDS/results/baseball_convergence")
 DEFAULT_CONVERGENCE_NS = (5, 10)
-DEFAULT_NUM_SIGMA_GRID = 21
-DEFAULT_NUM_LAMBDA_GRID = 21
-DEFAULT_LAMBDA_MIN = 1e-3
-DEFAULT_LAMBDA_MAX = 10**3.6
+# Smoke-demo pitcher pair for the convergence CLI (distinct from baseball_config defaults).
 DEFAULT_PITCHER_IDS = (623433, 543037)
-DEFAULT_PITCH_TYPES = ("FF",)
+
+CONVERGENCE_ROSTER_FILENAME = "convergence_roster.json"
+CONVERGENCE_ROSTER_METADATA_FILENAME = "convergence_roster_metadata.json"
+AGENT_CACHE_SUBDIR = "agents"
 
 
 def required_min_pitches_for_convergence(
@@ -112,31 +130,6 @@ def _abs_drift(estimate: MethodEstimate, reference: MethodEstimate) -> tuple[flo
     return (
         abs(estimate.posterior_mean_sigma - reference.posterior_mean_sigma),
         abs(estimate.posterior_mean_log_lambda - reference.posterior_mean_log_lambda),
-    )
-
-
-def _build_pitch_observations(
-    agent_rows,
-    runtime,
-    execution_skills: Sequence[float],
-) -> list[PitchObservation]:
-    return build_pitch_observations_for_rows(agent_rows, runtime, execution_skills)
-
-
-def _compute_log_likelihood_grid(
-    pitch_observations: Sequence[PitchObservation],
-    runtime,
-    sigma_grid: np.ndarray,
-    log_lambda_grid: np.ndarray,
-    delta: float,
-) -> np.ndarray:
-    return compute_baseball_log_likelihood_grid(
-        pitch_observations=pitch_observations,
-        possible_targets_feet=runtime.grids.possible_targets_feet,
-        all_covs=runtime.all_covs,
-        sigma_grid=sigma_grid,
-        log_lambda_grid=log_lambda_grid,
-        delta=delta,
     )
 
 
@@ -328,16 +321,19 @@ def run_single_baseball_convergence_seed(
         )
         for agent_spec in config.agent_specs
     ]
-    return run_convergence_from_agent_caches(config, seed, agent_caches)
+    return run_convergence_from_agent_caches(
+        config,
+        seed,
+        agent_caches,
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+    )
 
 
 def build_baseball_skill_grids_from_convergence(
     config: BaseballConvergenceConfig,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build skill grids using the shared baseball grid helpers."""
-
-    from .baseball_config import build_baseball_skill_grids as _build
-    from .baseball_config import BaseballExperimentConfig
+    """Build skill grids via the shared baseball grid helper (config shim)."""
 
     shim = BaseballExperimentConfig(
         base=config.base,
@@ -349,13 +345,35 @@ def build_baseball_skill_grids_from_convergence(
         agent_specs=config.agent_specs,
         agents=config.agents,
     )
-    return _build(shim)
+    return build_baseball_skill_grids(shim)
+
+
+def _config_with_agent_specs(
+    config: BaseballConvergenceConfig,
+    agent_specs: Sequence[StatcastAgentSpec],
+) -> BaseballConvergenceConfig:
+    """Copy config fields but swap in an explicit agent roster (prepared JSON)."""
+
+    specs = tuple(agent_specs)
+    return BaseballConvergenceConfig(
+        base=config.base,
+        season_year=config.season_year,
+        pitcher_ids=config.pitcher_ids,
+        pitch_types=config.pitch_types,
+        convergence_ns=config.convergence_ns,
+        max_reference_pitches=config.max_reference_pitches,
+        min_pitches_per_agent=config.min_pitches_per_agent,
+        agent_specs=specs,
+        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in specs),
+        agent_pitch_counts=config.agent_pitch_counts,
+        excluded_agents=config.excluded_agents,
+    )
 
 
 def _load_prepared_roster_selection(
     output_dir: Path,
     *,
-    all_data,
+    all_data: pd.DataFrame,
     season_year: int | None,
     pitch_types: Sequence[str],
     min_pitches_per_agent: int,
@@ -401,7 +419,11 @@ def _ensure_bbip_cache_for_args(args) -> None:
     )
 
 
-def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConfig:
+def _build_convergence_config_and_data(
+    args,
+) -> tuple[BaseballConvergenceConfig, pd.DataFrame]:
+    """Resolve roster + Statcast frame once; shared by config builders and prepare-roster."""
+
     convergence_ns = _parse_count_buckets(args.convergence_ns)
     pitch_types = parse_pitch_types(args.pitch_types)
     min_pitches_per_agent = (
@@ -461,7 +483,7 @@ def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConf
         hyperpriors=hyperpriors,
         true_population=true_population_from_hyperpriors(hyperpriors),
     )
-    return BaseballConvergenceConfig(
+    config = BaseballConvergenceConfig(
         base=base,
         season_year=args.season_year,
         pitcher_ids=roster.pitcher_ids,
@@ -474,23 +496,12 @@ def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConf
         agent_pitch_counts=roster.agent_pitch_counts,
         excluded_agents=roster.excluded_agents,
     )
+    return config, all_data
 
 
-def print_eligible_pitchers(
-    pitch_types: Sequence[str],
-    *,
-    min_pitches: int,
-    limit: int,
-    season_year: int | None = None,
-) -> None:
-    from .baseball_roster import print_eligible_agents
-
-    print_eligible_agents(
-        season_year=season_year,
-        pitch_types=pitch_types,
-        min_pitches=min_pitches,
-        limit=limit,
-    )
+def build_baseball_convergence_config_from_args(args) -> BaseballConvergenceConfig:
+    config, _all_data = _build_convergence_config_and_data(args)
+    return config
 
 
 def planned_convergence_output_paths(output_dir: Path) -> dict[str, Path]:
@@ -570,11 +581,6 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     )
 
 
-CONVERGENCE_ROSTER_FILENAME = "convergence_roster.json"
-CONVERGENCE_ROSTER_METADATA_FILENAME = "convergence_roster_metadata.json"
-AGENT_CACHE_SUBDIR = "agents"
-
-
 def _estimate_to_dict(estimate: MethodEstimate) -> dict[str, Any]:
     return {
         "method_name": estimate.method_name,
@@ -625,10 +631,8 @@ def write_convergence_roster(
     max_reference_pitches: int | None,
     convergence_ns: Sequence[int],
     roster_selector: dict[str, Any],
-    all_data=None,
+    all_data: pd.DataFrame | None = None,
 ) -> Path:
-    import json
-
     output_dir.mkdir(parents=True, exist_ok=True)
     path = convergence_roster_path_for(output_dir)
     payload = [
@@ -675,8 +679,6 @@ def write_convergence_roster(
 
 
 def load_convergence_roster(output_dir: Path) -> tuple[StatcastAgentSpec, ...]:
-    import json
-
     path = convergence_roster_path_for(output_dir)
     if not path.is_file():
         raise FileNotFoundError(
@@ -699,7 +701,7 @@ def build_agent_convergence_cache(
     config: BaseballConvergenceConfig,
     seed: int,
     agent_spec: StatcastAgentSpec,
-    all_data,
+    all_data: pd.DataFrame,
     runtime,
     sigma_grid: np.ndarray,
     log_lambda_grid: np.ndarray,
@@ -723,14 +725,15 @@ def build_agent_convergence_cache(
     build_n = max(max_build_n, reference_row_count)
     built_rows = agent_rows.iloc[:build_n, :]
     execution_skills = tuple(float(value) for value in sigma_grid)
-    all_observations = _build_pitch_observations(built_rows, runtime, execution_skills)
+    all_observations = build_pitch_observations_for_rows(built_rows, runtime, execution_skills)
     reference_observations = all_observations[:reference_row_count]
-    reference_log_likelihood = _compute_log_likelihood_grid(
-        reference_observations,
-        runtime,
-        sigma_grid,
-        log_lambda_grid,
-        config.base.delta,
+    reference_log_likelihood = compute_baseball_log_likelihood_grid(
+        pitch_observations=reference_observations,
+        possible_targets_feet=runtime.grids.possible_targets_feet,
+        all_covs=runtime.all_covs,
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+        delta=config.base.delta,
     )
     reference_estimate = run_independent_jeeds_baseline(
         log_likelihood_grid=reference_log_likelihood,
@@ -744,12 +747,13 @@ def build_agent_convergence_cache(
     for convergence_n in config.convergence_ns:
         take_n = min(convergence_n, len(all_observations))
         pitch_observations = all_observations[:take_n]
-        log_likelihood_grid = _compute_log_likelihood_grid(
-            pitch_observations,
-            runtime,
-            sigma_grid,
-            log_lambda_grid,
-            config.base.delta,
+        log_likelihood_grid = compute_baseball_log_likelihood_grid(
+            pitch_observations=pitch_observations,
+            possible_targets_feet=runtime.grids.possible_targets_feet,
+            all_covs=runtime.all_covs,
+            sigma_grid=sigma_grid,
+            log_lambda_grid=log_lambda_grid,
+            delta=config.base.delta,
         )
         jeeds_estimate = run_independent_jeeds_baseline(
             log_likelihood_grid=log_likelihood_grid,
@@ -776,16 +780,12 @@ def build_agent_convergence_cache(
 
 
 def write_agent_convergence_cache(path: Path, payload: dict[str, Any]) -> None:
-    import pickle
-
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def load_agent_convergence_cache(path: Path) -> dict[str, Any]:
-    import pickle
-
     with path.open("rb") as handle:
         return pickle.load(handle)
 
@@ -810,14 +810,23 @@ def run_convergence_from_agent_caches(
     config: BaseballConvergenceConfig,
     seed: int,
     agent_caches: Sequence[dict[str, Any]],
+    *,
+    sigma_grid: np.ndarray | None = None,
+    log_lambda_grid: np.ndarray | None = None,
 ) -> BaseballConvergenceSeedResult:
     """Run population MAP + hierarchical passes from per-agent cached grids.
 
     Drift for each method is relative to that method's own estimate at
     ``max(convergence_ns)`` (JEEDS→JEEDS@N_max, H-JEEDS→H-JEEDS@N_max).
+
+    Optional ``sigma_grid`` / ``log_lambda_grid`` avoid rebuilding grids when the
+    caller already has them (local sequential seed path). Pass both or neither.
     """
 
-    sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
+    if (sigma_grid is None) ^ (log_lambda_grid is None):
+        raise ValueError("Pass both sigma_grid and log_lambda_grid, or neither.")
+    if sigma_grid is None:
+        sigma_grid, log_lambda_grid = build_baseball_skill_grids_from_convergence(config)
     max_n = max(config.convergence_ns)
     seed_result = BaseballConvergenceSeedResult(
         seed=seed,
@@ -982,7 +991,7 @@ def run_single_agent_convergence_cache(
     seed: int,
     agent_spec: StatcastAgentSpec,
     *,
-    all_data=None,
+    all_data: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     # Seed is unused for Statcast likelihood numerics; see run_single_baseball_convergence_seed.
     rng = np.random.default_rng(seed)
@@ -1006,7 +1015,7 @@ def prepare_convergence_roster(args) -> Path:
     """Write BB/IP cache (if needed) and freeze ``convergence_roster.json``.
 
     Reuses the roster already resolved inside
-    ``build_baseball_convergence_config_from_args`` so prepare-roster and later
+    ``_build_convergence_config_and_data`` so prepare-roster and later
     ``--use-prepared-roster`` workers share one selection path (including
     ``output_dir`` for the BB/IP innings cache).
     """
@@ -1019,7 +1028,7 @@ def prepare_convergence_roster(args) -> Path:
         cache_path = write_bbip_innings_cache(Path(args.output_dir), season_year=args.season_year)
         print(f"[baseball-convergence] Wrote BB/IP innings cache to {cache_path.resolve()}", flush=True)
 
-    config = build_baseball_convergence_config_from_args(args)
+    config, all_data = _build_convergence_config_and_data(args)
     roster = BaseballRosterSelection(
         season_year=config.season_year,
         pitch_types=config.pitch_types,
@@ -1028,8 +1037,6 @@ def prepare_convergence_roster(args) -> Path:
         agent_pitch_counts=config.agent_pitch_counts,
         excluded_agents=config.excluded_agents,
     )
-    # Needed for BB/IP selection metadata in convergence_roster_metadata.json.
-    all_data = load_statcast_for_roster(args.season_year)
     path = write_convergence_roster(
         config.base.output_dir,
         roster,
@@ -1057,20 +1064,7 @@ def run_convergence_agent_index(args, agent_index: int) -> Path:
         )
 
     agent_spec = roster[agent_index]
-    config = build_baseball_convergence_config_from_args(args)
-    config = BaseballConvergenceConfig(
-        base=config.base,
-        season_year=config.season_year,
-        pitcher_ids=config.pitcher_ids,
-        pitch_types=config.pitch_types,
-        convergence_ns=config.convergence_ns,
-        max_reference_pitches=config.max_reference_pitches,
-        min_pitches_per_agent=config.min_pitches_per_agent,
-        agent_specs=roster,
-        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in roster),
-        agent_pitch_counts=config.agent_pitch_counts,
-        excluded_agents=config.excluded_agents,
-    )
+    config = _config_with_agent_specs(build_baseball_convergence_config_from_args(args), roster)
     seed = config.seed_values[0]
     cache = run_single_agent_convergence_cache(config, seed, agent_spec)
     out_path = agent_cache_path_for(output_dir, agent_spec.agent_id)
@@ -1096,20 +1090,7 @@ def aggregate_convergence_results(args) -> tuple[list[StatcastConvergenceAgentRe
     if not caches:
         raise FileNotFoundError("No agent convergence caches found for aggregation.")
 
-    config = build_baseball_convergence_config_from_args(args)
-    config = BaseballConvergenceConfig(
-        base=config.base,
-        season_year=config.season_year,
-        pitcher_ids=config.pitcher_ids,
-        pitch_types=config.pitch_types,
-        convergence_ns=config.convergence_ns,
-        max_reference_pitches=config.max_reference_pitches,
-        min_pitches_per_agent=config.min_pitches_per_agent,
-        agent_specs=roster,
-        agents=tuple((spec.pitcher_id, spec.pitch_type) for spec in roster),
-        agent_pitch_counts=config.agent_pitch_counts,
-        excluded_agents=config.excluded_agents,
-    )
+    config = _config_with_agent_specs(build_baseball_convergence_config_from_args(args), roster)
 
     seed_results = []
     for seed in config.seed_values:
