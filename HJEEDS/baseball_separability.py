@@ -1,5 +1,17 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""BB/IP top/bottom separability of JEEDS vs H-JEEDS estimates by observation count."""
+# This file has been fully reviewed by a human researcher as of 07/18/26 at 11:01 AM MDT.
+"""BB/IP top/bottom separability of JEEDS vs H-JEEDS estimates by observation count.
+
+Post-hoc analysis on convergence outputs (does **not** re-estimate). Reads
+``convergence_agent_level_results.csv`` + ``convergence_roster_metadata.json``,
+re-labels BB/IP tiers within the frozen roster, then reports AUC / mean-gap of
+posterior-mean ``sigma`` (primary) and ``log_lambda`` (secondary) vs top vs
+bottom BB/IP groups at each checkpoint ``N``.
+
+Paper BBIP: run after the convergence aggregate for the same output dir as
+``submit_hjeeds_baseball_convergence_paper_bbip.sh`` (``--bbip-extremes 10``,
+2021 FF, etc.). Re-running this module alone regenerates CSV/PNG/JSON under
+that dir; it does not change likelihoods or agent estimates.
+"""
 
 from __future__ import annotations
 
@@ -11,22 +23,28 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from HJEEDS.artifacts import _optional_float, _write_dict_rows
 from HJEEDS.baseball_bbip import label_bbip_tiers_for_pitcher_ids
+from HJEEDS.baseball_convergence import (
+    CONVERGENCE_ROSTER_METADATA_FILENAME,
+    planned_convergence_output_paths,
+)
+from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
 
 DEFAULT_AUC_THRESHOLD = 0.8
-AGENT_LEVEL_FILENAME = "convergence_agent_level_results.csv"
-ROSTER_FILENAME = "convergence_roster.json"
-METADATA_FILENAME = "convergence_roster_metadata.json"
 SEPARABILITY_CSV = "separability_by_N.csv"
 SEPARABILITY_PLOT = "separability_by_N.png"
 SEPARABILITY_PLOT_PROPORTIONAL = "separability_by_N_proportional.png"
 SEPARABILITY_SUMMARY = "separability_summary.json"
 TIER_TABLE_CSV = "bbip_tiers_corrected.csv"
+# Keep the historical two-panel size; do not use error_metric_figure_size (height 5.0).
+SEPARABILITY_FIGURE_SIZE = (11.0, 4.2)
 
 SEPARABILITY_CSV_HEADER = [
     "method",
@@ -40,12 +58,6 @@ SEPARABILITY_CSV_HEADER = [
     "auc",
     "notes",
 ]
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    return float(value)
 
 
 def mann_whitney_auc(scores: Sequence[float], labels: Sequence[int]) -> float:
@@ -92,7 +104,7 @@ def resolve_bbip_tiers(
     rows in older metadata are corrected.
     """
 
-    metadata_path = output_dir / METADATA_FILENAME
+    metadata_path = output_dir / CONVERGENCE_ROSTER_METADATA_FILENAME
     if not metadata_path.is_file():
         raise FileNotFoundError(f"Missing roster metadata: {metadata_path}")
     metadata = load_json(metadata_path)
@@ -104,7 +116,11 @@ def resolve_bbip_tiers(
 
     count = extremes_count
     if count is None:
-        count = int(metadata.get("bbip_extremes") or metadata.get("roster_selector", {}).get("bbip_extremes") or 0)
+        count = int(
+            metadata.get("bbip_extremes")
+            or metadata.get("roster_selector", {}).get("bbip_extremes")
+            or 0
+        )
     if count <= 0:
         count = max(1, len(selection) // 2)
 
@@ -118,8 +134,6 @@ def resolve_bbip_tiers(
         }
         for row in selection
     ]
-    import pandas as pd
-
     table = pd.DataFrame(table_rows)
     pitcher_ids = [int(row["pitcher_id"]) for row in table_rows]
     tiers = label_bbip_tiers_for_pitcher_ids(table, pitcher_ids, extremes_count=count)
@@ -135,15 +149,12 @@ def resolve_bbip_tiers(
 
 
 def write_corrected_tier_table(path: Path, tiers: dict[int, dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     rows = sorted(tiers.values(), key=lambda row: (str(row["tier"]), float(row["bbip"])))
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["pitcher_id", "player_name", "walks", "innings_pitched", "bbip", "tier"],
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    _write_dict_rows(
+        path,
+        ["pitcher_id", "player_name", "walks", "innings_pitched", "bbip", "tier"],
+        rows,
+    )
 
 
 def compute_separability_rows(
@@ -156,9 +167,9 @@ def compute_separability_rows(
         ("jeeds", "jeeds_posterior_mean_sigma", "jeeds_posterior_mean_log_lambda"),
         ("hierarchical", "hierarchical_posterior_mean_sigma", "hierarchical_posterior_mean_log_lambda"),
     )
-    skill_metrics = (
-        ("sigma", 0, "Higher sigma = worse execution; expect top-BB/IP (walkers) higher."),
-        ("log_lambda", 1, "Secondary axis; not the primary original-JEEDS separator."),
+    skill_notes = (
+        ("sigma", "Higher sigma = worse execution; expect top-BB/IP (walkers) higher."),
+        ("log_lambda", "Secondary axis; not the primary original-JEEDS separator."),
     )
 
     by_n: dict[int, list[dict[str, Any]]] = {}
@@ -177,8 +188,9 @@ def compute_separability_rows(
     for convergence_n in sorted(by_n):
         group = by_n[convergence_n]
         for method_name, sigma_key, log_lambda_key in methods:
-            for metric_name, key_index, notes in skill_metrics:
-                value_key = sigma_key if key_index == 0 else log_lambda_key
+            value_keys = {"sigma": sigma_key, "log_lambda": log_lambda_key}
+            for metric_name, notes in skill_notes:
+                value_key = value_keys[metric_name]
                 bottom_scores: list[float] = []
                 top_scores: list[float] = []
                 for row in group:
@@ -232,11 +244,7 @@ def first_n_meeting_auc(
 
 
 def write_separability_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SEPARABILITY_CSV_HEADER)
-        writer.writeheader()
-        writer.writerows(rows)
+    _write_dict_rows(path, SEPARABILITY_CSV_HEADER, rows)
 
 
 def plot_separability_by_n(
@@ -250,12 +258,10 @@ def plot_separability_by_n(
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
-    from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
-
     if x_scale not in {"categorical", "proportional"}:
         raise ValueError(f"Unsupported x_scale={x_scale!r}")
 
-    figure, axes = plt.subplots(1, 2, figsize=(11.0, 4.2), sharex=True)
+    figure, axes = plt.subplots(1, 2, figsize=SEPARABILITY_FIGURE_SIZE, sharex=True)
     panels = (
         ("auc", "Separability (AUC)", "AUC (top vs bottom BB/IP)"),
         (
@@ -407,7 +413,7 @@ def run_separability_analysis(
     auc_threshold: float = DEFAULT_AUC_THRESHOLD,
     extremes_count: int | None = None,
 ) -> dict[str, Any]:
-    agent_path = output_dir / AGENT_LEVEL_FILENAME
+    agent_path = planned_convergence_output_paths(output_dir)["agent_level_csv"]
     if not agent_path.is_file():
         raise FileNotFoundError(f"Missing agent-level results: {agent_path}")
 
@@ -415,7 +421,7 @@ def run_separability_analysis(
     write_corrected_tier_table(output_dir / TIER_TABLE_CSV, tiers)
 
     # Patch metadata bbip_selection tiers in place for reproducibility of later reads.
-    metadata_path = output_dir / METADATA_FILENAME
+    metadata_path = output_dir / CONVERGENCE_ROSTER_METADATA_FILENAME
     metadata = load_json(metadata_path)
     for row in metadata.get("bbip_selection") or []:
         pitcher_id = int(row["pitcher_id"])

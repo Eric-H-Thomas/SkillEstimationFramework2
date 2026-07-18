@@ -31,6 +31,7 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
+from .artifacts import _optional_float
 from .baseball_config import BaseballExperimentConfig, build_baseball_skill_grids
 from .baseball_likelihood import compute_baseball_log_likelihood_grid
 from .baseball_hyperpriors import resolve_baseball_hyperpriors, true_population_from_hyperpriors
@@ -613,12 +614,6 @@ def _estimate_from_dict(payload: dict[str, Any]) -> MethodEstimate:
         status=str(payload.get("status", "")),
         notes=str(payload.get("notes", "")),
     )
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    return float(value)
 
 
 def convergence_roster_path_for(output_dir: Path) -> Path:

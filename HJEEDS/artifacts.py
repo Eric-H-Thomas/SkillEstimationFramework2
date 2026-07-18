@@ -144,6 +144,14 @@ def _value_or_blank(value: Any) -> Any:
     return "" if value is None else value
 
 
+def _optional_float(value: Any) -> float | None:
+    """Parse optional numeric CSV/JSON fields; blank or None becomes None."""
+
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
 def _abs_difference_or_blank(left: float | None, right: float | None) -> Any:
     """Return a CSV-friendly absolute difference when both values exist."""
 

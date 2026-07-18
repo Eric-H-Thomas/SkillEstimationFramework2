@@ -32,6 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from HJEEDS.artifacts import _optional_float
 from HJEEDS.baseball_config import (
     DEFAULT_LAMBDA_MAX,
     DEFAULT_LAMBDA_MIN,
@@ -183,12 +184,6 @@ def _estimate_to_row(
         "status": estimate.status,
         "notes": estimate.notes,
     }
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    return float(value)
 
 
 def _row_from_estimate_row(row: dict[str, Any]) -> MethodEstimate:
