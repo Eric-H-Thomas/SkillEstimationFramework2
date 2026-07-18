@@ -1,7 +1,6 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-#
-# Tonight smoke: 10-agent Phase 2 convergence with calibrated hyperpriors (single job).
+# Smoke: 10-agent Phase 2 convergence with calibrated hyperpriors (single job).
+# Pins --time 18:00:00 (sequential over 10 agents in one job).
 
 set -euo pipefail
 

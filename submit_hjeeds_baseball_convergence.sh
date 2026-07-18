@@ -1,7 +1,7 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-#
 # Submit a single Slurm job for the Statcast baseball HJEEDS convergence study.
+# Runs HJEEDS.baseball_convergence_study then zips the output directory.
+# Defaults: --time 08:00:00, --mem 8G (override via flags; smoke10 pins 18:00:00).
 
 set -euo pipefail
 
@@ -36,7 +36,7 @@ Slurm options:
   --qos QOS                      Slurm QOS (default: normal).
   --partition PARTITION          Optional Slurm partition.
   --account ACCOUNT              Optional Slurm account.
-  --time HH:MM:SS                Walltime (default: 04:00:00).
+  --time HH:MM:SS                Walltime (default: 08:00:00).
   --mem MEM                      Memory (default: 8G).
   --cpus-per-task N              CPUs per task (default: 1).
   --output PATH                  Slurm stdout path pattern.
@@ -48,15 +48,9 @@ Use exactly one roster selector: --all-eligible-agents, --top-pitchers,
 USAGE
 }
 
-format_command() {
-  local quoted=()
-  local part
-  for part in "$@"; do
-    printf -v part "%q" "${part}"
-    quoted+=("${part}")
-  done
-  printf "%s" "${quoted[*]}"
-}
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hjeeds_baseball_slurm_common.sh
+source "${script_dir}/hjeeds_baseball_slurm_common.sh"
 
 base_seed=""
 num_seeds="1"
@@ -79,7 +73,7 @@ job_name="hjeeds-baseball-conv"
 qos="normal"
 partition=""
 account=""
-time_limit="04:00:00"
+time_limit="08:00:00"
 memory="8G"
 cpus_per_task="1"
 slurm_output=""
@@ -236,30 +230,11 @@ if [[ "${hyperprior_preset}" == "calibrated" && -z "${hyperprior_config}" ]]; th
   exit 1
 fi
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sbatch_script="${script_dir}/run_hjeeds_baseball_convergence.sbatch"
-
-resolve_python() {
-  if [[ -n "${python_bin}" ]]; then
-    echo "${python_bin}"
-    return
-  fi
-  if command -v conda >/dev/null 2>&1; then
-    conda run -n "${conda_env}" which python 2>/dev/null && return
-  fi
-  if command -v module >/dev/null 2>&1; then
-    module load miniforge3
-    eval "$(conda shell.bash hook)"
-    conda activate "${conda_env}"
-    command -v python
-    return
-  fi
-  command -v python3
-}
 
 bbip_cache_path=""
 if [[ -n "${bbip_extremes}" ]]; then
-  resolved_python="$(resolve_python)"
+  resolved_python="$(hjeeds_baseball_resolve_python)"
   if [[ ! -x "${resolved_python}" ]]; then
     echo "Error: Could not resolve a Python interpreter for BB/IP cache prep. Pass --python-bin." >&2
     exit 1
@@ -364,7 +339,7 @@ echo "  convergence_ns=${convergence_ns}"
 echo "  max_reference_pitches=${max_reference_pitches:-all}"
 echo "  output_dir=${output_dir}"
 echo "Submit command:"
-echo "  $(format_command "${submit_cmd[@]}")"
+echo "  $(hjeeds_baseball_format_command "${submit_cmd[@]}")"
 
 if [[ "${dry_run}" == "1" ]]; then
   exit 0

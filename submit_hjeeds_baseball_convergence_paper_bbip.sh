@@ -1,7 +1,7 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-#
 # Paper run: 20-agent BB/IP convergence (top 10 + bottom 10) via Slurm array.
+# Pins the same walltimes used for the committed paper BBIP results:
+#   --time 12:00:00 (per agent; ~4h observed)  --agg-time 01:00:00
 
 set -euo pipefail
 

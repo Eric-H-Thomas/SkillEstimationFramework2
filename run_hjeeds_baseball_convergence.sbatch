@@ -1,37 +1,35 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# Single-job worker for Statcast baseball HJEEDS convergence.
+# Invoked by submit_hjeeds_baseball_convergence.sh (CLI --time/--mem override these).
 #SBATCH --job-name=hjeeds-baseball-conv
 #SBATCH --qos=normal
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=slurm-%x-%j.out
 
 set -euo pipefail
 
-export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
-export MPLBACKEND=Agg
-if [[ -n "${SLURM_TMPDIR:-}" ]]; then
-  export MPLCONFIGDIR="${MPLCONFIGDIR:-${SLURM_TMPDIR}/matplotlib}"
-else
-  export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib-${USER:-user}-${SLURM_JOB_ID:-manual}}"
+# Submit passes --chdir=<repo root>. Prefer PWD over BASH_SOURCE: Slurm may
+# execute a spool copy of this .sbatch, so dirname(BASH_SOURCE) would be wrong.
+_common="${PWD}/hjeeds_baseball_slurm_common.sh"
+if [[ ! -f "${_common}" && -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/hjeeds_baseball_slurm_common.sh" ]]; then
+  _common="${SLURM_SUBMIT_DIR}/hjeeds_baseball_slurm_common.sh"
 fi
-mkdir -p "${MPLCONFIGDIR}"
-
-python_bin="${PYTHON_BIN:-}"
-if [[ -z "${python_bin}" ]]; then
-  if ! command -v module >/dev/null 2>&1; then
-    echo "Error: module command not found and PYTHON_BIN is unset." >&2
-    echo "Pass --python-bin to submit_hjeeds_baseball_convergence.sh." >&2
-    exit 1
-  fi
-  module load miniforge3
-  eval "$(conda shell.bash hook)"
-  conda activate "${CONDA_ENV:-skill-estimation}"
-  python_bin="$(command -v python)"
+if [[ ! -f "${_common}" ]]; then
+  _common="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hjeeds_baseball_slurm_common.sh"
 fi
+if [[ ! -f "${_common}" ]]; then
+  echo "Error: cannot find hjeeds_baseball_slurm_common.sh (PWD=${PWD}, SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-unset})." >&2
+  exit 1
+fi
+# shellcheck source=hjeeds_baseball_slurm_common.sh
+source "${_common}"
 
+hjeeds_baseball_setup_matplotlib_env
+python_bin="$(hjeeds_baseball_resolve_cluster_python submit_hjeeds_baseball_convergence.sh)" || exit 1
 echo "[baseball-convergence] Using python: ${python_bin}" >&2
+
 "${python_bin}" - <<'PY'
 import sys
 
@@ -101,30 +99,4 @@ echo "[baseball-convergence] Starting: ${python_bin} ${python_args[*]}" >&2
 "${python_bin}" "${python_args[@]}"
 
 output_dir="${OUTPUT_DIR:-HJEEDS/results/baseball_convergence_n100}"
-zip_path="${RESULTS_ZIP_PATH:-${output_dir%/}.zip}"
-"${python_bin}" - "${output_dir}" "${zip_path}" <<'PY'
-from __future__ import annotations
-
-import sys
-import zipfile
-from pathlib import Path
-
-source_dir = Path(sys.argv[1]).resolve()
-zip_path = Path(sys.argv[2]).resolve()
-
-if not source_dir.exists():
-    raise FileNotFoundError(f"Cannot zip missing output directory: {source_dir}")
-
-zip_path.parent.mkdir(parents=True, exist_ok=True)
-if zip_path.exists():
-    zip_path.unlink()
-
-with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-    for path in sorted(source_dir.rglob("*")):
-        if path.resolve() == zip_path:
-            continue
-        if path.is_file():
-            archive.write(path, Path(source_dir.name) / path.relative_to(source_dir))
-
-print(f"[baseball-convergence] Zipped results to {zip_path}", flush=True)
-PY
+hjeeds_baseball_zip_results "${python_bin}" "${output_dir}" "baseball-convergence"

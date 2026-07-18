@@ -1,7 +1,7 @@
 #!/bin/bash
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-#
 # Submit a Slurm array for per-agent baseball convergence caches, then aggregate.
+# Paper BBIP entry: submit_hjeeds_baseball_convergence_paper_bbip.sh
+# Defaults: agent 08:00:00 / 8G; agg 01:00:00 / 4G (paper wrapper pins 12:00:00).
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ Slurm options:
   --qos QOS                      Slurm QOS (default: normal).
   --partition PARTITION          Optional Slurm partition.
   --account ACCOUNT              Optional Slurm account.
-  --time HH:MM:SS                Per-agent walltime (default: 12:00:00).
+  --time HH:MM:SS                Per-agent walltime (default: 08:00:00).
   --agg-time HH:MM:SS            Aggregation walltime (default: 01:00:00).
   --mem MEM                      Memory per agent task (default: 8G).
   --agg-mem MEM                  Aggregation memory (default: 4G).
@@ -49,15 +49,9 @@ Slurm options:
 USAGE
 }
 
-format_command() {
-  local quoted=()
-  local part
-  for part in "$@"; do
-    printf -v part "%q" "${part}"
-    quoted+=("${part}")
-  done
-  printf "%s" "${quoted[*]}"
-}
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hjeeds_baseball_slurm_common.sh
+source "${script_dir}/hjeeds_baseball_slurm_common.sh"
 
 base_seed="default"
 season_year=""
@@ -80,7 +74,7 @@ job_name="hjeeds-baseball-conv"
 qos="normal"
 partition=""
 account=""
-time_limit="12:00:00"
+time_limit="08:00:00"
 agg_time_limit="01:00:00"
 memory="8G"
 agg_memory="4G"
@@ -250,28 +244,9 @@ if [[ "${hyperprior_preset}" == "calibrated" && -z "${hyperprior_config}" ]]; th
   exit 1
 fi
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 array_script="${script_dir}/run_hjeeds_baseball_convergence_array.sbatch"
 
-resolve_python() {
-  if [[ -n "${python_bin}" ]]; then
-    echo "${python_bin}"
-    return
-  fi
-  if command -v conda >/dev/null 2>&1; then
-    conda run -n "${conda_env}" which python 2>/dev/null && return
-  fi
-  if command -v module >/dev/null 2>&1; then
-    module load miniforge3
-    eval "$(conda shell.bash hook)"
-    conda activate "${conda_env}"
-    command -v python
-    return
-  fi
-  command -v python3
-}
-
-resolved_python="$(resolve_python)"
+resolved_python="$(hjeeds_baseball_resolve_python)"
 if [[ ! -x "${resolved_python}" ]]; then
   echo "Error: Could not resolve a Python interpreter. Pass --python-bin." >&2
   exit 1
@@ -317,18 +292,7 @@ echo "  ${resolved_python} ${prepare_args[*]}"
 )
 
 roster_file="${script_dir}/${output_dir}/convergence_roster.json"
-agent_count="$(
-  PYTHONPATH="${script_dir}${PYTHONPATH:+:$PYTHONPATH}" \
-  "${resolved_python}" - "${roster_file}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(len(payload))
-PY
-)"
+agent_count="$(hjeeds_baseball_roster_agent_count "${resolved_python}" "${roster_file}")"
 
 if ! [[ "${agent_count}" =~ ^[0-9]+$ ]] || [[ "${agent_count}" -lt 1 ]]; then
   echo "Error: roster is empty or missing (${roster_file})." >&2
@@ -338,7 +302,6 @@ fi
 common_sbatch_args=(
   --job-name="${job_name}"
   --qos="${qos}"
-  --mem="${memory}"
   --cpus-per-task="${cpus_per_task}"
   --chdir="${script_dir}"
 )
@@ -382,7 +345,7 @@ fi
 
 array_sbatch_args=("${common_sbatch_args[@]}")
 array_sbatch_args[0]="--job-name=${job_name}"
-array_sbatch_args+=(--time="${time_limit}")
+array_sbatch_args+=(--time="${time_limit}" --mem="${memory}")
 
 array_cmd=(
   env "${experiment_env[@]}"
@@ -400,7 +363,7 @@ echo "  pitch_types=${pitch_types}"
 echo "  convergence_ns=${convergence_ns}"
 echo "  output_dir=${output_dir}"
 echo "Array command:"
-echo "  $(format_command "${array_cmd[@]}")"
+echo "  $(hjeeds_baseball_format_command "${array_cmd[@]}")"
 
 if [[ "${dry_run}" == "1" ]]; then
   agg_preview_args=("${common_sbatch_args[@]}")
@@ -415,7 +378,7 @@ if [[ "${dry_run}" == "1" ]]; then
     "${array_script}"
   )
   echo "Aggregation command:"
-  echo "  $(format_command "${aggregate_preview[@]}")"
+  echo "  $(hjeeds_baseball_format_command "${aggregate_preview[@]}")"
   exit 0
 fi
 
@@ -438,6 +401,6 @@ aggregate_cmd=(
 
 echo "Submitting aggregation task after array job ${array_job_id}."
 echo "Aggregation command:"
-echo "  $(format_command "${aggregate_cmd[@]}")"
+echo "  $(hjeeds_baseball_format_command "${aggregate_cmd[@]}")"
 aggregate_output="$("${aggregate_cmd[@]}")"
 echo "${aggregate_output}"
