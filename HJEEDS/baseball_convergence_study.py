@@ -13,7 +13,9 @@ Paper BBIP: ``submit_hjeeds_baseball_convergence_paper_bbip.sh`` →
 ``max_reference_pitches=100``, ``--hyperprior-preset baseball-2021-ff``.
 
 Drift is self-reference (JEEDS→JEEDS@N_max, H-JEEDS→H-JEEDS@N_max), not
-ground truth. Statcast estimates are deterministic in seed.
+ground truth. Statcast estimates are deterministic in seed. When roster
+metadata includes ``bbip_selection``, aggregate / ``--plot-only`` also write
+BBIP separability plots beside the drift figures.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from HJEEDS.baseball_config import (
     DEFAULT_PITCH_TYPES,
 )
 from HJEEDS.baseball_convergence import (
+    CONVERGENCE_ROSTER_METADATA_FILENAME,
     DEFAULT_CONVERGENCE_NS,
     DEFAULT_OUTPUT_DIR_CONVERGENCE,
     DEFAULT_PITCHER_IDS,
@@ -171,7 +174,10 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     parser.add_argument(
         "--plot-only",
         action="store_true",
-        help="Regenerate summary CSVs and drift plots from an existing agent-level CSV.",
+        help=(
+            "Regenerate summary CSVs and drift plots from an existing agent-level CSV. "
+            "Also regenerates BBIP separability when bbip_selection is present."
+        ),
     )
     parser.add_argument(
         "--plot-agent-estimates",
@@ -195,7 +201,10 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
     parser.add_argument(
         "--aggregate-results",
         action="store_true",
-        help="Combine per-agent caches and write convergence CSVs and drift_by_N.png.",
+        help=(
+            "Combine per-agent caches and write convergence CSVs and drift_by_N.png. "
+            "When roster metadata includes bbip_selection, also write separability plots."
+        ),
     )
     parser.add_argument(
         "--use-prepared-roster",
@@ -262,18 +271,64 @@ def write_convergence_summary_csvs(
     _write_dict_rows(paths["summary_overall_csv"], SUMMARY_OVERALL_CSV_HEADER, summary_overall_rows)
 
 
+def _roster_has_bbip_selection(output_dir: Path) -> bool:
+    """True when prepare-roster wrote a BB/IP extremes manifest under output_dir."""
+
+    import json
+
+    metadata_path = output_dir / CONVERGENCE_ROSTER_METADATA_FILENAME
+    if not metadata_path.is_file():
+        return False
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(payload.get("bbip_selection"))
+
+
+def maybe_write_separability_outputs(output_dir: Path) -> dict[str, Any] | None:
+    """Run BBIP separability after drift plots when ``bbip_selection`` is present.
+
+    Non-BBIP rosters (top-pitchers / pitcher-ids / all-eligible) skip silently so
+    aggregate jobs stay unchanged. Failures are logged and swallowed so a plotting
+    error cannot undo an otherwise successful aggregate (CSVs / drift plots).
+    """
+
+    if not _roster_has_bbip_selection(output_dir):
+        return None
+
+    from HJEEDS.baseball_separability import run_separability_analysis
+
+    try:
+        summary = run_separability_analysis(output_dir)
+    except Exception as exc:
+        print(
+            f"[baseball-convergence] WARNING: BBIP separability failed under "
+            f"{output_dir.resolve()}: {exc}",
+            flush=True,
+        )
+        return None
+
+    print(
+        f"[baseball-convergence] Wrote BBIP separability artifacts under {output_dir.resolve()}",
+        flush=True,
+    )
+    return summary
+
+
 def write_convergence_outputs(
     output_dir: Path,
     agent_results: Sequence[StatcastConvergenceAgentResult],
     summary_by_n_rows: Sequence[dict[str, Any]],
     summary_overall_rows: Sequence[dict[str, Any]],
 ) -> dict[str, Path]:
-    """Write agent CSV, summary CSVs, and both drift plots."""
+    """Write agent CSV, summary CSVs, drift plots, and BBIP separability when applicable."""
 
     paths = planned_convergence_output_paths(output_dir)
     write_convergence_agent_level_csv(paths["agent_level_csv"], agent_results)
     write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
     write_drift_plots(output_dir, summary_by_n_rows)
+    maybe_write_separability_outputs(output_dir)
     return paths
 
 
@@ -543,6 +598,7 @@ def regenerate_plot_from_existing_results(output_dir: Path) -> None:
     summary_by_n_rows, summary_overall_rows = summarize_drift_rows_from_agent_csv_rows(updated_rows)
     write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
     write_drift_plots(output_dir, summary_by_n_rows)
+    maybe_write_separability_outputs(output_dir)
     print(
         f"[baseball-convergence] Regenerated dual-reference summaries and plots under "
         f"{output_dir.resolve()}",

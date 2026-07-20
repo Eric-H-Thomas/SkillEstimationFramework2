@@ -581,7 +581,8 @@ def print_baseball_convergence_dry_run_summary(config: BaseballConvergenceConfig
     )
     print(
         "  7. Write convergence_agent_level_results.csv, summary_by_N.csv, "
-        "drift_by_N.png (+ proportional companion)"
+        "drift_by_N.png (+ proportional companion); if bbip_selection is present, "
+        "also write separability_by_N.png / CSV / summary"
     )
     print()
     print(

@@ -7,10 +7,11 @@ re-labels BB/IP tiers within the frozen roster, then reports AUC / mean-gap of
 posterior-mean ``sigma`` (primary) and ``log_lambda`` (secondary) vs top vs
 bottom BB/IP groups at each checkpoint ``N``.
 
-Paper BBIP: run after the convergence aggregate for the same output dir as
-``submit_hjeeds_baseball_convergence_paper_bbip.sh`` (``--bbip-extremes 10``,
-2021 FF, etc.). Re-running this module alone regenerates CSV/PNG/JSON under
-that dir; it does not change likelihoods or agent estimates.
+Paper BBIP: ``--aggregate-results`` / ``--plot-only`` auto-run this when
+``convergence_roster_metadata.json`` contains ``bbip_selection`` (same output
+dir as ``submit_hjeeds_baseball_convergence_paper_bbip.sh``). Re-running this
+module alone still regenerates CSV/PNG/JSON; it does not change likelihoods or
+agent estimates.
 """
 
 from __future__ import annotations
