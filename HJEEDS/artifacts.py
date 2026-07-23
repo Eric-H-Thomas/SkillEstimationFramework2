@@ -71,11 +71,11 @@ METHOD_COLORS = {
 }
 
 METHOD_MARKERS = {
-    "jeeds": "o",
-    "hierarchical": "s",
+    "jeeds": "^",
+    "hierarchical": "D",
 }
 
-METHOD_MARKER_SIZE = 4.0
+METHOD_MARKER_SIZE = 6.0
 
 
 def method_label(method: str) -> str:
