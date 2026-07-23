@@ -163,10 +163,10 @@ Each agents-per-bucket folder also contains prior-sensitivity combined CSVs and 
 
 Use `HJEEDS.darts_population_shape_sensitivity` to test how sensitive H-JEEDS is when the true simulator population does not match the estimator's unimodal Gaussian population model.
 
-The default sweep crosses five agents-per-bucket values with four true population shapes:
+The default sweep crosses five agents-per-bucket values with three true population shapes:
 
 ```text
-5 agents-per-bucket values x 4 population shapes = 20 scenarios
+5 agents-per-bucket values x 3 population shapes = 15 scenarios
 ```
 
 Population shapes:
@@ -174,7 +174,6 @@ Population shapes:
 - `default`
 - `uniform`
 - `bimodal`
-- `outlier_heavy`
 
 Dry run:
 
@@ -211,6 +210,38 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 ```
 
 After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
+
+## Outlier-Contamination Ablation
+
+Use `HJEEDS.darts_outlier_sensitivity` to test explicit contamination separately from population shape. Every seed retains the default 25-agent design with five agents in each observation-count bucket. The runner first draws the default Gaussian population, then replaces 0, 1, or 5 agents with profiles at Mahalanobis radius 3 in log-skill space. Directions outside the estimator's skill-grid support are redrawn. In the five-outlier condition, one replacement appears in every observation-count bucket.
+
+```text
+contamination counts {0, 1, 5} = 3 scenarios
+```
+
+Dry run:
+
+```bash
+python3 -m HJEEDS.darts_outlier_sensitivity --seed default --num-seeds 1 --dry-run
+```
+
+Run locally:
+
+```bash
+python3 -m HJEEDS.darts_outlier_sensitivity \
+  --seed 12345 \
+  --num-seeds 500 \
+  --output-dir HJEEDS/results/hierarchical_darts_outlier_sensitivity
+```
+
+Primary root outputs:
+
+- `outlier_sensitivity_scenarios.csv`
+- `outlier_sensitivity_agent_level_results.csv`
+- `outlier_sensitivity_summary_by_bucket.csv`
+- `outlier_sensitivity_summary_overall.csv`
+- `outlier_sensitivity_all_agents.png`
+- `outlier_sensitivity_subgroups.png`
 
 ## High-Data-Anchor Availability Ablation
 

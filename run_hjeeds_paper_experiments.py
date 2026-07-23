@@ -121,13 +121,23 @@ EXPERIMENT_SPECS = (
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 4 population shapes x 5 agents-per-bucket values
+    # 3 population shapes x 5 agents-per-bucket values
     ExperimentSpec(
         slug="population_shape",
         label="Population shape",
         module="HJEEDS.darts_population_shape_sensitivity",
         output_subdir="population_shape",
-        scenario_count=20,
+        scenario_count=15,
+        supports_scenario_array=True,
+        needs_aggregation=True,
+    ),
+    # Explicit contamination counts: 0, 1, and 5 injected outliers
+    ExperimentSpec(
+        slug="outlier_sensitivity",
+        label="Outlier contamination",
+        module="HJEEDS.darts_outlier_sensitivity",
+        output_subdir="outlier_sensitivity",
+        scenario_count=3,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),

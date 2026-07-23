@@ -1,4 +1,4 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# This file has been fully verified by a human researcher as of 07/23/2026 at 9:59 AM MT.
 """Run compact H-JEEDS compound-stress sensitivity experiments.
 
 This runner combines a small number of misspecification settings so the paper
@@ -46,8 +46,8 @@ from HJEEDS.decision_models import (
 )
 from HJEEDS.population_shapes import (
     DEFAULT_POPULATION_SHAPE_SLUG,
-    OUTLIER_HEAVY_POPULATION_SHAPE_SLUG,
     BIMODAL_POPULATION_SHAPE_SLUG,
+    UNIFORM_POPULATION_SHAPE_SLUG,
     population_shape_metadata_row,
 )
 
@@ -122,10 +122,13 @@ COMPOUND_STRESS_SPECS = (
         slug="moderate_compound_stress",
         label="Moderate Compound Stress",
         hyperprior_condition_slug=MODERATE_HYPERPRIOR_CONDITION_SLUG,
-        population_shape_slug=OUTLIER_HEAVY_POPULATION_SHAPE_SLUG,
+        population_shape_slug=UNIFORM_POPULATION_SHAPE_SLUG,
         decision_model_slug=FLIP_DECISION_MODEL_SLUG,
         true_correlation=0.0,
-        description="Moderate combined stress across hyperpriors, population shape, policy, and correlation",
+        description=(
+            "Moderate combined hyperprior misspecification with a uniform population, "
+            "flip behavior, and zero true skill correlation"
+        ),
     ),
     CompoundStressSpec(
         slug="strong_compound_stress",

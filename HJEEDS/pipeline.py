@@ -1,7 +1,8 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# This file was previously human-reviewed, but was modified by AI and requires re-review.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Callable
 
 import numpy as np
 
@@ -31,7 +32,18 @@ from .sampling import (
 # agent-level posteriors under that fitted prior.
 
 
-def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
+TruthSampler = Callable[
+    [np.random.Generator, ExperimentConfig, np.ndarray, np.ndarray],
+    list[AgentTruth],
+]
+
+
+def run_single_seed(
+    config: ExperimentConfig,
+    seed: int,
+    *,
+    truth_sampler: TruthSampler = sample_true_population_params,
+) -> SeedResult:
     """Run the experiment pipeline for one seed.
 
     The structure below is intentionally explicit so it is easy to see the
@@ -43,7 +55,7 @@ def run_single_seed(config: ExperimentConfig, seed: int) -> SeedResult:
     rng = np.random.default_rng(seed)
     reward_surface = sample_reward_surface(rng, config)
     sigma_grid, log_lambda_grid = build_skill_grids(config)
-    agent_truths = sample_true_population_params(rng, config, sigma_grid, log_lambda_grid)
+    agent_truths = truth_sampler(rng, config, sigma_grid, log_lambda_grid)
     observation_counts = assign_observation_counts(config)
 
     seed_result = SeedResult(

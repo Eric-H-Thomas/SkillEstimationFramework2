@@ -12,9 +12,9 @@ usage() {
 Usage: submit_hjeeds_population_shape_sensitivity.sh [options]
 
 Submit the H-JEEDS population-shape ablation to Slurm. By default this launches
-20 scenario tasks:
+15 scenario tasks:
 
-  population shapes: default,uniform,bimodal,outlier_heavy
+  population shapes: default,uniform,bimodal
   agents per bucket: 1,2,5,10,25
 
 The helper submits one afterok aggregation task that collects the scenario
@@ -64,7 +64,7 @@ memory="16G"
 cpus_per_task=""
 slurm_output=""
 dry_run="0"
-population_shape_count="4"
+population_shape_count="3"
 agents_per_bucket_count="5"
 
 while [[ $# -gt 0 ]]; do
@@ -197,7 +197,7 @@ array_cmd=(
 )
 
 echo "Submitting ${total_tasks} scenario tasks."
-echo "Population shapes: default, uniform, bimodal, outlier_heavy"
+echo "Population shapes: default, uniform, bimodal"
 echo "Scenario array command:"
 echo "  $(format_command "${array_cmd[@]}")"
 

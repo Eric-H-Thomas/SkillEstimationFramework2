@@ -11,14 +11,15 @@ The unified runner `run_hjeeds_paper_experiments.py` launches the full current H
 | `baseline` | 1 | Compare independent JEEDS against H-JEEDS under the main uneven-data design |
 | `hyperprior_robustness` | 60 | Stress the empirical-Bayes hyperpriors across bias, confidence, and misspecified prior components |
 | `agents_per_bucket` | 15 | Test sensitivity to the number of demonstrators available at each observation-count level |
-| `population_shape` | 20 | Test whether the Gaussian population assumption is brittle when the true population is uniform, bimodal, or outlier-heavy |
+| `population_shape` | 15 | Test whether the Gaussian population assumption is brittle when the true population is uniform or bimodal |
+| `outlier_sensitivity` | 3 | Test the effect of replacing 0, 1, or 5 default agents with explicit skill-profile outliers |
 | `anchor_availability` | 6 | Test whether low-data estimation depends on having some higher-data anchor agents |
 | `decision_model` | 20 | Test misspecification when true agents use non-softmax decision rules but H-JEEDS still assumes softmax |
 | `true_correlation` | 25 | Test sensitivity to the true execution/decision skill correlation |
 | `grid_resolution` | 3 | Check whether conclusions depend on the estimator grid resolution |
 | `compound_stress` | 15 | Combine representative stressors to show the estimator is not only robust one perturbation at a time |
 
-The default suite contains 9 experiment families and 165 Slurm scenario tasks before aggregation and final zipping.
+The default suite contains 10 experiment families and 163 Slurm scenario tasks before aggregation and final zipping.
 
 ## Local Run
 
@@ -83,6 +84,7 @@ baseline/
 hyperprior_robustness/
 agents_per_bucket/
 population_shape/
+outlier_sensitivity/
 anchor_availability/
 decision_model/
 true_correlation/
@@ -102,7 +104,7 @@ The runner also writes:
 
 The baseline experiment establishes the main H-JEEDS versus independent JEEDS comparison. Hyperprior robustness checks whether low-data improvements depend on overly convenient empirical-Bayes priors. The agents-per-bucket and anchor-availability studies separate two sample-size questions: how many demonstrators are available overall, and whether the population contains high-data anchor agents.
 
-Population-shape, decision-model, and true-correlation studies target modeling-assumption mismatch from three angles: the population distribution over skill profiles, the behavioral policy that generated actions, and the true relationship between execution and decision-making skill. Grid resolution is mainly an appendix check to show numerical conclusions are not artifacts of one discretization. The compound-stress study is a compact sanity check that combines representative hard settings without turning the main paper into an ablation soup.
+Population-shape, outlier-contamination, decision-model, and true-correlation studies target modeling-assumption mismatch from four angles: higher-order population shape, explicit contamination, the behavioral policy that generated actions, and the true relationship between execution and decision-making skill. Grid resolution is mainly an appendix check to show numerical conclusions are not artifacts of one discretization. The compound-stress study is a compact sanity check that combines representative hard settings without turning the main paper into an ablation soup.
 
 ## Resume And Dry Run
 

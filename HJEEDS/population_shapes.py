@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 05/19/26 at 11:34 AM MT.
+# This file was previously human-verified, but was modified by AI on 07/22/26 and requires re-review.
 """Population-shape definitions for H-JEEDS simulator misspecification studies."""
 
 from __future__ import annotations
@@ -13,11 +13,8 @@ from .models import TruePopulationConfig
 DEFAULT_POPULATION_SHAPE_SLUG = "default"
 UNIFORM_POPULATION_SHAPE_SLUG = "uniform"
 BIMODAL_POPULATION_SHAPE_SLUG = "bimodal"
-OUTLIER_HEAVY_POPULATION_SHAPE_SLUG = "outlier_heavy"
 
-BIMODAL_BETWEEN_VARIANCE_FRACTION = 0.45
-OUTLIER_HEAVY_OUTLIER_WEIGHT = 0.20
-OUTLIER_HEAVY_OUTLIER_SD_MULTIPLIER = 2.0
+BIMODAL_BETWEEN_VARIANCE_FRACTION = 0.75
 
 
 @dataclass(frozen=True)
@@ -43,12 +40,10 @@ POPULATION_SHAPE_SPECS = (
     PopulationShapeSpec(
         slug=BIMODAL_POPULATION_SHAPE_SLUG,
         label="Bimodal",
-        description="Moment-matched equal-weight two-cluster Gaussian mixture",
-    ),
-    PopulationShapeSpec(
-        slug=OUTLIER_HEAVY_POPULATION_SHAPE_SLUG,
-        label="Outlier-heavy",
-        description="Moment-matched 80/20 same-center Gaussian scale mixture with broad outliers",
+        description=(
+            "Moment-matched equal-weight two-cluster Gaussian mixture with "
+            f"b={BIMODAL_BETWEEN_VARIANCE_FRACTION:.2f}"
+        ),
     ),
 )
 
@@ -131,9 +126,9 @@ def _sample_bimodal(
 ) -> np.ndarray:
     """Sample from a moment-matched two-component Gaussian mixture.
 
-    In this function, we take (BIMODAL_BETWEEN_VARIANCE_FRACTION)% of the original
-    variance along the widest axis and re-express it as distance between two
-    symmetric Gaussian cluster centers.
+    We take BIMODAL_BETWEEN_VARIANCE_FRACTION of the original variance along the
+    widest axis and re-express it as distance between two symmetric Gaussian
+    cluster centers.
     """
 
     # Decompose covariance into eigenvalues and eigenvectors so we can identify the widest direction
@@ -158,33 +153,6 @@ def _sample_bimodal(
     return rng.multivariate_normal(component_mean, component_covariance)
 
 
-def _sample_outlier_heavy(
-    rng: np.random.Generator,
-    mean_vector: np.ndarray,
-    covariance: np.ndarray,
-) -> np.ndarray:
-    """Sample from a moment-matched same-center Gaussian scale mixture."""
-
-    # Set w, the probability of drawing from the broad outlier component
-    outlier_weight = OUTLIER_HEAVY_OUTLIER_WEIGHT
-    # Set k, the outlier component's standard-deviation multiplier
-    outlier_scale = OUTLIER_HEAVY_OUTLIER_SD_MULTIPLIER
-
-    # Solve (1 - w) * a^2 + w * k^2 = 1 so the mixture covariance still equals covariance
-    # (The weighted average variance scaling factor needs to be 1)
-    inlier_scale_squared = (1.0 - outlier_weight * outlier_scale**2) / (1.0 - outlier_weight)
-
-    # Fail early if w and k imply an impossible negative inlier variance
-    if inlier_scale_squared <= 0.0:
-        raise ValueError("Outlier-heavy mixture constants must leave positive inlier variance.")
-
-    # Draw from the outlier component with probability w, otherwise from the tighter inlier component
-    scale = outlier_scale if rng.random() < outlier_weight else math.sqrt(inlier_scale_squared)
-
-    # Scale the covariance by scale^2 because covariance scales with squared standard deviation
-    return rng.multivariate_normal(mean_vector, covariance * scale**2)
-
-
 def sample_log_skill_profile(
     rng: np.random.Generator,
     true_population: TruePopulationConfig,
@@ -201,8 +169,6 @@ def sample_log_skill_profile(
         eta, rho = _sample_uniform(rng, mean_vector, covariance)
     elif shape_slug == BIMODAL_POPULATION_SHAPE_SLUG:
         eta, rho = _sample_bimodal(rng, mean_vector, covariance)
-    elif shape_slug == OUTLIER_HEAVY_POPULATION_SHAPE_SLUG:
-        eta, rho = _sample_outlier_heavy(rng, mean_vector, covariance)
     else:
         get_population_shape_spec(shape_slug)
         raise AssertionError("Population shape validation should have failed earlier")
