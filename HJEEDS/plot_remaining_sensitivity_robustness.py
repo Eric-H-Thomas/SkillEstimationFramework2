@@ -29,6 +29,7 @@ from HJEEDS.sensitivity_plot_common import (
     grouped_y_positions as _shared_grouped_y_positions,
     labeled_group_centers as _shared_labeled_group_centers,
     mirrored_bar_arrays as _mirrored_bar_arrays,
+    missing_bar_label_latex as _missing_bar_label_latex,
     missing_bar_label_plain as _missing_bar_label,
     save_figure_bundle as _save_figure_bundle,
     seed_observation_from_agent_row as _seed_observation_from_agent_row,
@@ -39,6 +40,7 @@ from HJEEDS.sensitivity_plot_common import (
 
 BASE_RESULTS_DIR = Path("HJEEDS/results/hjeeds_paper_500_seeds")
 LOWEST_COUNT_BUCKET = 5
+DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 AGENTS_PER_BUCKET_ORDER = (1, 2, 5, 10, 25)
 
 
@@ -193,6 +195,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Average over every observation-count bucket instead of selecting one bucket.",
     )
     parser.add_argument(
+        "--group-by-count-bucket",
+        action="store_true",
+        help=(
+            "Group rows by experiment condition and use observation-count buckets "
+            "as subgroups. Crossed studies require --agents-per-bucket."
+        ),
+    )
+    parser.add_argument(
+        "--count-buckets",
+        default=",".join(str(bucket) for bucket in DEFAULT_COUNT_BUCKETS),
+        help="Comma-separated observation-count buckets used by --group-by-count-bucket.",
+    )
+    parser.add_argument(
         "--dpi",
         type=int,
         default=450,
@@ -203,7 +218,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Draw negative-mean improvement bars instead of printing negative percentages.",
     )
+    parser.add_argument(
+        "--single-column",
+        action="store_true",
+        help="Use proportions and typography designed for one AAAI text column.",
+    )
     return parser.parse_args(argv)
+
+
+def _parse_count_buckets(raw_value: str) -> tuple[int, ...]:
+    """Parse a comma-separated observation-count bucket list."""
+
+    buckets = tuple(int(piece.strip()) for piece in raw_value.split(",") if piece.strip())
+    if not buckets:
+        raise ValueError("At least one observation-count bucket must be provided.")
+    if any(bucket <= 0 for bucket in buckets):
+        raise ValueError(f"Observation-count buckets must be positive. Received: {buckets}")
+    return buckets
 
 
 def _grouped_y_positions(rows: Sequence[ImprovementRow], group_gap: float) -> tuple[np.ndarray, list[float]]:
@@ -296,7 +327,73 @@ def compute_improvement_rows(
     return rows
 
 
-def write_plot_data(output_csv: Path, rows: Sequence[ImprovementRow], count_bucket: int | str) -> None:
+def compute_improvement_rows_by_count_bucket(
+    config: PlotConfig,
+    count_buckets: Sequence[int],
+    agents_per_bucket: int | None,
+) -> list[ImprovementRow]:
+    """Compute rows grouped by factor and then observation-count bucket."""
+
+    requested_buckets = set(count_buckets)
+    observations = []
+    factor_labels_from_csv: dict[str, str] = {}
+
+    with config.agent_level_csv.open("r", newline="") as handle:
+        for row in csv.DictReader(handle):
+            count_bucket = int(row["count_bucket"])
+            if count_bucket not in requested_buckets:
+                continue
+            if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
+                continue
+
+            factor_slug = str(row[config.factor_slug_column])
+            if factor_slug not in config.factor_order:
+                continue
+
+            if config.crossed_with_agents_per_bucket:
+                row_agents_per_bucket = int(row["agents_per_bucket"])
+                if agents_per_bucket is None or row_agents_per_bucket != agents_per_bucket:
+                    continue
+
+            subgroup_label = str(count_bucket)
+            key = (factor_slug, subgroup_label)
+            observation = _seed_observation_from_agent_row(row, key)
+            if observation is None:
+                continue
+
+            factor_labels_from_csv[factor_slug] = str(row.get(config.factor_label_column, ""))
+            observations.append(observation)
+
+    summaries = _summarize_seed_improvements(observations)
+    rows: list[ImprovementRow] = []
+    for factor_slug in config.factor_order:
+        for count_bucket in count_buckets:
+            subgroup_label = str(count_bucket)
+            summary = summaries.get((factor_slug, subgroup_label))
+            if summary is None:
+                continue
+            rows.append(
+                ImprovementRow(
+                    factor_slug=factor_slug,
+                    factor_label=config.factor_labels.get(
+                        factor_slug,
+                        factor_labels_from_csv.get(factor_slug, factor_slug),
+                    ),
+                    subgroup_label=subgroup_label,
+                    **_summary_fields(summary),
+                )
+            )
+
+    return rows
+
+
+def write_plot_data(
+    output_csv: Path,
+    rows: Sequence[ImprovementRow],
+    count_bucket: int | str,
+    *,
+    subgroup_is_count_bucket: bool = False,
+) -> None:
     """Write plotted values so the figure can be audited."""
 
     fieldnames = [
@@ -324,7 +421,7 @@ def write_plot_data(output_csv: Path, rows: Sequence[ImprovementRow], count_buck
                     "factor_slug": row.factor_slug,
                     "factor_label": row.factor_label,
                     "subgroup_label": row.subgroup_label,
-                    "count_bucket": count_bucket,
+                    "count_bucket": row.subgroup_label if subgroup_is_count_bucket else count_bucket,
                     "num_seeds": row.num_seeds,
                     "num_agents_per_seed": row.num_agents_per_seed,
                     "execution_improvement_mean": row.execution_mean,
@@ -348,6 +445,10 @@ def plot_rows(
     group_by_agents_per_bucket: bool,
     output_stem: Path,
     agents_per_bucket: int | None,
+    title_override: str | None = None,
+    subgroup_header: str | None = None,
+    subgroup_is_count_bucket: bool = False,
+    single_column: bool = False,
 ) -> None:
     """Render one mirrored sensitivity plot."""
 
@@ -367,8 +468,26 @@ def plot_rows(
     group_centers = _group_centers(rows, y_positions)
     colors = [config.factor_colors.get(row.factor_slug, "#B8B8B8") for row in rows]
 
-    plt.rcParams.update(
-        {
+    if single_column:
+        rc_params = {
+            "font.family": "DejaVu Sans",
+            "font.size": 7.0,
+            "axes.titlesize": 8.3,
+            "axes.labelsize": 7.2,
+            "xtick.labelsize": 6.6,
+            "ytick.labelsize": 6.7,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+        figure_width = 3.35
+        figure_height = max(2.45, 0.38 * len(rows) + 1.20)
+        bar_height = 0.56
+        error_line_width = 0.66
+        error_cap_size = 1.55
+        negative_label_size = 5.2
+        skill_header_size = 7.2
+    else:
+        rc_params = {
             "font.family": "DejaVu Sans",
             "font.size": 7.2,
             "axes.titlesize": 10.0,
@@ -378,11 +497,16 @@ def plot_rows(
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
-    )
+        figure_width = 8.1
+        figure_height = max(3.2, 0.22 * len(rows) + 2.8)
+        bar_height = 0.64 if len(rows) <= 15 else 0.58
+        error_line_width = 0.58
+        error_cap_size = 1.4
+        negative_label_size = 4.95
+        skill_header_size = 7.6
+    plt.rcParams.update(rc_params)
 
-    figure_height = max(3.2, 0.22 * len(rows) + 2.8)
-    figure, axis = plt.subplots(figsize=(8.1, figure_height))
-    bar_height = 0.64 if len(rows) <= 15 else 0.58
+    figure, axis = plt.subplots(figsize=(figure_width, figure_height))
     execution_values, decision_values, execution_xerr, decision_xerr = _mirrored_bar_arrays(rows, hide_negative_bars)
 
     axis.barh(
@@ -410,9 +534,9 @@ def plot_rows(
         xerr=execution_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.58,
-        capsize=1.4,
-        capthick=0.58,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
         alpha=0.74,
         zorder=4,
     )
@@ -422,9 +546,9 @@ def plot_rows(
         xerr=decision_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.58,
-        capsize=1.4,
-        capthick=0.58,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
         alpha=0.74,
         zorder=4,
     )
@@ -465,6 +589,21 @@ def plot_rows(
                 clip_on=False,
                 zorder=5,
             )
+        axis.text(
+            subgroup_label_x + 0.006,
+            1.012,
+            subgroup_header or "Agents\nper bucket",
+            transform=axis.transAxes,
+            ha="center",
+            va="bottom",
+            multialignment="center",
+            linespacing=0.9,
+            fontsize=5.3,
+            color=TEXT_COLOR,
+            fontweight="bold",
+            clip_on=False,
+            zorder=5,
+        )
     else:
         axis.set_yticks(y_positions)
         axis.set_yticklabels([row.factor_label for row in rows])
@@ -474,26 +613,58 @@ def plot_rows(
             tick_label.set_color(TEXT_COLOR)
 
     for y_value, row in zip(y_positions, rows):
+        annotation_offset = (
+            1.5
+            if single_column
+            and row.factor_slug == "deceptive"
+            and row.execution_mean < 0.0
+            and row.decision_mean < 0.0
+            else 0.65
+        )
         if hide_negative_bars and row.execution_mean < 0.0:
             axis.text(
-                -0.65,
+                -annotation_offset,
                 y_value,
-                _missing_bar_label(row.execution_mean, row.execution_ci_lower, row.execution_ci_upper),
+                (
+                    _missing_bar_label_latex(
+                        row.execution_mean,
+                        row.execution_ci_lower,
+                        row.execution_ci_upper,
+                    )
+                    if single_column
+                    else _missing_bar_label(
+                        row.execution_mean,
+                        row.execution_ci_lower,
+                        row.execution_ci_upper,
+                    )
+                ),
                 ha="right",
                 va="center",
-                fontsize=4.95,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
             )
         if hide_negative_bars and row.decision_mean < 0.0:
             axis.text(
-                0.65,
+                annotation_offset,
                 y_value,
-                _missing_bar_label(row.decision_mean, row.decision_ci_lower, row.decision_ci_upper),
+                (
+                    _missing_bar_label_latex(
+                        row.decision_mean,
+                        row.decision_ci_lower,
+                        row.decision_ci_upper,
+                    )
+                    if single_column
+                    else _missing_bar_label(
+                        row.decision_mean,
+                        row.decision_ci_lower,
+                        row.decision_ci_upper,
+                    )
+                ),
                 ha="left",
                 va="center",
-                fontsize=4.95,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
@@ -518,68 +689,70 @@ def plot_rows(
     axis.spines["bottom"].set_color("#AAA4B3")
     axis.spines["bottom"].set_linewidth(0.6)
 
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error", color=CHARCOAL, labelpad=7.0)
-    title = (
+    axis.set_xlabel(
+        "Improvement over JEEDS in absolute error (%)"
+        if single_column
+        else "Percent improvement over JEEDS in absolute error",
+        color=CHARCOAL,
+        labelpad=5.0 if single_column else 7.0,
+    )
+    title = title_override or (
         f"{config.title} (all agents)"
         if count_bucket == "all"
         else f"{config.title} ({count_bucket} observations/agent)"
     )
+    if single_column:
+        title = {
+            "decision_model": "Decision-model sensitivity",
+            "compound_stress": "Compound stress test",
+        }.get(config.experiment_slug, config.title)
     figure.suptitle(
         title,
-        y=0.976,
-        fontsize=11.6,
+        y=0.982 if single_column else 0.976,
+        fontsize=8.3 if single_column else 11.6,
         fontweight="bold",
         color=TEXT_COLOR,
     )
     axis.text(
         (x_min + 0.0) / 2.0,
         1.012,
-        "Execution",
+        "Execution skill" if single_column else "Execution",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=7.6,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
     axis.text(
         x_max / 2.0,
         1.012,
-        "Decision",
+        "Decision skill" if single_column else "Decision",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=7.6,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
 
-    if group_by_agents_per_bucket:
-        figure.text(
-            0.5,
-            0.026,
-            "Small row labels indicate agents per observation-count bucket.",
-            ha="center",
-            va="bottom",
-            fontsize=6.3,
-            color=CHARCOAL,
-        )
-    elif agents_per_bucket is not None:
-        figure.text(
-            0.5,
-            0.026,
-            f"{agents_per_bucket} agents per observation-count bucket.",
-            ha="center",
-            va="bottom",
-            fontsize=6.3,
-            color=CHARCOAL,
-        )
-
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    write_plot_data(output_stem.with_suffix(".csv"), rows, count_bucket)
-    left_margin = 0.18 if group_by_agents_per_bucket else 0.16
-    bottom_margin = 0.12 if group_by_agents_per_bucket else 0.16
-    figure.subplots_adjust(left=left_margin, right=0.985, top=0.885, bottom=bottom_margin)
+    write_plot_data(
+        output_stem.with_suffix(".csv"),
+        rows,
+        count_bucket,
+        subgroup_is_count_bucket=subgroup_is_count_bucket,
+    )
+    if single_column:
+        # The compound-stress labels are longer than the decision-model labels;
+        # reserve enough room so ``Moderate stress`` is not clipped at the
+        # physical edge of a 3.35-inch column figure.
+        left_margin = 0.31 if config.experiment_slug == "compound_stress" else 0.27
+        figure.subplots_adjust(left=left_margin, right=0.975, top=0.83, bottom=0.20)
+    else:
+        left_margin = 0.18 if group_by_agents_per_bucket else 0.16
+        bottom_margin = 0.10 if group_by_agents_per_bucket else 0.14
+        figure.subplots_adjust(left=left_margin, right=0.985, top=0.885, bottom=bottom_margin)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 
@@ -593,6 +766,49 @@ def main(argv: Sequence[str] | None = None) -> None:
     unknown = requested - {config.experiment_slug for config in PLOT_CONFIGS}
     if unknown:
         raise ValueError(f"Unknown experiment slug(s): {', '.join(sorted(unknown))}")
+
+    if args.group_by_count_bucket and args.average_all_buckets:
+        raise ValueError("--group-by-count-bucket cannot be combined with --average-all-buckets.")
+    if args.group_by_count_bucket and args.single_column:
+        raise ValueError("--single-column is intended for one main-paper bucket, not grouped panels.")
+    if args.group_by_count_bucket:
+        count_buckets = _parse_count_buckets(args.count_buckets)
+        for config in configs:
+            if config.crossed_with_agents_per_bucket and args.agents_per_bucket is None:
+                raise ValueError(
+                    f"{config.experiment_slug} requires --agents-per-bucket when "
+                    "--group-by-count-bucket is used."
+                )
+            rows = compute_improvement_rows_by_count_bucket(
+                config,
+                count_buckets,
+                args.agents_per_bucket,
+            )
+            base_name = config.output_stem.name.removesuffix("_lowest_bucket_improvement_bars")
+            qualifiers = ["by_count_bucket"]
+            if args.agents_per_bucket is not None:
+                qualifiers.append(f"agents_per_bucket_{args.agents_per_bucket:03d}")
+            output_stem = config.output_stem.with_name(
+                "_".join((base_name, *qualifiers, "improvement_bars"))
+            )
+            plot_rows(
+                config=config,
+                rows=rows,
+                count_bucket="varies",
+                dpi=args.dpi,
+                hide_negative_bars=not args.show_negative_bars,
+                group_by_agents_per_bucket=True,
+                output_stem=output_stem,
+                agents_per_bucket=args.agents_per_bucket,
+                title_override=f"{config.title} by observation count",
+                subgroup_header="Observations\nper agent",
+                subgroup_is_count_bucket=True,
+            )
+            print(
+                f"Wrote {config.experiment_slug} plot to {output_stem.with_suffix('.png')}",
+                flush=True,
+            )
+        return
 
     count_bucket = None if args.average_all_buckets else args.count_bucket
     count_bucket_label: int | str = "all" if count_bucket is None else count_bucket
@@ -628,6 +844,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             group_by_agents_per_bucket=group_by_agents_per_bucket,
             output_stem=output_stem,
             agents_per_bucket=agents_per_bucket,
+            single_column=args.single_column,
         )
         print(f"Wrote {config.experiment_slug} plot to {output_stem.with_suffix('.png')}", flush=True)
 

@@ -184,6 +184,21 @@ def _draw_panel(
             clip_on=False,
             zorder=5,
         )
+    axis.text(
+        group_label_x,
+        1.015,
+        "Agents\nper bucket",
+        transform=axis.transAxes,
+        ha="center",
+        va="bottom",
+        multialignment="center",
+        linespacing=0.9,
+        fontsize=6.0,
+        color=TEXT_COLOR,
+        fontweight="bold",
+        clip_on=False,
+        zorder=5,
+    )
 
     for y_value, row in zip(y_positions, rows):
         if hide_negative_bars and row.execution_mean < 0.0:
@@ -331,17 +346,26 @@ def plot_panels(
 
     figure.text(
         0.5,
-        0.02,
-        "Labels: DEF = default; MOD = moderate misspecification; STR = strong misspecification. "
-        "Shade darkens with misspecification severity.",
+        0.940,
+        "Hyperprior conditions: DEF = default; MOD = moderate combined misspecification; "
+        "STR = strong combined misspecification",
         ha="center",
-        va="bottom",
-        fontsize=7.0,
-        color=CHARCOAL,
+        va="center",
+        fontsize=8.5,
+        color=TEXT_COLOR,
+    )
+    figure.text(
+        0.5,
+        0.925,
+        "Darker shades indicate greater misspecification severity.",
+        ha="center",
+        va="center",
+        fontsize=8.5,
+        color=TEXT_COLOR,
     )
 
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.065, right=0.985, top=0.922, bottom=0.06, hspace=0.34, wspace=0.16)
+    figure.subplots_adjust(left=0.065, right=0.985, top=0.895, bottom=0.035, hspace=0.34, wspace=0.16)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 

@@ -82,6 +82,13 @@ FOCUS_LEGEND_LABELS = {
     "combined": "Combined",
 }
 
+SINGLE_COLUMN_FOCUS_LEGEND_LABELS = {
+    "average_skill": "Avg. skill",
+    "population_spread": "Pop. spread",
+    "correlation": "Correlation",
+    "combined": "Combined",
+}
+
 BIAS_CODES = {
     "strong_reverse_misspecification": "SR",
     "moderate_reverse_misspecification": "MR",
@@ -171,6 +178,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--symmetric-x-axis",
         action="store_true",
         help="Use the earlier symmetric x-axis limits around zero.",
+    )
+    parser.add_argument(
+        "--single-column",
+        action="store_true",
+        help="Use typography and proportions designed for one AAAI text column.",
     )
     return parser.parse_args(argv)
 
@@ -398,6 +410,7 @@ def plot_improvement_bars(
     label_placement: str = "center",
     x_limits: tuple[float, float] | None = None,
     symmetric_x_axis: bool = False,
+    single_column: bool = False,
 ) -> None:
     """Render the mirrored robustness bar plot."""
 
@@ -427,8 +440,32 @@ def plot_improvement_bars(
     colors = [bar_color(row.condition) for row in rows]
     labels = [bar_label(row.condition) for row in rows]
 
-    plt.rcParams.update(
-        {
+    if single_column:
+        rc_params = {
+            "font.family": "DejaVu Sans",
+            "font.size": 7.0,
+            "axes.titlesize": 8.0,
+            "axes.labelsize": 7.2,
+            "xtick.labelsize": 6.6,
+            "ytick.labelsize": 6.0,
+            "legend.fontsize": 6.0,
+            "legend.title_fontsize": 6.2,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+        figure_width = 3.35
+        figure_height = max(7.1, 0.074 * len(rows) + 2.66)
+        bar_height = 0.78
+        condition_label_size = 4.9
+        negative_label_size = 5.0
+        title_size = 8.3
+        skill_header_size = 7.3
+        error_line_width = 0.66
+        error_cap_size = 1.55
+        legend_columns = 5
+        legend_labels = SINGLE_COLUMN_FOCUS_LEGEND_LABELS
+    else:
+        rc_params = {
             "font.family": "DejaVu Sans",
             "font.size": 7.2,
             "axes.titlesize": 9.0,
@@ -440,11 +477,20 @@ def plot_improvement_bars(
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
-    )
+        figure_width = 7.35
+        figure_height = max(9.0, 0.138 * len(rows) + 2.75)
+        bar_height = 0.66
+        condition_label_size = 4.9
+        negative_label_size = 5.1
+        title_size = 9.2
+        skill_header_size = 7.7
+        error_line_width = 0.62
+        error_cap_size = 1.6
+        legend_columns = 5
+        legend_labels = FOCUS_LEGEND_LABELS
 
-    figure_height = max(9.0, 0.138 * len(rows) + 2.75)
-    figure, axis = plt.subplots(figsize=(7.35, figure_height))
-    bar_height = 0.66
+    plt.rcParams.update(rc_params)
+    figure, axis = plt.subplots(figsize=(figure_width, figure_height))
     execution_values, decision_values, execution_xerr, decision_xerr = _mirrored_bar_arrays(rows, hide_negative_bars)
 
     axis.barh(
@@ -472,10 +518,10 @@ def plot_improvement_bars(
         xerr=execution_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.62,
-        capsize=1.6,
-        capthick=0.62,
-        alpha=0.74,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
+        alpha=0.70 if single_column else 0.74,
         zorder=4,
     )
     axis.errorbar(
@@ -484,10 +530,10 @@ def plot_improvement_bars(
         xerr=decision_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.62,
-        capsize=1.6,
-        capthick=0.62,
-        alpha=0.74,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
+        alpha=0.70 if single_column else 0.74,
         zorder=4,
     )
 
@@ -518,7 +564,7 @@ def plot_improvement_bars(
                 _missing_bar_label(row.execution_mean, row.execution_ci_lower, row.execution_ci_upper),
                 ha="right",
                 va="center",
-                fontsize=5.1,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
@@ -530,7 +576,7 @@ def plot_improvement_bars(
                 label,
                 ha="right",
                 va="center",
-                fontsize=4.9,
+                fontsize=condition_label_size,
                 color=label_color,
                 zorder=5,
             )
@@ -542,7 +588,7 @@ def plot_improvement_bars(
                 _missing_bar_label(row.decision_mean, row.decision_ci_lower, row.decision_ci_upper),
                 ha="left",
                 va="center",
-                fontsize=5.1,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
@@ -554,12 +600,12 @@ def plot_improvement_bars(
                 label,
                 ha="left",
                 va="center",
-                fontsize=4.9,
+                fontsize=condition_label_size,
                 color=label_color,
                 zorder=5,
             )
 
-    axis.axvline(0.0, color=TEXT_COLOR, linewidth=0.9, zorder=6)
+    axis.axvline(0.0, color=TEXT_COLOR, linewidth=0.8 if single_column else 0.9, zorder=6)
     axis.set_xlim(x_min, x_max)
     axis.set_ylim(-0.7, float(y_positions[-1]) + 0.7)
     axis.invert_yaxis()
@@ -576,11 +622,20 @@ def plot_improvement_bars(
     axis.spines["bottom"].set_color("#AAA4B3")
     axis.spines["bottom"].set_linewidth(0.6)
 
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error")
+    axis.set_xlabel(
+        "Improvement over JEEDS in absolute error (%)"
+        if single_column
+        else "Percent improvement over JEEDS in absolute error"
+    )
     figure.suptitle(
-        f"H-JEEDS improvement in {_bucket_title_phrase(lowest_bucket)} ({lowest_bucket} observations per agent)",
-        y=0.982,
-        fontsize=9.2,
+        (
+            f"Hyperprior sensitivity: {lowest_bucket} observations per agent"
+            if single_column
+            else f"H-JEEDS improvement in {_bucket_title_phrase(lowest_bucket)} "
+            f"({lowest_bucket} observations per agent)"
+        ),
+        y=0.989 if single_column else 0.982,
+        fontsize=title_size,
         fontweight="bold",
         color=TEXT_COLOR,
     )
@@ -591,54 +646,105 @@ def plot_improvement_bars(
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=7.7,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
     axis.text(
         x_max / 2.0,
         1.01,
-        "Decision-making skill",
+        "Decision skill" if single_column else "Decision-making skill",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=7.7,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
 
-    focus_handles = [
-        Patch(facecolor=color, edgecolor="none", label=FOCUS_LEGEND_LABELS[slug])
+    focus_handles = {
+        slug: Patch(facecolor=color, edgecolor="none", label=legend_labels[slug])
         for slug, color in FOCUS_BASE_COLORS.items()
-    ]
-    focus_handles.append(Patch(facecolor=CHARCOAL, edgecolor="none", label="Default/baseline"))
-    legend = figure.legend(
-        handles=focus_handles,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.958),
-        ncol=5,
-        frameon=False,
-        columnspacing=1.1,
-        handlelength=1.1,
-        handleheight=0.9,
-        borderaxespad=0.0,
+    }
+    baseline_handle = Patch(
+        facecolor=CHARCOAL,
+        edgecolor="none",
+        label="Baseline" if single_column else "Default/baseline",
     )
-    for text in legend.get_texts():
-        text.set_color(TEXT_COLOR)
 
-    figure.text(
-        0.5,
-        0.012,
-        "Labels: SR/MR/U/MA/SA = strong reverse, moderate reverse, unbiased, moderate adverse, strong adverse; "
-        "w/d/s = weak, default, strong confidence. Shade darkens with confidence.",
-        ha="center",
-        va="bottom",
-        fontsize=5.8,
-        color=CHARCOAL,
-    )
+    if single_column:
+        legend = figure.legend(
+            handles=[*focus_handles.values(), baseline_handle],
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.954),
+            ncol=legend_columns,
+            frameon=False,
+            columnspacing=0.65,
+            handlelength=0.9,
+            handleheight=0.8,
+            handletextpad=0.4,
+            labelspacing=0.25,
+            borderaxespad=0.0,
+        )
+        for text in legend.get_texts():
+            text.set_color(TEXT_COLOR)
+
+        key_lines = (
+            "Bias: SR = strong reverse; MR = moderate reverse",
+            "U = unbiased; MA = moderate adverse; SA = strong adverse",
+            "Confidence: w = weak; d = default; s = strong; DEF = baseline",
+        )
+        for y_value, line in zip((0.912, 0.891, 0.870), key_lines):
+            figure.text(
+                0.5,
+                y_value,
+                line,
+                ha="center",
+                va="center",
+                fontsize=5.5,
+                color=TEXT_COLOR,
+            )
+    else:
+        legend = figure.legend(
+            handles=[*focus_handles.values(), baseline_handle],
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.958),
+            ncol=legend_columns,
+            frameon=False,
+            columnspacing=1.1,
+            handlelength=1.1,
+            handleheight=0.9,
+            borderaxespad=0.0,
+        )
+        for text in legend.get_texts():
+            text.set_color(TEXT_COLOR)
+
+        figure.text(
+            0.5,
+            0.925,
+            "Bias prefix: SR = strong reverse; MR = moderate reverse; "
+            "U = unbiased; MA = moderate adverse; SA = strong adverse",
+            ha="center",
+            va="center",
+            fontsize=6.4,
+            color=TEXT_COLOR,
+        )
+        figure.text(
+            0.5,
+            0.910,
+            "Confidence suffix: w = weak; d = default; s = strong; darker shades indicate greater "
+            "confidence; DEF = default/baseline",
+            ha="center",
+            va="center",
+            fontsize=6.4,
+            color=TEXT_COLOR,
+        )
 
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.045, right=0.985, top=0.895, bottom=0.073)
+    if single_column:
+        figure.subplots_adjust(left=0.050, right=0.950, top=0.825, bottom=0.060)
+    else:
+        figure.subplots_adjust(left=0.045, right=0.985, top=0.875, bottom=0.045)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 
@@ -662,6 +768,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         label_placement=args.label_placement,
         x_limits=tuple(args.x_limits) if args.x_limits is not None else None,
         symmetric_x_axis=args.symmetric_x_axis,
+        single_column=args.single_column,
     )
     print(
         f"Wrote {len(rows)} settings to {args.output_stem.with_suffix('.png')} "

@@ -335,6 +335,8 @@ def format_percent(value: float) -> str:
 
     if abs(value) >= 100.0:
         return f"{value:,.0f}%"
+    if 0.0 < abs(value) < 0.1:
+        return f"{value:.2f}%"
     return f"{value:.1f}%"
 
 

@@ -35,6 +35,7 @@ from HJEEDS.sensitivity_plot_common import (
 DEFAULT_RESULTS_DIR = Path("HJEEDS/results/hjeeds_paper_500_seeds/outlier_sensitivity")
 DEFAULT_AGENT_LEVEL_CSV = DEFAULT_RESULTS_DIR / "outlier_sensitivity_agent_level_results.csv"
 CONTAMINATION_ORDER = (0, 1, 5)
+DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
 SUBSET_ORDER = ("all", "inliers", "outliers")
 SUBSET_LABELS = {
     "all": "All agents",
@@ -66,17 +67,38 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agent-level-csv", type=Path, default=DEFAULT_AGENT_LEVEL_CSV)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument(
+        "--count-buckets",
+        default=",".join(str(bucket) for bucket in DEFAULT_COUNT_BUCKETS),
+        help="Comma-separated observation-count buckets for the bucket-specific figures.",
+    )
     parser.add_argument("--dpi", type=int, default=450)
     parser.add_argument("--show-negative-bars", action="store_true")
     return parser.parse_args(argv)
 
 
-def compute_rows(agent_level_csv: Path) -> dict[str, list[OutlierRow]]:
+def parse_count_buckets(raw_value: str) -> tuple[int, ...]:
+    """Parse and validate a comma-separated list of observation-count buckets."""
+
+    count_buckets = tuple(int(piece.strip()) for piece in raw_value.split(",") if piece.strip())
+    if not count_buckets:
+        raise ValueError("At least one observation-count bucket must be provided.")
+    if any(bucket <= 0 for bucket in count_buckets):
+        raise ValueError(f"Observation-count buckets must be positive: {count_buckets}")
+    return count_buckets
+
+
+def compute_rows(
+    agent_level_csv: Path,
+    count_bucket: int | None = None,
+) -> dict[str, list[OutlierRow]]:
     """Calculate all-agent, inlier, and outlier improvements from seed means."""
 
     observations = []
     with agent_level_csv.open("r", newline="") as handle:
         for row in csv.DictReader(handle):
+            if count_bucket is not None and int(row["count_bucket"]) != count_bucket:
+                continue
             if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
                 continue
             contamination_count = int(row["contamination_count"])
@@ -117,6 +139,18 @@ def compute_rows(agent_level_csv: Path) -> dict[str, list[OutlierRow]]:
     return rows_by_subset
 
 
+def compute_rows_by_count_bucket(
+    agent_level_csv: Path,
+    count_buckets: Sequence[int],
+) -> dict[int, list[OutlierRow]]:
+    """Calculate all-agent improvements separately for each observation-count bucket."""
+
+    return {
+        count_bucket: compute_rows(agent_level_csv, count_bucket)["all"]
+        for count_bucket in count_buckets
+    }
+
+
 def write_plot_data(path: Path, rows_by_subset: dict[str, list[OutlierRow]]) -> None:
     """Write every plotted estimate and interval for auditability."""
 
@@ -142,6 +176,48 @@ def write_plot_data(path: Path, rows_by_subset: dict[str, list[OutlierRow]]) -> 
                 writer.writerow(
                     {
                         "population_subset": subset_slug,
+                        "contamination_count": row.contamination_count,
+                        "num_seeds": row.num_seeds,
+                        "num_agents_per_seed": row.num_agents_per_seed,
+                        "execution_improvement_mean": row.execution_mean,
+                        "execution_improvement_ci_lower": row.execution_ci_lower,
+                        "execution_improvement_ci_upper": row.execution_ci_upper,
+                        "decision_improvement_mean": row.decision_mean,
+                        "decision_improvement_ci_lower": row.decision_ci_lower,
+                        "decision_improvement_ci_upper": row.decision_ci_upper,
+                        "average_improvement_mean": row.average_mean,
+                    }
+                )
+
+
+def write_count_bucket_plot_data(
+    path: Path,
+    rows_by_count_bucket: dict[int, list[OutlierRow]],
+) -> None:
+    """Write the bucket-specific estimates and intervals used in the figures."""
+
+    fieldnames = [
+        "count_bucket",
+        "contamination_count",
+        "num_seeds",
+        "num_agents_per_seed",
+        "execution_improvement_mean",
+        "execution_improvement_ci_lower",
+        "execution_improvement_ci_upper",
+        "decision_improvement_mean",
+        "decision_improvement_ci_lower",
+        "decision_improvement_ci_upper",
+        "average_improvement_mean",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for count_bucket, rows in rows_by_count_bucket.items():
+            for row in rows:
+                writer.writerow(
+                    {
+                        "count_bucket": count_bucket,
                         "contamination_count": row.contamination_count,
                         "num_seeds": row.num_seeds,
                         "num_agents_per_seed": row.num_agents_per_seed,
@@ -255,8 +331,14 @@ def _draw_axis(axis, rows: Sequence[OutlierRow], x_limits: tuple[float, float], 
     )
 
 
-def render(rows_by_subset: dict[str, list[OutlierRow]], output_dir: Path, dpi: int, hide_negative_bars: bool) -> None:
-    """Render a main all-agent plot and an appendix subgroup figure."""
+def render(
+    rows_by_subset: dict[str, list[OutlierRow]],
+    rows_by_count_bucket: dict[int, list[OutlierRow]],
+    output_dir: Path,
+    dpi: int,
+    hide_negative_bars: bool,
+) -> None:
+    """Render aggregate, low-data, subgroup, and bucket-specific figures."""
 
     configure_matplotlib()
     import matplotlib.pyplot as plt
@@ -273,6 +355,10 @@ def render(rows_by_subset: dict[str, list[OutlierRow]], output_dir: Path, dpi: i
     x_limits = compact_x_limits(all_rows, hide_negative_bars, negative_placeholder=10.0)
     output_dir.mkdir(parents=True, exist_ok=True)
     write_plot_data(output_dir / "outlier_sensitivity_plot_data.csv", rows_by_subset)
+    write_count_bucket_plot_data(
+        output_dir / "outlier_sensitivity_by_count_bucket.csv",
+        rows_by_count_bucket,
+    )
 
     left, right = 0.20, 0.985
     figure, axis = plt.subplots(figsize=(7.2, 3.15))
@@ -288,6 +374,36 @@ def render(rows_by_subset: dict[str, list[OutlierRow]], output_dir: Path, dpi: i
     )
     figure.subplots_adjust(left=left, right=right, top=0.77, bottom=0.2)
     save_figure_bundle(figure, output_dir / "outlier_sensitivity_all_agents", dpi)
+    plt.close(figure)
+
+    count_buckets = tuple(rows_by_count_bucket)
+    bucket_rows = [
+        row
+        for count_bucket in count_buckets
+        for row in rows_by_count_bucket[count_bucket]
+    ]
+    bucket_x_limits = compact_x_limits(bucket_rows, hide_negative_bars, negative_placeholder=10.0)
+    lowest_count_bucket = count_buckets[0]
+
+    left, right = 0.20, 0.985
+    figure, axis = plt.subplots(figsize=(7.2, 3.15))
+    _draw_axis(
+        axis,
+        rows_by_count_bucket[lowest_count_bucket],
+        bucket_x_limits,
+        hide_negative_bars,
+    )
+    axis.set_xlabel("Percent improvement over JEEDS in absolute error", color=CHARCOAL, labelpad=7.0)
+    figure.suptitle(
+        f"Outlier contamination sensitivity ({lowest_count_bucket} observations/agent)",
+        x=(left + right) / 2.0,
+        y=0.94,
+        fontsize=11.5,
+        fontweight="bold",
+        color=TEXT_COLOR,
+    )
+    figure.subplots_adjust(left=left, right=right, top=0.77, bottom=0.2)
+    save_figure_bundle(figure, output_dir / "outlier_sensitivity_lowest_bucket", dpi)
     plt.close(figure)
 
     left, right = 0.09, 0.99
@@ -314,11 +430,70 @@ def render(rows_by_subset: dict[str, list[OutlierRow]], output_dir: Path, dpi: i
     save_figure_bundle(figure, output_dir / "outlier_sensitivity_subgroups", dpi)
     plt.close(figure)
 
+    num_columns = min(3, len(count_buckets))
+    num_rows = int(np.ceil(len(count_buckets) / num_columns))
+    figure, axes = plt.subplots(
+        num_rows,
+        num_columns,
+        figsize=(12.6, max(3.75, 3.5 * num_rows)),
+        squeeze=False,
+    )
+    flat_axes = list(axes.flat)
+    for axis, count_bucket in zip(flat_axes, count_buckets):
+        _draw_axis(
+            axis,
+            rows_by_count_bucket[count_bucket],
+            bucket_x_limits,
+            hide_negative_bars,
+        )
+        axis.set_title(
+            f"{count_bucket} observations/agent",
+            fontsize=9.0,
+            fontweight="bold",
+            color=TEXT_COLOR,
+            pad=15.0,
+        )
+    for axis in flat_axes[len(count_buckets) :]:
+        axis.set_visible(False)
+    figure.suptitle(
+        "Outlier contamination sensitivity by observation count",
+        x=(left + right) / 2.0,
+        y=0.98,
+        fontsize=13.0,
+        fontweight="bold",
+        color=TEXT_COLOR,
+    )
+    figure.supxlabel(
+        "Percent improvement over JEEDS in absolute error",
+        x=(left + right) / 2.0,
+        y=0.02,
+        fontsize=7.4,
+        color=CHARCOAL,
+    )
+    figure.subplots_adjust(
+        left=left,
+        right=right,
+        top=0.88 if num_rows > 1 else 0.79,
+        bottom=0.10 if num_rows > 1 else 0.19,
+        hspace=0.58,
+        wspace=0.31,
+    )
+    save_figure_bundle(figure, output_dir / "outlier_sensitivity_by_count_bucket", dpi)
+    plt.close(figure)
+
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    count_buckets = parse_count_buckets(args.count_buckets)
     rows_by_subset = compute_rows(args.agent_level_csv)
-    render(rows_by_subset, args.output_dir, args.dpi, not args.show_negative_bars)
+    rows_by_count_bucket = compute_rows_by_count_bucket(args.agent_level_csv, count_buckets)
+    render(
+        rows_by_subset,
+        rows_by_count_bucket,
+        args.output_dir,
+        args.dpi,
+        not args.show_negative_bars,
+    )
     print(f"Wrote outlier-sensitivity plots to {args.output_dir}")
 
 

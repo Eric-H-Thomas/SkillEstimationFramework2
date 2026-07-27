@@ -50,7 +50,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--y-tick-step",
         type=float,
-        default=0.5,
+        default=1.0,
         help="Spacing between y-axis tick marks.",
     )
     return parser.parse_args(argv)
@@ -79,19 +79,20 @@ def render(output_stem: Path, dpi: int, y_tick_step: float) -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 9.5,
-            "axes.labelsize": 10.5,
-            "axes.linewidth": 0.9,
-            "xtick.labelsize": 9.5,
-            "ytick.labelsize": 9.5,
-            "legend.fontsize": 9.5,
-            "savefig.bbox": "tight",
-            "savefig.pad_inches": 0.035,
+            "font.size": 7.0,
+            "axes.labelsize": 7.4,
+            "axes.linewidth": 0.7,
+            "xtick.labelsize": 6.5,
+            "ytick.labelsize": 6.5,
+            "legend.fontsize": 7.0,
+            "savefig.bbox": None,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
         }
     )
 
     x_values, y_values = build_step_arrays()
-    figure, axis = plt.subplots(figsize=(5.45, 2.25), constrained_layout=True)
+    figure, axis = plt.subplots(figsize=(3.35, 1.52), constrained_layout=True)
     figure.patch.set_facecolor("white")
     axis.set_facecolor("white")
 
@@ -109,7 +110,7 @@ def render(output_stem: Path, dpi: int, y_tick_step: float) -> None:
         y_values,
         where="post",
         color="#2C6E9F",
-        linewidth=2.4,
+        linewidth=1.55,
         solid_capstyle="butt",
         solid_joinstyle="miter",
         label="Reward",
@@ -117,8 +118,8 @@ def render(output_stem: Path, dpi: int, y_tick_step: float) -> None:
 
     axis.set_xlim(-X_LIMIT, X_LIMIT)
     axis.set_ylim(-0.05, 2.1)
-    axis.set_xlabel("Action", color=TEXT_COLOR, labelpad=4)
-    axis.set_ylabel("Reward", color=TEXT_COLOR, labelpad=6)
+    axis.set_xlabel("Action", color=TEXT_COLOR, labelpad=2.5)
+    axis.set_ylabel("Reward", color=TEXT_COLOR, labelpad=3.5)
     axis.set_xticks([-15, -10, -5, 0, 5, 10, 15])
     y_ticks = []
     tick = 0.0
@@ -126,15 +127,15 @@ def render(output_stem: Path, dpi: int, y_tick_step: float) -> None:
         y_ticks.append(round(tick, 10))
         tick += y_tick_step
     axis.set_yticks(y_ticks)
-    axis.tick_params(axis="both", colors=TEXT_COLOR, length=3.5, width=0.8)
-    axis.grid(axis="y", color=GRID_COLOR, linewidth=0.65, alpha=0.75)
+    axis.tick_params(axis="both", colors=TEXT_COLOR, length=2.5, width=0.65)
+    axis.grid(axis="y", color=GRID_COLOR, linewidth=0.45, alpha=0.72)
     axis.set_axisbelow(True)
 
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
     for spine_name in ("left", "bottom"):
         axis.spines[spine_name].set_color(CHARCOAL)
-        axis.spines[spine_name].set_linewidth(0.9)
+        axis.spines[spine_name].set_linewidth(0.7)
 
     _save_figure_bundle(figure, output_stem, dpi=dpi)
     plt.close(figure)

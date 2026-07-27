@@ -371,19 +371,9 @@ def plot_anchor_availability(
         color=TEXT_COLOR,
         fontweight="bold",
     )
-    figure.text(
-        0.5,
-        0.03,
-        f"Evaluated on 25 low-data agents with {low_data_observations} observation each; anchors have 25 observations each.",
-        ha="center",
-        va="bottom",
-        fontsize=6.5,
-        color=CHARCOAL,
-    )
-
     output_stem.parent.mkdir(parents=True, exist_ok=True)
     write_plot_data(output_stem.with_suffix(".csv"), rows, low_data_observations)
-    figure.subplots_adjust(left=0.16, right=0.985, top=0.82, bottom=0.19)
+    figure.subplots_adjust(left=0.16, right=0.985, top=0.82, bottom=0.15)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 

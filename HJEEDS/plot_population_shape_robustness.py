@@ -56,6 +56,11 @@ SHAPE_COLORS = {
     "uniform": CATEGORICAL_COLORS[0],
     "bimodal": CATEGORICAL_COLORS[1],
 }
+SINGLE_COLUMN_SHAPE_COLORS = {
+    "default": CHARCOAL,
+    "uniform": CATEGORICAL_COLORS[0],
+    "bimodal": CATEGORICAL_COLORS[1],
+}
 
 
 @dataclass(frozen=True)
@@ -97,6 +102,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--show-negative-bars",
         action="store_true",
         help="Draw negative-mean improvement bars instead of printing negative percentages.",
+    )
+    parser.add_argument(
+        "--single-column-output-stem",
+        type=Path,
+        default=None,
+        help=(
+            "Render only the first requested bucket as a native one-column AAAI figure "
+            "at this output stem."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -239,6 +253,7 @@ def _draw_shape_axis(
     x_limits: tuple[float, float],
     hide_negative_bars: bool,
     panel: bool,
+    shape_colors: dict[str, str] | None = None,
 ) -> None:
     """Draw one mirrored population-shape plot on an existing axis."""
 
@@ -249,7 +264,8 @@ def _draw_shape_axis(
 
     x_min, x_max = x_limits
     y_positions = np.arange(len(rows), dtype=float)
-    colors = [SHAPE_COLORS[row.shape_slug] for row in rows]
+    palette = SHAPE_COLORS if shape_colors is None else shape_colors
+    colors = [palette[row.shape_slug] for row in rows]
     execution_values, decision_values, execution_xerr, decision_xerr = _mirrored_bar_arrays(rows, hide_negative_bars)
 
     bar_height = 0.58 if panel else 0.64
@@ -353,7 +369,7 @@ def _draw_shape_axis(
     axis.text(
         (x_min + 0.0) / 2.0,
         1.035 if not panel else 1.03,
-        "Execution",
+        "Execution" if panel else "Execution skill",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
@@ -364,7 +380,7 @@ def _draw_shape_axis(
     axis.text(
         x_max / 2.0,
         1.035 if not panel else 1.03,
-        "Decision",
+        "Decision" if panel else "Decision skill",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
@@ -383,14 +399,28 @@ def plot_single_bucket(
     dpi: int,
     hide_negative_bars: bool,
     x_limits: tuple[float, float] | None = None,
+    single_column: bool = False,
 ) -> None:
     """Render one observation-count bucket plot."""
 
     _configure_matplotlib()
     import matplotlib.pyplot as plt
 
-    plt.rcParams.update(
-        {
+    if single_column:
+        rc_params = {
+            "font.family": "DejaVu Sans",
+            "font.size": 7.0,
+            "axes.titlesize": 8.0,
+            "axes.labelsize": 7.2,
+            "xtick.labelsize": 6.5,
+            "ytick.labelsize": 6.7,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+        figure_size = (3.35, 2.14)
+        left_margin, right_margin = 0.30, 0.985
+    else:
+        rc_params = {
             "font.family": "DejaVu Sans",
             "font.size": 8.0,
             "axes.titlesize": 11.5,
@@ -399,11 +429,12 @@ def plot_single_bucket(
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
-    )
+        figure_size = (7.2, 3.15)
+        left_margin, right_margin = 0.2, 0.985
+    plt.rcParams.update(rc_params)
 
     inferred_limits = _compact_x_limits(rows, hide_negative_bars) if x_limits is None else x_limits
-    left_margin, right_margin = 0.2, 0.985
-    figure, axis = plt.subplots(figsize=(7.2, 3.15))
+    figure, axis = plt.subplots(figsize=figure_size)
     _draw_shape_axis(
         axis=axis,
         rows=rows,
@@ -411,25 +442,45 @@ def plot_single_bucket(
         x_limits=inferred_limits,
         hide_negative_bars=hide_negative_bars,
         panel=False,
+        shape_colors=SINGLE_COLUMN_SHAPE_COLORS if single_column else None,
     )
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error", fontsize=7.4, color=CHARCOAL, labelpad=7.0)
+    axis.set_xlabel(
+        "Improvement over JEEDS in absolute error (%)"
+        if single_column
+        else "Percent improvement over JEEDS in absolute error",
+        fontsize=7.2 if single_column else 7.4,
+        color=CHARCOAL,
+        labelpad=5.0 if single_column else 7.0,
+    )
     title = (
         "Population-shape sensitivity (all agents)"
         if count_bucket == "all"
         else f"Population-shape sensitivity ({count_bucket} observations/agent)"
     )
-    figure.suptitle(
-        title,
-        x=(left_margin + right_margin) / 2.0,
-        y=0.94,
-        fontsize=11.5,
-        fontweight="bold",
-        color=TEXT_COLOR,
-    )
+    if single_column:
+        figure.suptitle(
+            "Population-shape sensitivity",
+            y=0.982,
+            fontsize=8.3,
+            fontweight="bold",
+            color=TEXT_COLOR,
+        )
+    else:
+        figure.suptitle(
+            title,
+            x=(left_margin + right_margin) / 2.0,
+            y=0.94,
+            fontsize=11.5,
+            fontweight="bold",
+            color=TEXT_COLOR,
+        )
 
     output_stem.parent.mkdir(parents=True, exist_ok=True)
     _write_plot_data(output_stem.with_suffix(".csv"), rows, count_bucket, agents_per_bucket)
-    figure.subplots_adjust(left=left_margin, right=right_margin, top=0.77, bottom=0.2)
+    if single_column:
+        figure.subplots_adjust(left=left_margin, right=right_margin, top=0.845, bottom=0.22)
+    else:
+        figure.subplots_adjust(left=left_margin, right=right_margin, top=0.77, bottom=0.2)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 
@@ -504,18 +555,8 @@ def plot_panel_figure(
     for text in legend.get_texts():
         text.set_color(TEXT_COLOR)
 
-    figure.text(
-        0.5,
-        0.022,
-        "All panels use 5 agents per observation-count bucket. Values are percent improvement over JEEDS in absolute error.",
-        ha="center",
-        va="bottom",
-        fontsize=7.0,
-        color=CHARCOAL,
-    )
-
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.11, right=0.985, top=0.885, bottom=0.065, hspace=0.68, wspace=0.38)
+    figure.subplots_adjust(left=0.11, right=0.985, top=0.885, bottom=0.04, hspace=0.68, wspace=0.38)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 
@@ -579,6 +620,27 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = parse_args(argv)
     count_buckets = _parse_count_buckets(args.count_buckets)
+    if args.single_column_output_stem is not None:
+        count_bucket = count_buckets[0]
+        rows = compute_improvement_rows(
+            agent_level_csv=args.agent_level_csv,
+            agents_per_bucket=args.agents_per_bucket,
+            count_bucket=count_bucket,
+        )
+        plot_single_bucket(
+            rows=rows,
+            count_bucket=count_bucket,
+            agents_per_bucket=args.agents_per_bucket,
+            output_stem=args.single_column_output_stem,
+            dpi=args.dpi,
+            hide_negative_bars=not args.show_negative_bars,
+            single_column=True,
+        )
+        print(
+            f"Wrote one-column population-shape plot to "
+            f"{args.single_column_output_stem.with_suffix('.png')}"
+        )
+        return
     render_all(
         agent_level_csv=args.agent_level_csv,
         output_dir=args.output_dir,

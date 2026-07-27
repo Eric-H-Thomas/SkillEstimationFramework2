@@ -50,6 +50,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Average over all observation-count buckets instead of selecting one bucket.",
     )
+    parser.add_argument(
+        "--single-column",
+        action="store_true",
+        help="Use proportions and typography designed for one AAAI text column.",
+    )
     parser.add_argument("--dpi", type=int, default=450)
     return parser.parse_args(argv)
 
@@ -113,6 +118,7 @@ def render(
     count_bucket: int | str,
     output_stem: Path,
     dpi: int,
+    single_column: bool = False,
 ) -> None:
     """Render the default-only agents-per-bucket figure."""
 
@@ -121,8 +127,24 @@ def render(
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
 
-    plt.rcParams.update(
-        {
+    if single_column:
+        rc_params = {
+            "font.family": "DejaVu Sans",
+            "font.size": 7.0,
+            "axes.labelsize": 7.2,
+            "xtick.labelsize": 6.4,
+            "ytick.labelsize": 6.7,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+        figure_size = (3.35, 2.18)
+        bar_height = 0.62
+        error_line_width = 0.68
+        error_cap_size = 1.7
+        negative_label_size = 5.2
+        skill_header_size = 7.2
+    else:
+        rc_params = {
             "font.family": "DejaVu Sans",
             "font.size": 8.0,
             "axes.labelsize": 8.2,
@@ -131,7 +153,13 @@ def render(
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
-    )
+        figure_size = (5.95, 2.85)
+        bar_height = 0.58
+        error_line_width = 0.62
+        error_cap_size = 1.7
+        negative_label_size = 6.1
+        skill_header_size = 8.0
+    plt.rcParams.update(rc_params)
 
     hide_negative_bars = True
     x_min, x_max = _compact_x_limits(rows, hide_negative_bars, base_extent=4.0)
@@ -139,8 +167,7 @@ def render(
     colors = [AGENTS_BASE_COLORS[row.condition.agents_per_bucket] for row in rows]
     execution_values, decision_values, execution_xerr, decision_xerr = _mirrored_bar_arrays(rows, hide_negative_bars)
 
-    figure, axis = plt.subplots(figsize=(5.95, 2.85))
-    bar_height = 0.58
+    figure, axis = plt.subplots(figsize=figure_size)
 
     axis.barh(
         y_positions,
@@ -166,9 +193,9 @@ def render(
         xerr=execution_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.62,
-        capsize=1.7,
-        capthick=0.62,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
         alpha=0.74,
         zorder=4,
     )
@@ -178,9 +205,9 @@ def render(
         xerr=decision_xerr,
         fmt="none",
         ecolor=TEXT_COLOR,
-        elinewidth=0.62,
-        capsize=1.7,
-        capthick=0.62,
+        elinewidth=error_line_width,
+        capsize=error_cap_size,
+        capthick=error_line_width,
         alpha=0.74,
         zorder=4,
     )
@@ -193,7 +220,7 @@ def render(
                 _missing_bar_label(row.execution_mean, row.execution_ci_lower, row.execution_ci_upper),
                 ha="right",
                 va="center",
-                fontsize=6.1,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
@@ -205,7 +232,7 @@ def render(
                 _missing_bar_label(row.decision_mean, row.decision_ci_lower, row.decision_ci_upper),
                 ha="left",
                 va="center",
-                fontsize=6.1,
+                fontsize=negative_label_size,
                 color=NEGATIVE_TEXT_COLOR,
                 fontweight="bold",
                 zorder=5,
@@ -219,7 +246,7 @@ def render(
     axis.set_yticklabels([str(row.condition.agents_per_bucket) for row in rows], fontweight="bold")
     for tick_label in axis.get_yticklabels():
         tick_label.set_color(TEXT_COLOR)
-    axis.set_ylabel("Agents per bucket", color=TEXT_COLOR, labelpad=8)
+    axis.set_ylabel("Agents per bucket", color=TEXT_COLOR, labelpad=5 if single_column else 8)
 
     axis.xaxis.set_major_locator(ticker.MultipleLocator(_tick_step(x_min, x_max)))
     axis.xaxis.set_major_formatter(ticker.FuncFormatter(_format_axis_tick))
@@ -232,43 +259,51 @@ def render(
     axis.spines["bottom"].set_color("#AAA4B3")
     axis.spines["bottom"].set_linewidth(0.6)
 
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error")
+    axis.set_xlabel(
+        "Improvement over JEEDS in absolute error (%)"
+        if single_column
+        else "Percent improvement over JEEDS in absolute error"
+    )
     title = (
         "Agents-per-bucket sensitivity (all agents)"
         if count_bucket == "all"
         else f"Agents-per-bucket sensitivity ({count_bucket} observations/agent)"
     )
-    figure.suptitle(
-        title,
-        y=0.985,
-        fontsize=9.8,
-        fontweight="bold",
-        color=TEXT_COLOR,
-    )
+    if not single_column:
+        figure.suptitle(
+            title,
+            y=0.985,
+            fontsize=9.8,
+            fontweight="bold",
+            color=TEXT_COLOR,
+        )
     axis.text(
         (x_min + 0.0) / 2.0,
-        1.025,
+        1.012 if single_column else 1.025,
         "Execution skill",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=8.0,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
     axis.text(
         x_max / 2.0,
-        1.025,
-        "Decision-making skill",
+        1.012 if single_column else 1.025,
+        "Decision skill" if single_column else "Decision-making skill",
         transform=axis.get_xaxis_transform(),
         ha="center",
         va="bottom",
-        fontsize=8.0,
+        fontsize=skill_header_size,
         color=TEXT_COLOR,
         fontweight="bold",
     )
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.12, right=0.985, top=0.84, bottom=0.15)
+    if single_column:
+        figure.subplots_adjust(left=0.20, right=0.985, top=0.86, bottom=0.22)
+    else:
+        figure.subplots_adjust(left=0.12, right=0.985, top=0.84, bottom=0.15)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
     _write_plot_data(output_stem.with_suffix(".csv"), rows, count_bucket)
@@ -283,7 +318,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         output_stem = DEFAULT_OVERALL_OUTPUT_STEM if args.average_all_buckets else DEFAULT_OUTPUT_STEM
     count_bucket: int | str = "all" if args.average_all_buckets else args.count_bucket
     rows = _default_rows(args.agent_level_csv, args.count_bucket, args.average_all_buckets)
-    render(rows, count_bucket, output_stem, args.dpi)
+    render(rows, count_bucket, output_stem, args.dpi, single_column=args.single_column)
     print(f"Wrote default-only agents-per-bucket figure to {output_stem.with_suffix('.png')}")
 
 

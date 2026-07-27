@@ -469,6 +469,21 @@ def plot_improvement_bars(
                 clip_on=False,
                 zorder=5,
             )
+        axis.text(
+            group_label_x,
+            1.01,
+            "Agents\nper bucket",
+            transform=axis.transAxes,
+            ha="center",
+            va="bottom",
+            multialignment="center",
+            linespacing=0.9,
+            fontsize=6.0,
+            color=TEXT_COLOR,
+            fontweight="bold",
+            clip_on=False,
+            zorder=5,
+        )
 
     for y_value, row, label, color in zip(y_positions, rows, labels, colors):
         if hide_negative_bars and row.execution_mean < 0.0:
@@ -587,28 +602,8 @@ def plot_improvement_bars(
     for text in legend.get_texts():
         text.set_color(TEXT_COLOR)
 
-    figure.text(
-        0.5,
-        0.03,
-        "Labels: DEF = default; MOD = moderate misspec.; STR = strong misspec. "
-        "Shade darkens with misspecification severity.",
-        ha="center",
-        va="bottom",
-        fontsize=5.8,
-        color=CHARCOAL,
-    )
-    figure.text(
-        0.5,
-        0.012,
-        "Note: each bucket plot uses its own x-axis scale.",
-        ha="center",
-        va="bottom",
-        fontsize=5.8,
-        color=CHARCOAL,
-    )
-
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.12, right=0.985, top=0.86, bottom=0.125)
+    figure.subplots_adjust(left=0.12, right=0.985, top=0.86, bottom=0.09)
     _save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 
