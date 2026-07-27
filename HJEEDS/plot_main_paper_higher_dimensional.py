@@ -511,67 +511,51 @@ def _set_pitch_axis(axis, pitch_counts: Sequence[int]) -> None:
     axis.set_xticks(list(pitch_counts), [str(value) for value in pitch_counts])
 
 
-def plot_baseball_separability(
+def plot_baseball_separability_auc(
     output_dir: Path,
     dpi: int,
     *,
     pitch_counts: Sequence[int],
     separability: dict[str, Sequence[float]],
-    sigma_gap: dict[str, Sequence[float]],
 ) -> tuple[Path, ...]:
+    """Main-paper BB/IP AUC panel (one-column)."""
+
     import matplotlib.pyplot as plt
 
-    gap_values = [float(value) for series in sigma_gap.values() for value in series]
-    gap_min = min(gap_values)
-    gap_max = max(gap_values)
-    gap_pad = max(0.012, 0.08 * (gap_max - gap_min))
-
-    with plt.rc_context(PLOT_RC):
-        figure, axes = plt.subplots(2, 1, figsize=(FIGURE_WIDTH, 4.18), sharex=True)
-
-        _draw_method_lines(axes[0], pitch_counts, separability)
-        axes[0].axhline(0.5, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
-        axes[0].axhline(0.8, color="#66616F", linestyle=":", linewidth=0.8, zorder=1)
-        axes[0].text(
+    with plt.rc_context(DUAL_AXIS_PLOT_RC):
+        figure, axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.65))
+        _draw_method_lines(axis, pitch_counts, separability)
+        axis.axhline(0.5, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
+        axis.axhline(0.8, color="#66616F", linestyle=":", linewidth=0.8, zorder=1)
+        axis.text(
             0.98,
             0.5,
             "chance",
-            transform=axes[0].get_yaxis_transform(),
+            transform=axis.get_yaxis_transform(),
             ha="right",
             va="bottom",
-            fontsize=6.1,
+            fontsize=7.0,
             color=MUTED_TEXT_COLOR,
             bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.6, "alpha": 0.9},
         )
-        axes[0].text(
+        axis.text(
             0.98,
             0.8,
             "0.8",
-            transform=axes[0].get_yaxis_transform(),
+            transform=axis.get_yaxis_transform(),
             ha="right",
             va="bottom",
-            fontsize=6.1,
+            fontsize=7.0,
             color=MUTED_TEXT_COLOR,
             bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.6, "alpha": 0.9},
         )
-        axes[0].set_title("BB/IP separability", pad=4.0)
-        axes[0].set_ylabel("AUC", labelpad=4.0)
-        axes[0].set_ylim(0.0, 1.05)
-
-        _draw_method_lines(axes[1], pitch_counts, sigma_gap)
-        axes[1].axhline(0.0, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
-        axes[1].set_title("Mean execution-skill gap", pad=4.0)
-        axes[1].set_ylabel(r"Top $-$ bottom mean $\hat{\sigma}$", labelpad=4.0)
-        axes[1].set_ylim(gap_min - gap_pad, gap_max + gap_pad)
-
-        for axis in axes:
-            _set_pitch_axis(axis, pitch_counts)
-            _style_axis(axis)
-        axes[0].tick_params(labelbottom=False)
-        axes[1].set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
-        _figure_legend(figure, axes[0])
-        figure.align_ylabels(axes)
-        figure.subplots_adjust(left=0.20, right=0.975, top=0.915, bottom=0.105, hspace=0.34)
+        axis.set_ylabel("AUC", labelpad=4.0)
+        axis.set_ylim(0.0, 1.05)
+        axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
+        _set_pitch_axis(axis, pitch_counts)
+        _style_axis(axis)
+        _figure_legend(figure, axis)
+        figure.subplots_adjust(left=0.18, right=0.975, top=0.88, bottom=0.18)
         written = _save_bundle(
             figure,
             output_dir,
@@ -579,7 +563,48 @@ def plot_baseball_separability(
             dpi,
             png_description=(
                 "Rendered from baseball_convergence_paper_bbip20_calibrated/"
-                "separability_by_N.csv"
+                "separability_by_N.csv (AUC panel)"
+            ),
+        )
+        plt.close(figure)
+    return written
+
+
+def plot_baseball_sigma_gap(
+    output_dir: Path,
+    dpi: int,
+    *,
+    pitch_counts: Sequence[int],
+    sigma_gap: dict[str, Sequence[float]],
+) -> tuple[Path, ...]:
+    """Supplementary mean top-minus-bottom $\\hat{\\sigma}$ gap panel."""
+
+    import matplotlib.pyplot as plt
+
+    gap_values = [float(value) for series in sigma_gap.values() for value in series]
+    gap_min = min(gap_values)
+    gap_max = max(gap_values)
+    gap_pad = max(0.012, 0.08 * (gap_max - gap_min))
+
+    with plt.rc_context(DUAL_AXIS_PLOT_RC):
+        figure, axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.65))
+        _draw_method_lines(axis, pitch_counts, sigma_gap)
+        axis.axhline(0.0, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
+        axis.set_ylabel(r"Top $-$ bottom mean $\hat{\sigma}$", labelpad=4.0)
+        axis.set_ylim(gap_min - gap_pad, gap_max + gap_pad)
+        axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
+        _set_pitch_axis(axis, pitch_counts)
+        _style_axis(axis)
+        _figure_legend(figure, axis)
+        figure.subplots_adjust(left=0.20, right=0.975, top=0.88, bottom=0.18)
+        written = _save_bundle(
+            figure,
+            output_dir,
+            "13_baseball_sigma_gap_by_c",
+            dpi,
+            png_description=(
+                "Rendered from baseball_convergence_paper_bbip20_calibrated/"
+                "separability_by_N.csv (mean sigma-gap panel)"
             ),
         )
         plt.close(figure)
@@ -741,11 +766,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{pitch_counts} and drift {drift_counts}"
             )
         written.extend(
-            plot_baseball_separability(
+            plot_baseball_separability_auc(
                 args.output_dir,
                 args.dpi,
                 pitch_counts=pitch_counts,
                 separability=separability,
+            )
+        )
+        written.extend(
+            plot_baseball_sigma_gap(
+                args.output_dir,
+                args.dpi,
+                pitch_counts=pitch_counts,
                 sigma_gap=sigma_gap,
             )
         )
