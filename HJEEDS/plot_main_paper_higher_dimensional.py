@@ -568,14 +568,14 @@ def plot_baseball_separability(
             _set_pitch_axis(axis, pitch_counts)
             _style_axis(axis)
         axes[0].tick_params(labelbottom=False)
-        axes[1].set_xlabel(r"Pitches observed, $N$", labelpad=4.0)
+        axes[1].set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
         _figure_legend(figure, axes[0])
         figure.align_ylabels(axes)
         figure.subplots_adjust(left=0.20, right=0.975, top=0.915, bottom=0.105, hspace=0.34)
         written = _save_bundle(
             figure,
             output_dir,
-            "11_baseball_separability_by_N",
+            "11_baseball_separability_by_c",
             dpi,
             png_description=(
                 "Rendered from baseball_convergence_paper_bbip20_calibrated/"
@@ -634,7 +634,7 @@ def plot_baseball_drift(
         execution_axis.set_ylim(-0.005, 0.135)
         execution_axis.set_yticks((0.00, 0.03, 0.06, 0.09, 0.12))
         execution_axis.set_ylabel(
-            "Execution drift\n" + r"$|\hat{\sigma}_N-\hat{\sigma}_{100}|$",
+            "Execution drift\n" + r"$|\hat{\sigma}_c-\hat{\sigma}_{100}|$",
             color=TEXT_COLOR,
             labelpad=4.5,
         )
@@ -642,7 +642,7 @@ def plot_baseball_drift(
         decision_axis.set_yticks((0.0, 0.25, 0.5, 0.75, 1.0))
         decision_axis.set_ylabel(
             "Decision drift\n"
-            + r"$|\widehat{\log\lambda}_N-\widehat{\log\lambda}_{100}|$",
+            + r"$|\widehat{\log\lambda}_c-\widehat{\log\lambda}_{100}|$",
             color=TEXT_COLOR,
             labelpad=5.0,
         )
@@ -655,14 +655,14 @@ def plot_baseball_drift(
         )
         execution_axis.set_xlim(-0.2, len(pitch_counts) - 0.8)
         execution_axis.set_xticks(x_values, [str(value) for value in pitch_counts])
-        execution_axis.set_xlabel(r"Pitches observed, $N$", labelpad=4.0)
+        execution_axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
         _style_dual_axes(execution_axis, decision_axis)
         _dual_axis_legend(figure, execution_axis, decision_axis)
         figure.subplots_adjust(left=0.25, right=0.765, top=0.785, bottom=0.19)
         written = _save_bundle(
             figure,
             output_dir,
-            "12_baseball_drift_by_N",
+            "12_baseball_drift_by_c",
             dpi,
             png_description=(
                 "Rendered from baseball_convergence_paper_bbip20_calibrated/"

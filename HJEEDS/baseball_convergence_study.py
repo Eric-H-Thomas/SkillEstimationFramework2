@@ -108,13 +108,13 @@ DRIFT_METRIC_PANELS = (
     (
         "abs_sigma_drift_vs_full",
         r"Execution skill ($\hat{\sigma}$)",
-        r"$|\hat{\sigma}_N - \hat{\sigma}_{N_{\max}}|$",
+        r"$|\hat{\sigma}_c - \hat{\sigma}_{c_{\max}}|$",
         "No rows for execution skill drift",
     ),
     (
         "abs_log_lambda_drift_vs_full",
         r"Decision skill ($\widehat{\log\lambda}$)",
-        r"$|\widehat{\log\lambda}_N - \widehat{\log\lambda}_{N_{\max}}|$",
+        r"$|\widehat{\log\lambda}_c - \widehat{\log\lambda}_{c_{\max}}|$",
         "No rows for log decision skill drift",
     ),
 )
@@ -484,7 +484,7 @@ def plot_drift_by_n(
         zip(axes_array, DRIFT_METRIC_PANELS)
     ):
         axis.set_title(title)
-        axis.set_xlabel(r"Pitch-count checkpoint $N$")
+        axis.set_xlabel(r"Pitch-count checkpoint $c$")
         axis.set_ylabel(ylabel)
         axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.45)
 
@@ -728,7 +728,7 @@ def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
                     alpha=0.85,
                     label=f"H-JEEDS @ {final_n}",
                 )
-            axis.set_xlabel(r"Pitch-count checkpoint $N$")
+            axis.set_xlabel(r"Pitch-count checkpoint $c$")
             axis.set_ylabel(ylabel)
             axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.55)
             axis.set_xticks(ns)

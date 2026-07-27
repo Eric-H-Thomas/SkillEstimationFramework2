@@ -345,7 +345,7 @@ def plot_separability_by_n(
                 axis.set_xlim(0, max(bucket_values) * 1.05)
 
         axis.set_title(title)
-        axis.set_xlabel(r"Pitch-count checkpoint $N$")
+        axis.set_xlabel(r"Pitch-count checkpoint $c$")
         axis.set_ylabel(ylabel)
         axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.45)
 
