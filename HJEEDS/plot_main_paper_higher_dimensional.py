@@ -1,28 +1,15 @@
 """Render the higher-dimensional main-paper figures for one-column AAAI use.
 
-The original result CSVs for these three figures are not available in this
-checkout.  The values below were therefore recovered from the already-rendered
-paper PNGs by calibrating each axis against its visible ticks and reading the
-colored marker/error-bar coordinates.  They are *digitized presentation data*,
-not recomputed experimental results.  Keeping that distinction explicit avoids
-accidentally implying that this plotting-only script reruns either estimator.
+Both figure families read experimental summary CSVs by default:
 
-Source PNGs used for recovery (relative to the SportsHCI project root):
-
-* ``HJEEDSPaper/figures/2d-darts/10_two_d_error_by_count_bucket.png``
-* ``HJEEDSPaper/figures/baseball/11_baseball_separability_by_N.png``
-* ``HJEEDSPaper/figures/baseball/12_baseball_drift_by_N.png``
-
-The recovered coordinates reproduce the headline values reported in the paper
-at their stated precision (for example, 6.70 vs. 5.93 execution error and 21.8
-vs. 15.4 decision-skill error at five 2D-Darts observations; .87/.86 AUC at
-100 baseball pitches).  If the source CSVs are recovered later, replace these
-constants with CSV readers while retaining the one-column rendering functions.
+* 2D-Darts (10): ``HJEEDS/results/2d_cluster_tests/cluster_0/summary_by_bucket.csv``
+* Baseball (11/12): ``HJEEDS/results/baseball_convergence_paper_bbip20_calibrated/``
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,27 +21,20 @@ from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SPORTSHCI_ROOT = REPO_ROOT.parent.parent
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "HJEEDS/results/hjeeds_paper_500_seeds/final_paper_plots"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "figures"
+DEFAULT_TWO_D_SUMMARY_CSV = (
+    REPO_ROOT / "HJEEDS/results/2d_cluster_tests/cluster_0/summary_by_bucket.csv"
+)
+DEFAULT_BASEBALL_RESULTS_DIR = (
+    REPO_ROOT / "HJEEDS/results/baseball_convergence_paper_bbip20_calibrated"
+)
 
 # Keep Matplotlib's font cache in a writable temporary location on desktop and
 # cluster runs.  This is presentation infrastructure only; it does not affect
-# any recovered values.
+# plotted values.
 _MATPLOTLIB_CACHE = Path(os.environ.get("TMPDIR", "/tmp")) / "hjeeds_main_paper_plot_cache"
 _MATPLOTLIB_CACHE.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_MATPLOTLIB_CACHE))
-
-SOURCE_PNGS = {
-    "10_two_d_error_by_count_bucket": (
-        SPORTSHCI_ROOT / "HJEEDSPaper/figures/2d-darts/10_two_d_error_by_count_bucket.png"
-    ),
-    "11_baseball_separability_by_N": (
-        SPORTSHCI_ROOT / "HJEEDSPaper/figures/baseball/11_baseball_separability_by_N.png"
-    ),
-    "12_baseball_drift_by_N": (
-        SPORTSHCI_ROOT / "HJEEDSPaper/figures/baseball/12_baseball_drift_by_N.png"
-    ),
-}
 
 FIGURE_WIDTH = 3.35
 TEXT_COLOR = "#2F2C37"
@@ -62,6 +42,9 @@ CHARCOAL = "#565264"
 MUTED_TEXT_COLOR = "#66616F"
 GRID_COLOR = "#D9D5DF"
 SPINE_COLOR = "#AAA4B3"
+
+TWO_D_EXECUTION_METRIC = "abs_sigma_error"
+TWO_D_DECISION_METRIC = "abs_rationality_percent_error"
 
 DUAL_AXIS_STYLES = {
     ("jeeds", "execution"): {
@@ -90,13 +73,10 @@ DUAL_AXIS_STYLES = {
     },
 }
 
-OBSERVATION_BUCKETS = (5, 10, 25, 100, 1000)
-PITCH_COUNTS = (5, 10, 25, 50, 100)
-
 
 @dataclass(frozen=True)
 class IntervalSeries:
-    """Digitized means and visible 95% interval endpoints for one method."""
+    """Means and 95% interval endpoints for one method."""
 
     means: tuple[float, ...]
     lower: tuple[float, ...]
@@ -110,58 +90,6 @@ class IntervalSeries:
                 np.asarray(self.upper, dtype=float) - means,
             )
         )
-
-
-# Pixel calibration for the 2D source used y=1192.5 at execution error 5.0
-# with 529.5 px/unit, and y=1173.5 at decision error 12 with 94.5 px/unit.
-# Interval caps were read at their visible centers; means are cap midpoints.
-TWO_D_EXECUTION = {
-    "jeeds": IntervalSeries(
-        means=(6.704, 6.364, 6.050, 5.422, 5.180),
-        lower=(6.471, 6.105, 5.778, 5.144, 4.892),
-        upper=(6.938, 6.624, 6.322, 5.701, 5.468),
-    ),
-    "hierarchical": IntervalSeries(
-        means=(5.935, 5.735, 5.574, 5.163, 5.139),
-        lower=(5.672, 5.463, 5.302, 4.890, 4.855),
-        upper=(6.197, 6.007, 5.846, 5.436, 5.423),
-    ),
-}
-
-TWO_D_DECISION = {
-    "jeeds": IntervalSeries(
-        means=(21.831, 20.005, 16.582, 12.868, 11.772),
-        lower=(21.005, 19.238, 15.757, 12.085, 11.101),
-        upper=(22.656, 20.772, 17.407, 13.651, 12.444),
-    ),
-    "hierarchical": IntervalSeries(
-        means=(15.407, 14.767, 13.270, 12.011, 11.646),
-        lower=(14.730, 14.053, 12.540, 11.249, 10.984),
-        upper=(16.085, 15.481, 14.000, 12.772, 12.307),
-    ),
-}
-
-# Baseball values were recovered from marker centers after calibrating the AUC,
-# mean-gap, and drift axes.  AUC has .01 resolution for the 10-vs-10 comparison.
-BASEBALL_SEPARABILITY = {
-    "jeeds": (0.56, 0.53, 0.74, 0.76, 0.87),
-    "hierarchical": (0.44, 0.52, 0.69, 0.77, 0.86),
-}
-
-BASEBALL_SIGMA_GAP = {
-    "jeeds": (-0.0059, 0.0389, 0.0706, 0.1026, 0.1309),
-    "hierarchical": (0.0002, 0.0204, 0.0403, 0.0813, 0.1146),
-}
-
-BASEBALL_EXECUTION_DRIFT = {
-    "jeeds": (0.1286, 0.1200, 0.0630, 0.0520, 0.0),
-    "hierarchical": (0.0734, 0.0703, 0.0511, 0.0449, 0.0),
-}
-
-BASEBALL_DECISION_DRIFT = {
-    "jeeds": (0.694, 0.721, 0.611, 0.369, 0.0),
-    "hierarchical": (0.999, 0.927, 0.317, 0.180, 0.0),
-}
 
 
 PLOT_RC = {
@@ -201,17 +129,167 @@ DUAL_AXIS_PLOT_RC = {
 }
 
 
-def _validate_recovery() -> None:
-    """Guard the reported headline values against accidental transcription edits."""
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
 
-    assert f"{TWO_D_EXECUTION['jeeds'].means[0]:.2f}" == "6.70"
-    assert f"{TWO_D_EXECUTION['hierarchical'].means[0]:.2f}" == "5.93"
-    assert f"{TWO_D_DECISION['jeeds'].means[0]:.1f}" == "21.8"
-    assert f"{TWO_D_DECISION['hierarchical'].means[0]:.1f}" == "15.4"
-    assert BASEBALL_SEPARABILITY["jeeds"][-1] == 0.87
-    assert BASEBALL_SEPARABILITY["hierarchical"][-1] == 0.86
-    assert f"{BASEBALL_SIGMA_GAP['jeeds'][-1]:.2f}" == "0.13"
-    assert f"{BASEBALL_SIGMA_GAP['hierarchical'][-1]:.2f}" == "0.11"
+
+def _optional_float(value: str | None) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return float(value)
+
+
+def load_two_d_series(
+    summary_csv: Path,
+) -> tuple[tuple[int, ...], dict[str, IntervalSeries], dict[str, IntervalSeries]]:
+    """Load 2D execution/decision error series from ``summary_by_bucket.csv``."""
+
+    if not summary_csv.is_file():
+        raise FileNotFoundError(f"Missing 2D summary CSV: {summary_csv}")
+
+    rows = _read_csv_rows(summary_csv)
+    paper_rows = [
+        row
+        for row in rows
+        if row.get("metric", "").strip()
+        in {TWO_D_EXECUTION_METRIC, TWO_D_DECISION_METRIC}
+    ]
+    buckets = tuple(
+        sorted({int(float(row["count_bucket"])) for row in paper_rows})
+    )
+    if not buckets:
+        raise ValueError(f"No 2D paper metrics found in {summary_csv}")
+
+    execution: dict[str, IntervalSeries] = {}
+    decision: dict[str, IntervalSeries] = {}
+    for method in ("jeeds", "hierarchical"):
+        for metric, destination in (
+            (TWO_D_EXECUTION_METRIC, execution),
+            (TWO_D_DECISION_METRIC, decision),
+        ):
+            by_n = {
+                int(float(row["count_bucket"])): row
+                for row in paper_rows
+                if row.get("method", "").strip() == method
+                and row.get("metric", "").strip() == metric
+            }
+            missing = [n for n in buckets if n not in by_n]
+            if missing:
+                raise ValueError(
+                    f"Missing {method}/{metric} rows for buckets {missing} in {summary_csv}"
+                )
+            means: list[float] = []
+            lower: list[float] = []
+            upper: list[float] = []
+            for n in buckets:
+                mean = _optional_float(by_n[n].get("mean"))
+                ci_lower = _optional_float(by_n[n].get("ci_lower"))
+                ci_upper = _optional_float(by_n[n].get("ci_upper"))
+                if mean is None or ci_lower is None or ci_upper is None:
+                    raise ValueError(
+                        f"Incomplete CI fields for {method}/{metric}/N={n} in {summary_csv}"
+                    )
+                if not (ci_lower <= mean <= ci_upper):
+                    raise ValueError(
+                        "Expected ci_lower <= mean <= ci_upper for "
+                        f"{method}/{metric}/N={n}, got {ci_lower}, {mean}, {ci_upper}"
+                    )
+                means.append(mean)
+                lower.append(ci_lower)
+                upper.append(ci_upper)
+            destination[method] = IntervalSeries(
+                means=tuple(means),
+                lower=tuple(lower),
+                upper=tuple(upper),
+            )
+    return buckets, execution, decision
+
+
+def load_baseball_separability(
+    results_dir: Path,
+) -> tuple[tuple[int, ...], dict[str, tuple[float, ...]], dict[str, tuple[float, ...]]]:
+    """Load AUC and mean-sigma-gap series from ``separability_by_N.csv``."""
+
+    path = results_dir / "separability_by_N.csv"
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing baseball separability CSV: {path}")
+
+    sigma_rows = [
+        row for row in _read_csv_rows(path) if row.get("metric", "").strip() == "sigma"
+    ]
+    pitch_counts = tuple(
+        sorted({int(float(row["convergence_n"])) for row in sigma_rows})
+    )
+    if not pitch_counts:
+        raise ValueError(f"No sigma rows found in {path}")
+
+    separability: dict[str, tuple[float, ...]] = {}
+    sigma_gap: dict[str, tuple[float, ...]] = {}
+    for method in ("jeeds", "hierarchical"):
+        by_n = {
+            int(float(row["convergence_n"])): row
+            for row in sigma_rows
+            if row.get("method", "").strip() == method
+        }
+        missing = [n for n in pitch_counts if n not in by_n]
+        if missing:
+            raise ValueError(f"Missing {method} sigma rows for N={missing} in {path}")
+        separability[method] = tuple(float(by_n[n]["auc"]) for n in pitch_counts)
+        sigma_gap[method] = tuple(
+            float(by_n[n]["mean_gap_top_minus_bottom"]) for n in pitch_counts
+        )
+    return pitch_counts, separability, sigma_gap
+
+
+def load_baseball_drift(
+    results_dir: Path,
+) -> tuple[tuple[int, ...], dict[str, tuple[float, ...]], dict[str, tuple[float, ...]]]:
+    """Load execution/decision self-reference drift from ``summary_by_N.csv``."""
+
+    path = results_dir / "summary_by_N.csv"
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing baseball drift summary CSV: {path}")
+
+    rows = _read_csv_rows(path)
+    pitch_counts = tuple(
+        sorted(
+            {
+                int(float(row["count_bucket"]))
+                for row in rows
+                if row.get("metric", "").strip()
+                in {"abs_sigma_drift_vs_full", "abs_log_lambda_drift_vs_full"}
+            }
+        )
+    )
+    if not pitch_counts:
+        raise ValueError(f"No drift rows found in {path}")
+
+    execution_drift: dict[str, tuple[float, ...]] = {}
+    decision_drift: dict[str, tuple[float, ...]] = {}
+    for method in ("jeeds", "hierarchical"):
+        sigma_by_n = {
+            int(float(row["count_bucket"])): float(row["mean"])
+            for row in rows
+            if row.get("method", "").strip() == method
+            and row.get("metric", "").strip() == "abs_sigma_drift_vs_full"
+        }
+        lambda_by_n = {
+            int(float(row["count_bucket"])): float(row["mean"])
+            for row in rows
+            if row.get("method", "").strip() == method
+            and row.get("metric", "").strip() == "abs_log_lambda_drift_vs_full"
+        }
+        missing_sigma = [n for n in pitch_counts if n not in sigma_by_n]
+        missing_lambda = [n for n in pitch_counts if n not in lambda_by_n]
+        if missing_sigma or missing_lambda:
+            raise ValueError(
+                f"Missing {method} drift rows for "
+                f"sigma N={missing_sigma}, log-lambda N={missing_lambda} in {path}"
+            )
+        execution_drift[method] = tuple(sigma_by_n[n] for n in pitch_counts)
+        decision_drift[method] = tuple(lambda_by_n[n] for n in pitch_counts)
+    return pitch_counts, execution_drift, decision_drift
 
 
 def _style_axis(axis) -> None:
@@ -298,19 +376,25 @@ def _dual_axis_legend(figure, execution_axis, decision_axis) -> None:
             text.set_color(TEXT_COLOR)
 
 
-def _save_bundle(figure, output_dir: Path, stem: str, dpi: int) -> tuple[Path, ...]:
+def _save_bundle(
+    figure,
+    output_dir: Path,
+    stem: str,
+    dpi: int,
+    *,
+    png_description: str | None = None,
+) -> tuple[Path, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for suffix in (".png", ".pdf", ".svg"):
         path = output_dir / f"{stem}{suffix}"
         # Do not use bbox_inches="tight": the canvas is intentionally the exact
         # 3.35-inch AAAI column width, and all elements fit inside its margins.
-        save_kwargs = {}
+        save_kwargs: dict = {}
         if suffix == ".png":
             save_kwargs["dpi"] = dpi
-            save_kwargs["metadata"] = {
-                "Description": "Presentation redraw from digitized coordinates in the original paper PNG; not recomputed data."
-            }
+            if png_description is not None:
+                save_kwargs["metadata"] = {"Description": png_description}
         figure.savefig(path, **save_kwargs)
         written.append(path)
     return tuple(written)
@@ -343,26 +427,33 @@ def _draw_error_series(axis, x_values, series: IntervalSeries, style: dict) -> N
     )
 
 
-def plot_two_d(output_dir: Path, dpi: int) -> tuple[Path, ...]:
+def plot_two_d(
+    output_dir: Path,
+    dpi: int,
+    *,
+    observation_buckets: Sequence[int],
+    execution: dict[str, IntervalSeries],
+    decision: dict[str, IntervalSeries],
+) -> tuple[Path, ...]:
     import matplotlib.pyplot as plt
 
     with plt.rc_context(DUAL_AXIS_PLOT_RC):
         figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.92))
         decision_axis = execution_axis.twinx()
         figure.patch.set_facecolor("white")
-        x_values = np.arange(len(OBSERVATION_BUCKETS), dtype=float)
+        x_values = np.arange(len(observation_buckets), dtype=float)
 
         for method in ("jeeds", "hierarchical"):
             _draw_error_series(
                 execution_axis,
                 x_values,
-                TWO_D_EXECUTION[method],
+                execution[method],
                 DUAL_AXIS_STYLES[(method, "execution")],
             )
             _draw_error_series(
                 decision_axis,
                 x_values,
-                TWO_D_DECISION[method],
+                decision[method],
                 DUAL_AXIS_STYLES[(method, "decision")],
             )
 
@@ -378,12 +469,22 @@ def plot_two_d(output_dir: Path, dpi: int) -> tuple[Path, ...]:
             color=TEXT_COLOR,
             labelpad=5.0,
         )
-        execution_axis.set_xticks(x_values, [str(value) for value in OBSERVATION_BUCKETS])
+        execution_axis.set_xticks(
+            x_values, [str(value) for value in observation_buckets]
+        )
         execution_axis.set_xlabel("Observations per agent", color=TEXT_COLOR, labelpad=4.0)
         _style_dual_axes(execution_axis, decision_axis)
         _dual_axis_legend(figure, execution_axis, decision_axis)
         figure.subplots_adjust(left=0.205, right=0.795, top=0.785, bottom=0.19)
-        written = _save_bundle(figure, output_dir, "10_two_d_error_by_count_bucket", dpi)
+        written = _save_bundle(
+            figure,
+            output_dir,
+            "10_two_d_error_by_count_bucket",
+            dpi,
+            png_description=(
+                "Rendered from 2d_cluster_tests/cluster_0/summary_by_bucket.csv"
+            ),
+        )
         plt.close(figure)
     return written
 
@@ -404,18 +505,31 @@ def _draw_method_lines(axis, x_values, values_by_method) -> None:
         )
 
 
-def _set_pitch_axis(axis) -> None:
-    axis.set_xlim(0.0, 105.0)
-    axis.set_xticks(PITCH_COUNTS, [str(value) for value in PITCH_COUNTS])
+def _set_pitch_axis(axis, pitch_counts: Sequence[int]) -> None:
+    max_n = max(pitch_counts)
+    axis.set_xlim(0.0, max_n * 1.05)
+    axis.set_xticks(list(pitch_counts), [str(value) for value in pitch_counts])
 
 
-def plot_baseball_separability(output_dir: Path, dpi: int) -> tuple[Path, ...]:
+def plot_baseball_separability(
+    output_dir: Path,
+    dpi: int,
+    *,
+    pitch_counts: Sequence[int],
+    separability: dict[str, Sequence[float]],
+    sigma_gap: dict[str, Sequence[float]],
+) -> tuple[Path, ...]:
     import matplotlib.pyplot as plt
+
+    gap_values = [float(value) for series in sigma_gap.values() for value in series]
+    gap_min = min(gap_values)
+    gap_max = max(gap_values)
+    gap_pad = max(0.012, 0.08 * (gap_max - gap_min))
 
     with plt.rc_context(PLOT_RC):
         figure, axes = plt.subplots(2, 1, figsize=(FIGURE_WIDTH, 4.18), sharex=True)
 
-        _draw_method_lines(axes[0], PITCH_COUNTS, BASEBALL_SEPARABILITY)
+        _draw_method_lines(axes[0], pitch_counts, separability)
         axes[0].axhline(0.5, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
         axes[0].axhline(0.8, color="#66616F", linestyle=":", linewidth=0.8, zorder=1)
         axes[0].text(
@@ -444,39 +558,55 @@ def plot_baseball_separability(output_dir: Path, dpi: int) -> tuple[Path, ...]:
         axes[0].set_ylabel("AUC", labelpad=4.0)
         axes[0].set_ylim(0.0, 1.05)
 
-        _draw_method_lines(axes[1], PITCH_COUNTS, BASEBALL_SIGMA_GAP)
+        _draw_method_lines(axes[1], pitch_counts, sigma_gap)
         axes[1].axhline(0.0, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
         axes[1].set_title("Mean execution-skill gap", pad=4.0)
         axes[1].set_ylabel(r"Top $-$ bottom mean $\hat{\sigma}$", labelpad=4.0)
-        axes[1].set_ylim(-0.012, 0.138)
+        axes[1].set_ylim(gap_min - gap_pad, gap_max + gap_pad)
 
         for axis in axes:
-            _set_pitch_axis(axis)
+            _set_pitch_axis(axis, pitch_counts)
             _style_axis(axis)
         axes[0].tick_params(labelbottom=False)
         axes[1].set_xlabel(r"Pitches observed, $N$", labelpad=4.0)
         _figure_legend(figure, axes[0])
         figure.align_ylabels(axes)
         figure.subplots_adjust(left=0.20, right=0.975, top=0.915, bottom=0.105, hspace=0.34)
-        written = _save_bundle(figure, output_dir, "11_baseball_separability_by_N", dpi)
+        written = _save_bundle(
+            figure,
+            output_dir,
+            "11_baseball_separability_by_N",
+            dpi,
+            png_description=(
+                "Rendered from baseball_convergence_paper_bbip20_calibrated/"
+                "separability_by_N.csv"
+            ),
+        )
         plt.close(figure)
     return written
 
 
-def plot_baseball_drift(output_dir: Path, dpi: int) -> tuple[Path, ...]:
+def plot_baseball_drift(
+    output_dir: Path,
+    dpi: int,
+    *,
+    pitch_counts: Sequence[int],
+    execution_drift: dict[str, Sequence[float]],
+    decision_drift: dict[str, Sequence[float]],
+) -> tuple[Path, ...]:
     import matplotlib.pyplot as plt
 
     with plt.rc_context(DUAL_AXIS_PLOT_RC):
         figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.92))
         decision_axis = execution_axis.twinx()
-        x_values = np.arange(len(PITCH_COUNTS), dtype=float)
+        x_values = np.arange(len(pitch_counts), dtype=float)
 
         for method in ("jeeds", "hierarchical"):
             execution_style = DUAL_AXIS_STYLES[(method, "execution")]
             decision_style = DUAL_AXIS_STYLES[(method, "decision")]
             execution_axis.plot(
                 x_values,
-                BASEBALL_EXECUTION_DRIFT[method],
+                execution_drift[method],
                 color=execution_style["color"],
                 marker=execution_style["marker"],
                 linestyle=execution_style["linestyle"],
@@ -489,7 +619,7 @@ def plot_baseball_drift(output_dir: Path, dpi: int) -> tuple[Path, ...]:
             )
             decision_axis.plot(
                 x_values,
-                BASEBALL_DECISION_DRIFT[method],
+                decision_drift[method],
                 color=decision_style["color"],
                 marker=decision_style["marker"],
                 linestyle=decision_style["linestyle"],
@@ -523,22 +653,52 @@ def plot_baseball_drift(output_dir: Path, dpi: int) -> tuple[Path, ...]:
             linewidth=0.75,
             zorder=1,
         )
-        execution_axis.set_xlim(-0.2, len(PITCH_COUNTS) - 0.8)
-        execution_axis.set_xticks(x_values, [str(value) for value in PITCH_COUNTS])
+        execution_axis.set_xlim(-0.2, len(pitch_counts) - 0.8)
+        execution_axis.set_xticks(x_values, [str(value) for value in pitch_counts])
         execution_axis.set_xlabel(r"Pitches observed, $N$", labelpad=4.0)
         _style_dual_axes(execution_axis, decision_axis)
         _dual_axis_legend(figure, execution_axis, decision_axis)
         figure.subplots_adjust(left=0.25, right=0.765, top=0.785, bottom=0.19)
-        written = _save_bundle(figure, output_dir, "12_baseball_drift_by_N", dpi)
+        written = _save_bundle(
+            figure,
+            output_dir,
+            "12_baseball_drift_by_N",
+            dpi,
+            png_description=(
+                "Rendered from baseball_convergence_paper_bbip20_calibrated/"
+                "summary_by_N.csv"
+            ),
+        )
         plt.close(figure)
     return written
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Render digitized higher-dimensional paper figures for one-column AAAI layout."
+        description=(
+            "Render higher-dimensional paper figures for one-column AAAI layout "
+            "from experimental summary CSVs."
+        )
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--two-d-summary-csv",
+        type=Path,
+        default=DEFAULT_TWO_D_SUMMARY_CSV,
+        help="2D summary_by_bucket.csv used for figure 10.",
+    )
+    parser.add_argument(
+        "--baseball-results-dir",
+        type=Path,
+        default=DEFAULT_BASEBALL_RESULTS_DIR,
+        help="Directory containing separability_by_N.csv and summary_by_N.csv.",
+    )
+    parser.add_argument(
+        "--figures",
+        choices=("all", "baseball", "2d"),
+        default="all",
+        help="Which figure set to render (default: all).",
+    )
     parser.add_argument("--dpi", type=int, default=300)
     return parser.parse_args(argv)
 
@@ -551,15 +711,58 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.dpi <= 0:
         raise ValueError(f"--dpi must be positive, received {args.dpi}")
 
-    _validate_recovery()
-    written = (
-        *plot_two_d(args.output_dir, args.dpi),
-        *plot_baseball_separability(args.output_dir, args.dpi),
-        *plot_baseball_drift(args.output_dir, args.dpi),
-    )
-    print("[main-paper-higher-dimensional] Digitized source PNGs:")
-    for path in SOURCE_PNGS.values():
-        print(f"  {path}")
+    written: list[Path] = []
+    if args.figures in {"all", "2d"}:
+        buckets, execution, decision = load_two_d_series(args.two_d_summary_csv)
+        written.extend(
+            plot_two_d(
+                args.output_dir,
+                args.dpi,
+                observation_buckets=buckets,
+                execution=execution,
+                decision=decision,
+            )
+        )
+        print(
+            "[main-paper-higher-dimensional] 2D source CSV: "
+            f"{args.two_d_summary_csv.resolve()}"
+        )
+
+    if args.figures in {"all", "baseball"}:
+        pitch_counts, separability, sigma_gap = load_baseball_separability(
+            args.baseball_results_dir
+        )
+        drift_counts, execution_drift, decision_drift = load_baseball_drift(
+            args.baseball_results_dir
+        )
+        if pitch_counts != drift_counts:
+            raise ValueError(
+                "Baseball pitch-count checkpoints differ between separability "
+                f"{pitch_counts} and drift {drift_counts}"
+            )
+        written.extend(
+            plot_baseball_separability(
+                args.output_dir,
+                args.dpi,
+                pitch_counts=pitch_counts,
+                separability=separability,
+                sigma_gap=sigma_gap,
+            )
+        )
+        written.extend(
+            plot_baseball_drift(
+                args.output_dir,
+                args.dpi,
+                pitch_counts=drift_counts,
+                execution_drift=execution_drift,
+                decision_drift=decision_drift,
+            )
+        )
+        print(
+            "[main-paper-higher-dimensional] Baseball source CSVs: "
+            f"{args.baseball_results_dir.resolve()}"
+        )
+
     print("[main-paper-higher-dimensional] Wrote:")
     for path in written:
         print(f"  {path.resolve()}")
