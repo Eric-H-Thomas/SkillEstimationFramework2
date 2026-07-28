@@ -223,6 +223,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Use proportions and typography designed for one AAAI text column.",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Optional directory for rendered plots; defaults to each experiment's results directory.",
+    )
     return parser.parse_args(argv)
 
 
@@ -465,6 +471,8 @@ def plot_rows(
         rows,
         group_gap=0.8 if group_by_agents_per_bucket else 0.0,
     )
+    if single_column and config.experiment_slug in {"decision_model", "compound_stress"}:
+        y_positions *= 0.78
     group_centers = _group_centers(rows, y_positions)
     colors = [config.factor_colors.get(row.factor_slug, "#B8B8B8") for row in rows]
 
@@ -480,8 +488,13 @@ def plot_rows(
             "ps.fonttype": 42,
         }
         figure_width = 3.35
-        figure_height = max(2.45, 0.38 * len(rows) + 1.20)
-        bar_height = 0.56
+        if config.experiment_slug == "decision_model":
+            figure_height = 1.80
+        elif config.experiment_slug == "compound_stress":
+            figure_height = 1.62
+        else:
+            figure_height = max(2.25, 0.30 * len(rows) + 1.25)
+        bar_height = 0.40 if config.experiment_slug in {"decision_model", "compound_stress"} else 0.56
         error_line_width = 0.66
         error_cap_size = 1.55
         negative_label_size = 5.2
@@ -553,9 +566,10 @@ def plot_rows(
         zorder=4,
     )
 
-    for boundary in group_boundaries:
-        axis.axhline(boundary, color="#FFFFFF", linewidth=2.8, zorder=3)
-        axis.axhline(boundary, color="#D8D3DD", linewidth=0.42, zorder=3)
+    if not single_column:
+        for boundary in group_boundaries:
+            axis.axhline(boundary, color="#FFFFFF", linewidth=2.8, zorder=3)
+            axis.axhline(boundary, color="#D8D3DD", linewidth=0.42, zorder=3)
 
     if group_by_agents_per_bucket:
         label_transform = blended_transform_factory(axis.transAxes, axis.transData)
@@ -672,7 +686,12 @@ def plot_rows(
 
     axis.axvline(0.0, color=TEXT_COLOR, linewidth=0.9, zorder=6)
     axis.set_xlim(x_min, x_max)
-    axis.set_ylim(-0.7, float(y_positions[-1]) + 0.7)
+    y_padding = (
+        0.50
+        if single_column and config.experiment_slug in {"decision_model", "compound_stress"}
+        else 0.7
+    )
+    axis.set_ylim(-y_padding, float(y_positions[-1]) + y_padding)
     axis.invert_yaxis()
     if group_by_agents_per_bucket:
         axis.set_yticks([])
@@ -748,7 +767,7 @@ def plot_rows(
         # reserve enough room so ``Moderate stress`` is not clipped at the
         # physical edge of a 3.35-inch column figure.
         left_margin = 0.31 if config.experiment_slug == "compound_stress" else 0.27
-        figure.subplots_adjust(left=left_margin, right=0.975, top=0.83, bottom=0.20)
+        figure.subplots_adjust(left=left_margin, right=0.975, top=0.81, bottom=0.215)
     else:
         left_margin = 0.18 if group_by_agents_per_bucket else 0.16
         bottom_margin = 0.10 if group_by_agents_per_bucket else 0.14
@@ -835,6 +854,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         elif agents_per_bucket is not None:
             base_name = output_stem.name.removesuffix("_improvement_bars")
             output_stem = output_stem.with_name(f"{base_name}_agents_per_bucket_{agents_per_bucket:03d}_improvement_bars")
+        if args.output_dir is not None:
+            output_stem = args.output_dir / output_stem.name
         plot_rows(
             config=config,
             rows=rows,

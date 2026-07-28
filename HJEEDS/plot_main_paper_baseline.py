@@ -239,7 +239,9 @@ def render(rows: Sequence[dict[str, Any]], output_stem: Path, dpi: int) -> None:
 
     bucket_values = sorted({int(row["count_bucket"]) for row in rows})
     bucket_positions = {bucket: index for index, bucket in enumerate(bucket_values)}
-    figure, execution_axis = plt.subplots(figsize=(3.35, 2.65))
+    # Keep the native AAAI column width while trimming vertical space that the
+    # shared legend and five-point traces do not need.
+    figure, execution_axis = plt.subplots(figsize=(3.35, 2.38))
     decision_axis = execution_axis.twinx()
     figure.patch.set_facecolor("white")
 
@@ -319,7 +321,7 @@ def render(rows: Sequence[dict[str, Any]], output_stem: Path, dpi: int) -> None:
         label.set_color(TEXT_COLOR)
 
     output_stem.parent.mkdir(parents=True, exist_ok=True)
-    figure.subplots_adjust(left=0.195, right=0.805, top=0.80, bottom=0.18)
+    figure.subplots_adjust(left=0.195, right=0.805, top=0.79, bottom=0.20)
     save_figure_bundle(figure, output_stem, dpi)
     plt.close(figure)
 

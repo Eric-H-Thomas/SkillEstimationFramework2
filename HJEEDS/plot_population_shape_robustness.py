@@ -253,6 +253,7 @@ def _draw_shape_axis(
     x_limits: tuple[float, float],
     hide_negative_bars: bool,
     panel: bool,
+    single_column: bool = False,
     shape_colors: dict[str, str] | None = None,
 ) -> None:
     """Draw one mirrored population-shape plot on an existing axis."""
@@ -263,12 +264,13 @@ def _draw_shape_axis(
         raise ValueError("No rows available to plot.")
 
     x_min, x_max = x_limits
-    y_positions = np.arange(len(rows), dtype=float)
+    row_step = 0.75 if single_column else 1.0
+    y_positions = np.arange(len(rows), dtype=float) * row_step
     palette = SHAPE_COLORS if shape_colors is None else shape_colors
     colors = [palette[row.shape_slug] for row in rows]
     execution_values, decision_values, execution_xerr, decision_xerr = _mirrored_bar_arrays(rows, hide_negative_bars)
 
-    bar_height = 0.58 if panel else 0.64
+    bar_height = 0.37 if single_column else (0.58 if panel else 0.64)
     axis.barh(
         y_positions,
         execution_values,
@@ -341,7 +343,8 @@ def _draw_shape_axis(
 
     axis.axvline(0.0, color=TEXT_COLOR, linewidth=0.9 if not panel else 0.78, zorder=6)
     axis.set_xlim(x_min, x_max)
-    axis.set_ylim(-0.6, float(y_positions[-1]) + 0.6)
+    y_padding = 0.45 if single_column else 0.6
+    axis.set_ylim(-y_padding, float(y_positions[-1]) + y_padding)
     axis.invert_yaxis()
     axis.set_yticks(y_positions)
     axis.set_yticklabels([row.shape_label for row in rows])
@@ -417,7 +420,7 @@ def plot_single_bucket(
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
-        figure_size = (3.35, 2.14)
+        figure_size = (3.35, 1.50)
         left_margin, right_margin = 0.30, 0.985
     else:
         rc_params = {
@@ -442,6 +445,7 @@ def plot_single_bucket(
         x_limits=inferred_limits,
         hide_negative_bars=hide_negative_bars,
         panel=False,
+        single_column=single_column,
         shape_colors=SINGLE_COLUMN_SHAPE_COLORS if single_column else None,
     )
     axis.set_xlabel(
@@ -478,7 +482,7 @@ def plot_single_bucket(
     output_stem.parent.mkdir(parents=True, exist_ok=True)
     _write_plot_data(output_stem.with_suffix(".csv"), rows, count_bucket, agents_per_bucket)
     if single_column:
-        figure.subplots_adjust(left=left_margin, right=right_margin, top=0.845, bottom=0.22)
+        figure.subplots_adjust(left=left_margin, right=right_margin, top=0.78, bottom=0.23)
     else:
         figure.subplots_adjust(left=left_margin, right=right_margin, top=0.77, bottom=0.2)
     _save_figure_bundle(figure, output_stem, dpi)

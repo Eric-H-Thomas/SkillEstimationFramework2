@@ -92,7 +92,9 @@ def render(output_stem: Path, dpi: int, y_tick_step: float) -> None:
     )
 
     x_values, y_values = build_step_arrays()
-    figure, axis = plt.subplots(figsize=(3.35, 1.52), constrained_layout=True)
+    # The step plot has only three y levels, so a 1.34-inch canvas preserves
+    # comfortable label clearance without spending unnecessary column height.
+    figure, axis = plt.subplots(figsize=(3.35, 1.34), constrained_layout=True)
     figure.patch.set_facecolor("white")
     axis.set_facecolor("white")
 

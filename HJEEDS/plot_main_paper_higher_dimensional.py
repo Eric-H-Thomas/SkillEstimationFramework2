@@ -4,6 +4,17 @@ Both figure families read experimental summary CSVs by default:
 
 * 2D-Darts (10): ``HJEEDS/results/2d_cluster_tests/cluster_0/summary_by_bucket.csv``
 * Baseball (11/12): ``HJEEDS/results/baseball_convergence_paper_bbip20_calibrated/``
+Source PNGs used for recovery (relative to the SportsHCI project root):
+
+* ``HJEEDSPaper/figures/2d-darts/10_two_d_error_by_count_bucket.png``
+* ``HJEEDSPaper/figures/baseball/11_baseball_separability_by_c.png``
+* ``HJEEDSPaper/figures/baseball/12_baseball_drift_by_c.png``
+
+The recovered coordinates reproduce the headline values reported in the paper
+at their stated precision (for example, 6.70 vs. 5.93 execution error and 21.8
+vs. 15.4 decision-skill error at five 2D-Darts observations; .87/.86 AUC at
+100 baseball pitches).  If the source CSVs are recovered later, replace these
+constants with CSV readers while retaining the one-column rendering functions.
 """
 
 from __future__ import annotations
@@ -35,6 +46,18 @@ DEFAULT_BASEBALL_RESULTS_DIR = (
 _MATPLOTLIB_CACHE = Path(os.environ.get("TMPDIR", "/tmp")) / "hjeeds_main_paper_plot_cache"
 _MATPLOTLIB_CACHE.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_MATPLOTLIB_CACHE))
+
+SOURCE_PNGS = {
+    "10_two_d_error_by_count_bucket": (
+        SPORTSHCI_ROOT / "HJEEDSPaper/figures/2d-darts/10_two_d_error_by_count_bucket.png"
+    ),
+    "11_baseball_separability_by_c": (
+        SPORTSHCI_ROOT / "HJEEDSPaper/figures/baseball/11_baseball_separability_by_c.png"
+    ),
+    "12_baseball_drift_by_c": (
+        SPORTSHCI_ROOT / "HJEEDSPaper/figures/baseball/12_baseball_drift_by_c.png"
+    ),
+}
 
 FIGURE_WIDTH = 3.35
 TEXT_COLOR = "#2F2C37"
@@ -438,7 +461,7 @@ def plot_two_d(
     import matplotlib.pyplot as plt
 
     with plt.rc_context(DUAL_AXIS_PLOT_RC):
-        figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.92))
+        figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.60))
         decision_axis = execution_axis.twinx()
         figure.patch.set_facecolor("white")
         x_values = np.arange(len(observation_buckets), dtype=float)
@@ -476,15 +499,7 @@ def plot_two_d(
         _style_dual_axes(execution_axis, decision_axis)
         _dual_axis_legend(figure, execution_axis, decision_axis)
         figure.subplots_adjust(left=0.205, right=0.795, top=0.785, bottom=0.19)
-        written = _save_bundle(
-            figure,
-            output_dir,
-            "10_two_d_error_by_count_bucket",
-            dpi,
-            png_description=(
-                "Rendered from 2d_cluster_tests/cluster_0/summary_by_bucket.csv"
-            ),
-        )
+        written = _save_bundle(figure, output_dir, "10_two_d_error_by_count_bucket", dpi)
         plt.close(figure)
     return written
 
@@ -523,8 +538,9 @@ def plot_baseball_separability_auc(
     import matplotlib.pyplot as plt
 
     with plt.rc_context(DUAL_AXIS_PLOT_RC):
-        figure, axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.65))
-        _draw_method_lines(axis, pitch_counts, separability)
+        figure, axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.30))
+
+        _draw_method_lines(axis, PITCH_COUNTS, BASEBALL_SEPARABILITY)
         axis.axhline(0.5, color="#88838F", linestyle="--", linewidth=0.75, zorder=1)
         axis.axhline(0.8, color="#66616F", linestyle=":", linewidth=0.8, zorder=1)
         axis.text(
@@ -551,21 +567,12 @@ def plot_baseball_separability_auc(
         )
         axis.set_ylabel("AUC", labelpad=4.0)
         axis.set_ylim(0.0, 1.05)
-        axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
-        _set_pitch_axis(axis, pitch_counts)
+        _set_pitch_axis(axis)
         _style_axis(axis)
+        axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
         _figure_legend(figure, axis)
-        figure.subplots_adjust(left=0.18, right=0.975, top=0.88, bottom=0.18)
-        written = _save_bundle(
-            figure,
-            output_dir,
-            "11_baseball_separability_by_c",
-            dpi,
-            png_description=(
-                "Rendered from baseball_convergence_paper_bbip20_calibrated/"
-                "separability_by_N.csv (AUC panel)"
-            ),
-        )
+        figure.subplots_adjust(left=0.18, right=0.975, top=0.89, bottom=0.18)
+        written = _save_bundle(figure, output_dir, "11_baseball_separability_by_c", dpi)
         plt.close(figure)
     return written
 
@@ -622,7 +629,7 @@ def plot_baseball_drift(
     import matplotlib.pyplot as plt
 
     with plt.rc_context(DUAL_AXIS_PLOT_RC):
-        figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.92))
+        figure, execution_axis = plt.subplots(1, 1, figsize=(FIGURE_WIDTH, 2.60))
         decision_axis = execution_axis.twinx()
         x_values = np.arange(len(pitch_counts), dtype=float)
 
@@ -678,22 +685,13 @@ def plot_baseball_drift(
             linewidth=0.75,
             zorder=1,
         )
-        execution_axis.set_xlim(-0.2, len(pitch_counts) - 0.8)
-        execution_axis.set_xticks(x_values, [str(value) for value in pitch_counts])
+        execution_axis.set_xlim(-0.2, len(PITCH_COUNTS) - 0.8)
+        execution_axis.set_xticks(x_values, [str(value) for value in PITCH_COUNTS])
         execution_axis.set_xlabel(r"Pitches observed, $c$", labelpad=4.0)
         _style_dual_axes(execution_axis, decision_axis)
         _dual_axis_legend(figure, execution_axis, decision_axis)
-        figure.subplots_adjust(left=0.25, right=0.765, top=0.785, bottom=0.19)
-        written = _save_bundle(
-            figure,
-            output_dir,
-            "12_baseball_drift_by_c",
-            dpi,
-            png_description=(
-                "Rendered from baseball_convergence_paper_bbip20_calibrated/"
-                "summary_by_N.csv"
-            ),
-        )
+        figure.subplots_adjust(left=0.25, right=0.765, top=0.82, bottom=0.17)
+        written = _save_bundle(figure, output_dir, "12_baseball_drift_by_c", dpi)
         plt.close(figure)
     return written
 

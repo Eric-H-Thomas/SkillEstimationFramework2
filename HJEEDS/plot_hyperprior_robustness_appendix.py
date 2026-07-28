@@ -454,9 +454,11 @@ def plot_improvement_bars(
             "ps.fonttype": 42,
         }
         figure_width = 3.35
-        figure_height = max(7.1, 0.074 * len(rows) + 2.66)
+        # Preserve the readable in-bar labels while tightening the repeated
+        # row rhythm and header block for the one-column main-paper version.
+        figure_height = max(6.15, 0.061 * len(rows) + 2.45)
         bar_height = 0.78
-        condition_label_size = 4.9
+        condition_label_size = 4.4
         negative_label_size = 5.0
         title_size = 8.3
         skill_header_size = 7.3
@@ -701,7 +703,7 @@ def plot_improvement_bars(
                 line,
                 ha="center",
                 va="center",
-                fontsize=5.5,
+                fontsize=5.2,
                 color=TEXT_COLOR,
             )
     else:

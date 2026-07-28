@@ -207,7 +207,7 @@ def _render_single_column(
     )
     # Keep the panels tall enough to show the Gaussian modes clearly while
     # moving the shared density scale beside them to reduce the total height.
-    figure, axes = plt.subplots(3, 1, figsize=(3.35, 3.12), sharex=True, sharey=True)
+    figure, axes = plt.subplots(3, 1, figsize=(3.35, 2.82), sharex=True, sharey=True)
     density_image = None
     for axis, shape_slug in zip(np.ravel(axes), SHAPE_ORDER):
         density = _shape_density(shape_slug, x_mesh, y_mesh)
@@ -254,9 +254,9 @@ def _render_single_column(
     # Narrow the density panels slightly to reserve a dedicated right-side band
     # for the shared color scale. This recovers the bottom band previously used
     # by the horizontal colorbar without flattening the three density panels.
-    figure.subplots_adjust(left=0.19, right=0.79, top=0.94, bottom=0.14, hspace=0.40)
+    figure.subplots_adjust(left=0.19, right=0.79, top=0.95, bottom=0.15, hspace=0.30)
     if density_image is not None:
-        colorbar_axis = figure.add_axes((0.835, 0.20, 0.035, 0.66))
+        colorbar_axis = figure.add_axes((0.835, 0.19, 0.035, 0.68))
         colorbar = figure.colorbar(
             density_image,
             cax=colorbar_axis,
