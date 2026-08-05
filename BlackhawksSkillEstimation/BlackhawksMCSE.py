@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -39,6 +40,9 @@ DEFAULT_NUM_PARTICLES = 1000
 DEFAULT_MCSE_NOISE = [200, 200]
 DEFAULT_RESAMPLE_PERCENT = 0.90
 DEFAULT_RESAMPLING_METHOD = "systematic"
+# "estimated" lets lambda accumulate evidence across shots. "fixed_grid" reproduces
+# runs before 2026-08, where lambda was reset to the prior at every resample.
+DEFAULT_LAMBDA_MODE = "estimated"
 # Match JEEDS Blackhawks grids: execution skill in [0.004, 0.25] rad per axis;
 # rationality lambda on log10 scale in [0, 4] (same as JEEDS logspace(0, 4)).
 #
@@ -48,8 +52,13 @@ DEFAULT_RESAMPLING_METHOD = "systematic"
 # The smoke run on 950160/950184 (200 particles, legacy Data/Hockey) used those
 # older bounds. joint_pfe.py previously hardcoded the lambda grid as linspace(-3, 1.6).
 DEFAULT_EXECUTION_SKILL_MAX = 0.25
-DEFAULT_RATIONALITY_LOG10_MIN = 0.0
-DEFAULT_RATIONALITY_LOG10_MAX = 4.0
+# Must match the JEEDS rationality grid in Estimators/joint.py, which shifts down by
+# three decades when BH_EV_NORMALIZE is on because EV is rescaled to unit
+# peak-above-average. Keeping the two estimators on one lambda scale is what makes
+# their rationality numbers comparable.
+_EV_NORMALIZED = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
+DEFAULT_RATIONALITY_LOG10_MIN = -1.0 if _EV_NORMALIZED else 0.0
+DEFAULT_RATIONALITY_LOG10_MAX = 3.0 if _EV_NORMALIZED else 4.0
 # Prior execution upper bound (radians); kept for reference / sensitivity reruns.
 LEGACY_EXECUTION_SKILL_MAX = float(np.pi / 4)
 # Prior rationality log10 endpoints; kept for reference / sensitivity reruns.
@@ -229,6 +238,7 @@ def _build_mcse_estimator(
     resampling_method: str,
     ranges: dict[str, list[float]],
     rng_seed: int | None,
+    lambda_mode: str = DEFAULT_LAMBDA_MODE,
 ) -> QREMethod_Multi_Particles:
     env = _MCSEEnv(
         domain_name="hockey-multi",
@@ -243,7 +253,7 @@ def _build_mcse_estimator(
         bool(resample_neff),
         resampling_method,
         ranges,
-        otherArgs={"verbose": False, "retain_history": False},
+        otherArgs={"verbose": False, "retain_history": False, "lambda_mode": lambda_mode},
     )
 
 
@@ -294,6 +304,7 @@ def _run_mcse_estimation(
     resample_neff: bool = True,
     resampling_method: str = DEFAULT_RESAMPLING_METHOD,
     ranges: dict[str, list[float]] | None = None,
+    lambda_mode: str = DEFAULT_LAMBDA_MODE,
     rng_seed: int | None = 0,
     return_intermediate_estimates: bool = False,
     preloaded_shot_maps: dict[int, dict[str, object]] | None = None,
@@ -344,6 +355,7 @@ def _run_mcse_estimation(
         resampling_method=resampling_method,
         ranges=ranges,
         rng_seed=rng_seed,
+        lambda_mode=lambda_mode,
     )
 
     rng = np.random.default_rng(rng_seed)
@@ -462,6 +474,7 @@ def estimate_player_skill(
     resample_neff: bool = True,
     resampling_method: str = DEFAULT_RESAMPLING_METHOD,
     ranges: dict[str, list[float]] | None = None,
+    lambda_mode: str = DEFAULT_LAMBDA_MODE,
     rng_seed: int | None = 0,
     return_intermediate_estimates: bool = False,
     save_intermediate_csv: bool = False,
@@ -490,6 +503,7 @@ def estimate_player_skill(
                 resample_neff=resample_neff,
                 resampling_method=resampling_method,
                 ranges=ranges,
+                lambda_mode=lambda_mode,
                 rng_seed=rng_seed,
                 return_intermediate_estimates=return_intermediate_estimates,
                 save_intermediate_csv=save_intermediate_csv,
@@ -519,6 +533,7 @@ def estimate_player_skill(
         resample_neff=resample_neff,
         resampling_method=resampling_method,
         ranges=ranges,
+        lambda_mode=lambda_mode,
         rng_seed=rng_seed,
         return_intermediate_estimates=return_intermediate_estimates,
         save_intermediate_csv=save_intermediate_csv,

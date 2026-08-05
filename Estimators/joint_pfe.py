@@ -51,6 +51,11 @@ class QREMethod_Multi_Particles():
         exponents = np.linspace(lambda_log_start, lambda_log_end, num=self.N)
         self.pskills = np.power(10, exponents)
 
+        # Kept on the instance so the noise step can jitter lambda in log10 space,
+        # which is the space the grid and the prior are uniform in.
+        self.lambdaLog10Start = lambda_log_start
+        self.lambdaLog10End = lambda_log_end
+
         WS = []
 
         for ei in range(len(self.ranges["start"])):
@@ -91,6 +96,19 @@ class QREMethod_Multi_Particles():
             raise TypeError(f"Unsupported noise type: {type(noise)}")
 
         self.ranges["noise"] = noise_list
+
+        # "estimated": lambda is a real particle dimension - it survives resampling
+        #   and is jittered in log10 space, so evidence about rationality accumulates.
+        # "fixed_grid": every particle's lambda is overwritten with the fixed log10
+        #   grid after each resample. Because resampling also resets the weights,
+        #   this discards the rationality posterior and returns it to the prior.
+        #   Retained only to reproduce runs made before 2026-08.
+        self.lambdaMode = str(otherArgs.get("lambda_mode", "estimated")) if otherArgs else "estimated"
+        if self.lambdaMode not in ("estimated", "fixed_grid"):
+            raise ValueError(
+                f"lambda_mode must be 'estimated' or 'fixed_grid', got {self.lambdaMode!r}"
+            )
+
         self.verbose = bool(otherArgs.get("verbose", False)) if otherArgs else False
         # When False, skip growing allParticles / allProbs / allNoises history
         # (Blackhawks production runs). Paper experiments keep the default True.
@@ -621,10 +639,8 @@ class QREMethod_Multi_Particles():
 
 
 
-            ###################################
-            # TESTING ENFORCING SAME PSKILLS
-            self.particles[:,-1] = self.pskills
-            ####################################
+            if self.lambdaMode == "fixed_grid":
+                self.particles[:,-1] = self.pskills
 
 
 
@@ -769,17 +785,22 @@ class QREMethod_Multi_Particles():
         # tempN = ceil(self.N*percent)
         tempParticles = np.empty((tempN,self.dimensions))
 
-        exponents = np.linspace(-3, 1.6, num=tempN)
-        pskills = np.power(10, exponents)
+        if self.lambdaMode == "fixed_grid":
+            # Overwritten by the fixed grid immediately after resampling anyway.
+            pskills = np.power(10, np.linspace(-3, 1.6, num=tempN))
+        else:
+            # Fresh particles are prior draws, and the lambda prior is uniform in
+            # log10 over the configured range.
+            pskills = np.power(
+                10,
+                np.random.uniform(self.lambdaLog10Start, self.lambdaLog10End, size=tempN),
+            )
 
         for d in range(self.dimensions):
             # Not including endpoint
 
             # For pskill dimension
             if d == self.dimensions-1:
-                # temp = np.random.uniform(self.ranges["start"][d],self.ranges["end"][d],size=tempN)
-                # tempParticles[:,d] = np.power(10,temp) # Exponentiate
-
                 tempParticles[:,d] = pskills
 
             else:
@@ -1027,25 +1048,34 @@ class QREMethod_Multi_Particles():
 
             for ei in range(len(each)):
 
+                isPskillDim = ei == len(self.ranges["start"])-1
+
+                if isPskillDim:
+                    # Lambda spans several decades, so a linear step of fixed size is
+                    # meaningless at one end of the range and destructive at the other.
+                    # Jitter in log10 space, where the grid and prior are uniform.
+                    if self.lambdaMode == "fixed_grid":
+                        noise = 0.0
+                        upd = each[ei]
+                    else:
+                        widthLog10 = self.lambdaLog10End-self.lambdaLog10Start
+                        noise = rng.normal(0.0,(widthLog10/self.ranges["noise"][ei]))
+                        currentLog10 = np.log10(max(float(each[ei]),1e-12))
+                        updLog10 = min(
+                            max(currentLog10+noise,self.lambdaLog10Start),
+                            self.lambdaLog10End,
+                        )
+                        upd = float(np.power(10,updLog10))
+
+                    noisy.append(upd)
+                    noises.append(noise)
+                    continue
+
                 start = self.ranges["start"][ei]
                 stop = self.ranges["end"][ei]
 
-                # if pskill dimension
-                if ei == len(self.ranges["start"])-1:
-                    start = np.power(10,float(start))
-                    stop =  np.power(10,float(stop))
-
-
-                if ei == len(self.ranges["start"])-1:
-                    noise = 0.0
-                else:
-                    # Drawn gaussian
-                    noise = rng.normal(0.0,(self.ranges["W"][ei]/self.ranges["noise"][ei]))
-
-                # Drawn uniform random
-                # number = np.sqrt(3)*(self.ranges["W"][ei]/self.ranges["noise"][ei])
-                # noise = each[ei]+rng.uniform(low=-number,high=number,size=1)[0]
-
+                # Drawn gaussian
+                noise = rng.normal(0.0,(self.ranges["W"][ei]/self.ranges["noise"][ei]))
 
                 upd = each[ei]+noise
 

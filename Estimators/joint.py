@@ -340,7 +340,15 @@ class JointMethodQRE:
                 return np.logspace(other_args["minLambda"], 3.6, num_rationality_levels)
             return np.logspace(-3, 3.6, num_rationality_levels)
         if domain_name == "hockey-multi":
-            return np.round(np.logspace(0, 4.0, num_rationality_levels), 4)
+            # The grid has to match the units of the EV surface it is applied to.
+            # With BH_EV_NORMALIZE on, EV is rescaled to unit peak-above-average and
+            # the identifiable lambda range drops by about three decades; on raw xG
+            # units the old [1, 10^4] applies. Either endpoint can be overridden.
+            normalized = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
+            default_start, default_end = ("-1", "3.0") if normalized else ("0", "4.0")
+            log_start = float(os.environ.get("BH_RATIONALITY_LOG10_MIN", default_start))
+            log_end = float(os.environ.get("BH_RATIONALITY_LOG10_MAX", default_end))
+            return np.round(np.logspace(log_start, log_end, num_rationality_levels), 4)
         return None
 
     def get_estimator_name(self):

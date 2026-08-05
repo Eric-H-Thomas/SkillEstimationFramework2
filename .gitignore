@@ -33,6 +33,10 @@ Data/**/data/
 Data/**/times/
 Data/**/plots/
 Data/**/logs/
+
+# Local-only snapshots of results taken before a rerun; never pushed to the cluster.
+Data/PRE_FIX_BACKUP_*/
+
 /.idea/dictionaries
 /.idea
 *.so

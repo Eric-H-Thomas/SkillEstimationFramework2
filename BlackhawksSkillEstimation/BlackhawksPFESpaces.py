@@ -1,12 +1,17 @@
 """Per-shot space objects for MCSE (PFE) on Blackhawks angular xG surfaces."""
 from __future__ import annotations
 
+import os
 from typing import Sequence
 
 import numpy as np
 from scipy.signal import convolve2d
 
 from Environments.Hockey import hockey as hockey_domain
+
+# Shares the BH_EV_NORMALIZE switch with BlackhawksJEEDS so an A/B run applies
+# the same convention to both estimators.
+EV_NORMALIZE = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
 
 
 class BlackhawksPFESpaces:
@@ -59,12 +64,21 @@ class BlackhawksPFESpaces:
 
         if key not in self.evsPerXskill:
             zs = info["Zs"]
-            self.evsPerXskill[key] = convolve2d(
+            evs = convolve2d(
                 zs,
                 self.pdfsPerXskill[key],
                 mode="same",
                 fillvalue=0.0,
             )
+            if EV_NORMALIZE:
+                # Keep lambda on the same dimensionless scale JEEDS uses when
+                # BH_EV_NORMALIZE is on, so the two estimators stay comparable.
+                # Without it the EV scale shrinks as execution skill worsens and
+                # lambda absorbs the difference, pinning it against the grid cap.
+                ev_scale = float(np.max(evs) - np.mean(evs))
+                if ev_scale > 1e-12:
+                    evs = evs / ev_scale
+            self.evsPerXskill[key] = evs
 
     def clear_particle_caches(self) -> None:
         """Drop PDF/EV caches for this shot (safe after the observation is done)."""

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -101,6 +102,32 @@ MIN_DISTANCE_FROM_NET_FT = 10.0
 #   30 hypotheses: ~0.025 rad spacing, matches production experiments
 #   50 hypotheses: ~0.015 rad spacing, high precision for research
 DEFAULT_NUM_EXECUTION_SKILLS = 50
+
+# Upper bound, in grid bins, on the Gaussian blur that turns the raw xG surface into
+# the EV surface a player of a given execution skill plans against.
+#
+# This was 1.0 before 2026-08. On the 100x100 angular grid one bin is ~0.004 rad, so a
+# cap of 1.0 clamped 98-99% of the candidate skills: every hypothesis from ~0.008 rad up
+# to 0.25 rad produced an identical EV surface, even though real estimates land at
+# 0.08-0.14 rad. That removed the coupling between execution skill and target choice
+# which is the whole premise of joint estimation, and left execution skill and
+# rationality trading off along a ridge (r = +0.66 on legacy xG).
+#
+# Set BH_EV_BLUR_MAX_SIGMA_BINS=1.0 to reproduce pre-fix runs.
+EV_BLUR_MAX_SIGMA_BINS = float(os.environ.get("BH_EV_BLUR_MAX_SIGMA_BINS", "1e9"))
+
+# Rescale each shot's EV surface to unit peak-above-average before it reaches the
+# softmax, so rationality is measured on a scale that does not depend on the xG model
+# or on how much the surface was blurred.
+#
+# This is required once the blur clamp above is lifted. Correct blurring flattens the
+# EV surface for poor execution skill, which shrinks the raw EV scale; lambda then
+# absorbs that shrinkage and pins itself against the top of its grid, wiping out
+# between-player variation. Normalizing keeps lambda interior and interpretable.
+#
+# Set BH_EV_NORMALIZE=0 for raw xG units (and note that the rationality grid default
+# in Estimators/joint.py shifts to match).
+EV_NORMALIZE = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
 
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
@@ -524,9 +551,19 @@ def transform_shots_for_jeeds(
         for skill in candidate_skills:
             key = spaces.get_key([skill, skill], r=0.0)
             # sigma in grid bins: skill (rad) / avg_bin_size (rad/bin) = bins
-            # Clamp to avoid extreme smoothing or no smoothing.
-            sigma = max(min(skill / avg_bin_size, 1.0), 1e-3)
-            evs = gaussian_filter(grid_utilities_computed, sigma=sigma)
+            sigma = max(min(skill / avg_bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
+            evs = gaussian_filter(
+                grid_utilities_computed, sigma=sigma, mode="constant", cval=0.0
+            )
+            if EV_NORMALIZE:
+                # The softmax exp(lambda * EV) only cares about the scale of EV, so
+                # dividing by the peak-above-average advantage makes lambda dimensionless:
+                # "how strongly does the player prefer one unit of extra advantage".
+                # Without this, lambda absorbs the EV scale, which shrinks as execution
+                # skill worsens (more blur) and differs between xG models.
+                ev_scale = float(np.max(evs) - np.mean(evs))
+                if ev_scale > 1e-12:
+                    evs = evs / ev_scale
 
             entry["evsPerXskill"][key] = evs
             entry["maxEVPerXskill"][key] = float(np.max(evs))

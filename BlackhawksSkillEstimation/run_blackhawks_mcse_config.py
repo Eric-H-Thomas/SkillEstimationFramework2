@@ -10,6 +10,7 @@ from typing import Any
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import load_player_data
 from BlackhawksSkillEstimation.BlackhawksMCSE import (
+    DEFAULT_LAMBDA_MODE,
     DEFAULT_MCSE_RANGES,
     DEFAULT_MCSE_NOISE,
     DEFAULT_NUM_PARTICLES,
@@ -122,6 +123,7 @@ def _run_single_job(job: dict[str, Any], *, config: dict[str, Any]) -> dict[str,
         resample_neff=bool(estimator.get("resample_neff", True)),
         resampling_method=str(estimator.get("resampling_method", DEFAULT_RESAMPLING_METHOD)),
         ranges=ranges,
+        lambda_mode=str(estimator.get("lambda_mode", DEFAULT_LAMBDA_MODE)),
         rng_seed=int(estimator.get("rng_seed", 0)),
         save_intermediate_csv=bool(estimator.get("save_intermediate_csv", True)),
         confirm=False,
