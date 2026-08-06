@@ -21,9 +21,6 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
      (tight shot clustering). Range: [0.004, π/4].
    - **Rationality (pskill)**: Raw λ from the JEEDS grid (`logspace(0, 4)`). **Higher is better**
      (more weight on high-EV targets). **EXPERIMENTAL** - see interpretation notes below.
-   - **Rationality percentage**: Post-hoc 0–100 scale from the JEEDS paper (uniform aim = 0,
-     always picking the max-EV target = 100). Reported as mean/median of per-shot values using
-     final EES+EPS (`rationality_percent_mean_eps`, etc.).
 
 ## Key modeling choices
 
@@ -41,13 +38,8 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
   (accounting for greater shot error), while lower skills keep probability mass 
   concentrated near the intended target.
 - **Rationality interpretation (EXPERIMENTAL)** – Raw λ (and `log10_eps`) summarize the
-  posterior over decision skill on a fixed grid. They are **not** the same as **rationality
-  percentage**, which also depends on each shot's blurred EV surface: two players with the
-  same λ can differ in `rationality_percent_mean_eps`. Percentage uses the distribution-level
-  softmax formula in `BlackhawksSkillEstimation/rationality_metric.py` (0 = random aim on that surface,
-  100 = optimal aim). Shots with flat EV surfaces are skipped (`rationality_percent_n_defined_eps`
-  may be less than `num_shots`). This metric may not fully account for real-world constraints;
-  use with caution.
+  posterior over decision skill on a fixed grid. They should be interpreted cautiously,
+  especially when comparing across different xG surfaces or data regimes.
 - **JEEDS compatibility** – The helper `SimpleHockeySpaces` mirrors the fields
   JEEDS reads for the hockey domain (`possibleTargets`, `delta`, `allCovs`, and
   `get_key`), allowing the official estimator to run unmodified.
@@ -71,8 +63,6 @@ python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
 - **Execution skill**: Value in radians. **Lower = better shooter** (0.004 = elite, 0.785 = poor)
 - **Rationality**: Raw λ on the JEEDS grid. **Higher = more weight on high-EV targets**
   (EXPERIMENTAL - see notes above)
-- **Rationality percentage**: 0–100 paper scale; **higher = closer to always aiming at max EV**
-  on each shot's surface (primary summary: `rationality_percent_mean_eps`)
 
 The command prints the MAP execution-skill estimate. All per-player outputs
 (timing logs, intermediate estimate CSVs, plots) are stored under
