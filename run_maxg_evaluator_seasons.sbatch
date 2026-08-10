@@ -23,6 +23,15 @@ BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_xgnew_v1}"
 BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey_xg_new/benchmarks}"
 SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
 PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
+ESTIMATOR="${BH_ESTIMATOR:-jeeds}"
+MCSE_PROFILE="${BH_MCSE_PROFILE:-ees}"
+
+# maxg_evaluator appends "_mcse" to its output filename, so both estimators can
+# share an output directory without colliding.
+ESTIMATOR_ARGS=(--estimator "$ESTIMATOR")
+if [[ "$ESTIMATOR" == "mcse" ]]; then
+  ESTIMATOR_ARGS+=(--mcse-profile "$MCSE_PROFILE")
+fi
 
 case "$MODE" in
   old)
@@ -39,7 +48,7 @@ case "$MODE" in
     ;;
 esac
 
-SEASONS=(20212022 20222023 20242025 20252026)
+SEASONS=(20212022 20222023 20232024 20242025)
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
 if (( TASK_ID < 0 || TASK_ID >= ${#SEASONS[@]} )); then
@@ -61,7 +70,8 @@ if [[ "$MODE" == "comparison" ]]; then
       --data-dir "$DATA_DIR" \
       --output-dir "$MODEL_OUTPUT_DIR" \
       --pids-file "$PIDS_FILE" \
-      --model-filter "$MODEL"
+      --model-filter "$MODEL" \
+      "${ESTIMATOR_ARGS[@]}"
   done
 else
   python -m BlackhawksSkillEstimation.maxg_evaluator \
@@ -71,5 +81,6 @@ else
     --shot-group "$SHOT_GROUP" \
     --data-dir "$DATA_DIR" \
     --output-dir "$OUTPUT_DIR" \
-    --pids-file "$PIDS_FILE"
+    --pids-file "$PIDS_FILE" \
+    "${ESTIMATOR_ARGS[@]}"
 fi
