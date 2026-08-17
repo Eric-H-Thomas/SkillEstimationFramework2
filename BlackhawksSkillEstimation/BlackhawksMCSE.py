@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -18,6 +17,7 @@ import pandas as pd
 
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint_pfe import QREMethod_Multi_Particles
+from Estimators.joint import hockey_rationality_log10_bounds
 
 from .BlackhawksJEEDS import (
     DEFAULT_SHOT_GROUPS,
@@ -44,7 +44,8 @@ DEFAULT_RESAMPLING_METHOD = "systematic"
 # runs before 2026-08, where lambda was reset to the prior at every resample.
 DEFAULT_LAMBDA_MODE = "estimated"
 # Match JEEDS Blackhawks grids: execution skill in [0.004, 0.25] rad per axis;
-# rationality lambda on log10 scale in [0, 4] (same as JEEDS logspace(0, 4)).
+# rationality lambda on log10 scale from hockey_rationality_log10_bounds()
+# (default [-1, 3] when BH_EV_NORMALIZE is on).
 #
 # Historical MCSE defaults (pre-2026-07 bounds alignment):
 #   execution skill per axis: [0.004, pi/4]  (~0.785 rad upper bound)
@@ -52,13 +53,11 @@ DEFAULT_LAMBDA_MODE = "estimated"
 # The smoke run on 950160/950184 (200 particles, legacy Data/Hockey) used those
 # older bounds. joint_pfe.py previously hardcoded the lambda grid as linspace(-3, 1.6).
 DEFAULT_EXECUTION_SKILL_MAX = 0.25
-# Must match the JEEDS rationality grid in Estimators/joint.py, which shifts down by
-# three decades when BH_EV_NORMALIZE is on because EV is rescaled to unit
-# peak-above-average. Keeping the two estimators on one lambda scale is what makes
-# their rationality numbers comparable.
-_EV_NORMALIZED = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
-DEFAULT_RATIONALITY_LOG10_MIN = -1.0 if _EV_NORMALIZED else 0.0
-DEFAULT_RATIONALITY_LOG10_MAX = 3.0 if _EV_NORMALIZED else 4.0
+# Must match the JEEDS rationality grid in Estimators/joint.py, which shifts down
+# when BH_EV_NORMALIZE is on because EV is rescaled to unit peak-above-average.
+# Keeping the two estimators on one lambda scale is what makes their rationality
+# numbers comparable.
+DEFAULT_RATIONALITY_LOG10_MIN, DEFAULT_RATIONALITY_LOG10_MAX = hockey_rationality_log10_bounds()
 # Prior execution upper bound (radians); kept for reference / sensitivity reruns.
 LEGACY_EXECUTION_SKILL_MAX = float(np.pi / 4)
 # Prior rationality log10 endpoints; kept for reference / sensitivity reruns.

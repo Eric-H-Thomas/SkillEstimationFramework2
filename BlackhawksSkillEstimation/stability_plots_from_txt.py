@@ -40,6 +40,7 @@ import numpy as np
 
 from BlackhawksSkillEstimation.player_cache import lookup_player
 from BlackhawksSkillEstimation.plot_intermediate_estimates import load_intermediate_estimates
+from Estimators.joint import hockey_rationality_log10_bounds
 
 
 def _read_player_ids(players_file: Path) -> list[int]:
@@ -550,7 +551,7 @@ def run_stability_plots_from_txt(
     combined_dir = run_dir / "combined"
     population_dir = run_dir / "population"
     execution_limits = (0.04, 0.14)
-    rationality_limits = (1.0, 2.2)
+    rationality_limits = hockey_rationality_log10_bounds()
 
     all_rows_by_player: dict[int, list[dict[str, float | int | str]]] = {}
     player_names: dict[int, str] = {}

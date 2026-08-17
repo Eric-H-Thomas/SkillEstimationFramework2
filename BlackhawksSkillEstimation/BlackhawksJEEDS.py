@@ -130,7 +130,8 @@ EV_NORMALIZE = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", 
 
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
-# These are currently between the range of 0-3.5 in logspace.
+# Endpoints come from hockey_rationality_log10_bounds() in Estimators/joint.py
+# (default log10 in [-1, 3] when BH_EV_NORMALIZE is on).
 DEFAULT_NUM_PLANNING_SKILLS = 100
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import pandas as pd
 
 from BlackhawksSkillEstimation.maxg_evaluator import discover_ees_csvs
 from BlackhawksSkillEstimation.plot_intermediate_estimates import load_intermediate_estimates
+from Estimators.joint import hockey_rationality_log10_bounds
 
 
 def _read_player_ids(players_file: Path) -> list[int]:
@@ -228,14 +229,10 @@ def _plot_scatter(
 
     mn_x = float(np.min(x))
     mx_x = float(np.max(x))
-    mn_y = float(np.min(y))
-    mx_y = float(np.max(y))
     pad_x = max(mx_x - mn_x, 1e-12) * 0.05
-    pad_y = max(mx_y - mn_y, 1e-12) * 0.05
     lo_x = mn_x - pad_x
     hi_x = mx_x + pad_x
-    lo_y = mn_y - pad_y
-    hi_y = mx_y + pad_y
+    lo_y, hi_y = hockey_rationality_log10_bounds()
 
     r, slope, intercept = _weighted_corr_and_fit(x, y, w)
     if np.isfinite(slope) and np.isfinite(intercept):
@@ -299,14 +296,10 @@ def _plot_season_multipanel(per_season: dict[int, pd.DataFrame], output_path: Pa
 
         mn_x = float(np.min(x))
         mx_x = float(np.max(x))
-        mn_y = float(np.min(y))
-        mx_y = float(np.max(y))
         pad_x = max(mx_x - mn_x, 1e-12) * 0.05
-        pad_y = max(mx_y - mn_y, 1e-12) * 0.05
         lo_x = mn_x - pad_x
         hi_x = mx_x + pad_x
-        lo_y = mn_y - pad_y
-        hi_y = mx_y + pad_y
+        lo_y, hi_y = hockey_rationality_log10_bounds()
         r_stat, slope, intercept = _weighted_corr_and_fit(x, y, w)
         if np.isfinite(slope) and np.isfinite(intercept):
             x_line = np.array([lo_x, hi_x])

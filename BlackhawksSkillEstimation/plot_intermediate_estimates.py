@@ -27,6 +27,24 @@ import matplotlib.ticker as mticker
 import numpy as np
 
 from BlackhawksSkillEstimation.player_cache import lookup_player
+from Estimators.joint import hockey_rationality_log10_bounds
+
+
+def _apply_rationality_log_axis(ax) -> tuple[float, float]:
+    """Pin a log-scaled lambda axis to the hockey-multi JEEDS grid."""
+    log_min, log_max = hockey_rationality_log10_bounds()
+    pad = 0.05
+    ax.set_yscale("log")
+    ax.set_ylim(10 ** (log_min - pad), 10 ** (log_max + pad))
+    start_half = int(np.ceil(log_min * 2.0))
+    end_half = int(np.floor(log_max * 2.0))
+    ticks = [10 ** (h / 2.0) for h in range(start_half, end_half + 1)]
+    ax.yaxis.set_major_locator(mticker.FixedLocator(ticks))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda val, _: f"10^{np.log10(val):.1f}" if val > 0 else ""
+    ))
+    ax.yaxis.set_minor_locator(mticker.NullLocator())
+    return log_min, log_max
 
 
 # ---------------------------------------------------------------------------
@@ -312,16 +330,7 @@ def plot_intermediate_estimates(
                          color="#4169E1", lw=2, ls="--", label="MAP (rationality)")
     else:
         l4 = []
-    ax_rat.set_yscale("log")
-    ax_rat.set_ylim(10 ** 0.95, 10 ** 3.65)
-
-    # Show ticks at each half order of magnitude (10^1, 10^1.5, 10^2, ...)
-    _half_log_ticks = [10 ** (x / 2) for x in range(2, 8)]  # 10^1 to 10^3.5
-    ax_rat.yaxis.set_major_locator(mticker.FixedLocator(_half_log_ticks))
-    ax_rat.yaxis.set_major_formatter(mticker.FuncFormatter(
-        lambda val, _: f"10^{np.log10(val):.1f}" if val > 0 else ""
-    ))
-    ax_rat.yaxis.set_minor_locator(mticker.NullLocator())
+    _apply_rationality_log_axis(ax_rat)
 
     ax_skill.set_xlabel("Shot Count", fontsize=12)
     ax_skill.set_ylabel("Execution Skill (rad, lower = better)",
@@ -451,14 +460,7 @@ def plot_comparison(
     ax.set_xlabel("Shot Count", fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
     if metric == "rationality":
-        ax.set_yscale("log")
-        ax.set_ylim(10, 10 ** 3.5)
-        _half_log_ticks = [10 ** (x / 2) for x in range(2, 8)]  # 10^1 to 10^3.5
-        ax.yaxis.set_major_locator(mticker.FixedLocator(_half_log_ticks))
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(
-            lambda val, _: f"10^{np.log10(val):.1f}" if val > 0 else ""
-        ))
-        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        _apply_rationality_log_axis(ax)
 
     # Burn-in annotation
     if burnin > 0:
@@ -568,6 +570,8 @@ def rank_final_estimates(
     else:
         ax.set_xlabel("Final expected log10(rationality) (log10(lambda))")
         fmt = "{:.2f}"
+        log_min, log_max = hockey_rationality_log10_bounds()
+        ax.set_xlim(log_min, log_max)
 
     # Annotate values at end of bars
     max_v = max(sorted_values)

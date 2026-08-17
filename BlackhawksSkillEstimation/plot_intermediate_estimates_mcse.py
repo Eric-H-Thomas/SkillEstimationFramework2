@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 
+from Estimators.joint import hockey_rationality_log10_bounds
+
 
 def load_mcse_intermediate_estimates(csv_path: Path | str) -> dict[str, list]:
     csv_path = Path(csv_path)
@@ -82,6 +84,19 @@ def plot_intermediate_estimates_mcse(
     axes[2].plot(shots, log10_eps, label="log10 EPS", color="C2")
     if include_map_estimates:
         axes[2].plot(shots, log10_map, label="log10 MAP λ", color="C3", linestyle="--")
+    log_min, log_max = hockey_rationality_log10_bounds()
+    vals = np.concatenate([log10_eps, log10_map]) if include_map_estimates else log10_eps
+    finite = vals[np.isfinite(vals)]
+    lo, hi = log_min, log_max
+    if finite.size:
+        dmin = float(np.min(finite))
+        dmax = float(np.max(finite))
+        pad = 0.05 * max(hi - lo, 1e-6)
+        if dmin < lo:
+            lo = dmin - pad
+        if dmax > hi:
+            hi = dmax + pad
+    axes[2].set_ylim(lo, hi)
     axes[2].set_ylabel("log10 rationality (λ)")
     axes[2].set_xlabel("Shots processed")
     axes[2].legend(loc="upper right")

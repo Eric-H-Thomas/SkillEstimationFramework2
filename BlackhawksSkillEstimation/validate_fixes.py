@@ -18,12 +18,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from Estimators.joint import hockey_rationality_log10_bounds
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROOTS = {"legacy": REPO_ROOT / "Data" / "Hockey", "new": REPO_ROOT / "Data" / "Hockey_xg_new"}
 
-# Prior mean of lambda on a log10-uniform [0, 4] grid. An estimate pinned here is
-# an estimate that has learned nothing.
-PRIOR_MEAN_LOG10_LAMBDA = float(np.log10(np.mean(np.power(10.0, np.linspace(0, 4, 500)))))
+# Prior mean of lambda on the current hockey-multi log10-uniform grid.
+# An estimate pinned here is an estimate that has learned nothing.
+_LOG_MIN, _LOG_MAX = hockey_rationality_log10_bounds()
+PRIOR_MEAN_LOG10_LAMBDA = float(np.log10(np.mean(np.power(10.0, np.linspace(_LOG_MIN, _LOG_MAX, 500)))))
 
 
 def _players_in_root(root: Path, season: int) -> list[int]:

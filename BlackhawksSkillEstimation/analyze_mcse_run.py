@@ -26,6 +26,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from Estimators.joint import hockey_rationality_log10_bounds
+
 SEASONS = [20212022, 20222023, 20232024, 20242025]
 SEASON_LABEL = {s: f"{str(s)[:4]}-{str(s)[6:]}" for s in SEASONS}
 SHOT_GROUP = "wristshot_snapshot"
@@ -37,10 +39,10 @@ ROOTS = {
     "new": REPO_ROOT / "Data" / "Hockey_xg_new",
 }
 
-# Rationality grid is log10-uniform on [0, 4] for both estimators, so a
-# posterior that has learned nothing reports E[lambda] equal to the grid mean.
-RATIONALITY_LOG10_MIN = 0.0
-RATIONALITY_LOG10_MAX = 4.0
+# Rationality grid is log10-uniform on the hockey-multi JEEDS/MCSE bounds
+# (default [-1, 3] when BH_EV_NORMALIZE is on), so a posterior that has
+# learned nothing reports E[lambda] equal to the grid mean.
+RATIONALITY_LOG10_MIN, RATIONALITY_LOG10_MAX = hockey_rationality_log10_bounds()
 PRIOR_MEAN_LAMBDA = float(
     np.mean(np.power(10.0, np.linspace(RATIONALITY_LOG10_MIN, RATIONALITY_LOG10_MAX, 500)))
 )
@@ -309,17 +311,34 @@ def plot_rationality_distributions(frame: pd.DataFrame, out_path: Path, min_shot
         if values.empty:
             ax.set_visible(False)
             continue
-        ax.hist(values, bins=40, range=(0, 4), color="#4c72b0", alpha=0.85)
+        ax.hist(
+            values,
+            bins=40,
+            range=(RATIONALITY_LOG10_MIN, RATIONALITY_LOG10_MAX),
+            color="#4c72b0",
+            alpha=0.85,
+        )
         ax.axvline(prior_log10, color="red", ls="--", lw=1.4, label=f"prior mean ({prior_log10:.2f})")
-        ax.axvline(RATIONALITY_LOG10_MAX, color="black", ls=":", lw=1.2, label="grid cap (4.0)")
+        ax.axvline(
+            RATIONALITY_LOG10_MAX,
+            color="black",
+            ls=":",
+            lw=1.2,
+            label=f"grid cap ({RATIONALITY_LOG10_MAX:g})",
+        )
         ax.set_title(
             f"{estimator.upper()} / {xg_model} xG\nmedian={values.median():.2f}  sd={values.std():.2f}",
             fontsize=10,
         )
         ax.set_xlabel("log10 expected rationality")
+        ax.set_xlim(RATIONALITY_LOG10_MIN, RATIONALITY_LOG10_MAX)
         ax.legend(fontsize=7)
     axes[0].set_ylabel("player-seasons")
-    fig.suptitle("Where the rationality posterior lands on its [0, 4] log10 grid", fontsize=13)
+    fig.suptitle(
+        f"Where the rationality posterior lands on its "
+        f"[{RATIONALITY_LOG10_MIN:g}, {RATIONALITY_LOG10_MAX:g}] log10 grid",
+        fontsize=13,
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
@@ -376,6 +395,7 @@ def plot_convergence_traces(out_path: Path, n_players: int = 6) -> None:
         if column == "expected_rationality":
             ax.axhline(PRIOR_MEAN_LAMBDA, color="red", ls="--", lw=1.3, label="prior mean E[lambda]")
             ax.set_yscale("log")
+            ax.set_ylim(10 ** RATIONALITY_LOG10_MIN, 10 ** RATIONALITY_LOG10_MAX)
             ax.legend(fontsize=8)
     fig.suptitle("MCSE within-run convergence traces", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -439,8 +459,11 @@ def main() -> None:
     summary.to_csv(out_dir / "summary_by_estimator.csv", index=False)
 
     pd.set_option("display.width", 200)
-    print(f"Prior mean E[lambda] on log10-uniform [0,4] grid = {PRIOR_MEAN_LAMBDA:.1f} "
-          f"(log10 = {math.log10(PRIOR_MEAN_LAMBDA):.3f})\n")
+    print(
+        f"Prior mean E[lambda] on log10-uniform "
+        f"[{RATIONALITY_LOG10_MIN:g}, {RATIONALITY_LOG10_MAX:g}] grid = {PRIOR_MEAN_LAMBDA:.1f} "
+        f"(log10 = {math.log10(PRIOR_MEAN_LAMBDA):.3f})\n"
+    )
     print("=== COVERAGE ===")
     print(coverage.to_string(index=False))
     print("\n=== SUMMARY ===")

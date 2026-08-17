@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from Estimators.joint import hockey_rationality_log10_bounds
+
 
 def _read_player_ids(players_file: Path) -> list[int]:
     player_ids: list[int] = []
@@ -250,8 +252,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cap-log10",
         type=float,
-        default=4.0,
-        help="Log10 cap assumed for rationality grid (default: 4.0).",
+        default=hockey_rationality_log10_bounds()[1],
+        help="Log10 cap assumed for rationality grid (default: hockey-multi JEEDS max).",
     )
     parser.add_argument(
         "--cap-tolerance",

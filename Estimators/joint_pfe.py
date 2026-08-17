@@ -44,8 +44,9 @@ class QREMethod_Multi_Particles():
 
         # Quantal Response (logit) inverse-temperature (lambda) grid on log10 scale.
         # Endpoints come from ranges["start"/"end"] on the lambda dimension so
-        # domain configs (e.g. hockey MCSE logspace(0, 4)) control the particle grid.
-        # Historical default before ranges-driven init: linspace(-3, 1.6) -> ~0.001 to ~40.
+        # domain configs (e.g. hockey MCSE hockey_rationality_log10_bounds()) control
+        # the particle grid. Historical default before ranges-driven init:
+        # linspace(-3, 1.6) -> ~0.001 to ~40.
         lambda_log_start = float(self.ranges["start"][-1])
         lambda_log_end = float(self.ranges["end"][-1])
         exponents = np.linspace(lambda_log_start, lambda_log_end, num=self.N)
