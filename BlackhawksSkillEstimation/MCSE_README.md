@@ -165,11 +165,11 @@ MAXG uses the EES profile `(ees_y, ees_z, rho_ees)` with anisotropic convolution
 
 ```bash
 python -m BlackhawksSkillEstimation.maxg_evaluator \
-  --benchmark-tag wristshot-snapshot_v1 \
+  --benchmark-tag wristshot_snapshot_v1 \
   --season-tag 20232024 \
   --shot-group wristshot_snapshot \
   --estimator mcse \
-  --data-dir Data/Hockey
+  --data-dir Data/Hockey_xg_new
 ```
 
 Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE `(x_y, x_z)`.

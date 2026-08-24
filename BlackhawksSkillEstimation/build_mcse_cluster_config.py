@@ -22,8 +22,8 @@ from BlackhawksSkillEstimation.BlackhawksMCSE import (
 
 LEGACY_DATA_ROOT = Path("Data/Hockey")
 NEW_XG_DATA_ROOT = Path("Data/Hockey_xg_new")
-LEGACY_BENCHMARK_TAG = "wristshot-snapshot_v1"
-NEW_XG_BENCHMARK_TAG = "wristshot_snapshot_xgnew_v1"
+LEGACY_BENCHMARK_TAG = "wristshot_snapshot_legacy_v1"
+NEW_XG_BENCHMARK_TAG = "wristshot_snapshot_v1"
 
 
 def benchmark_settings_for_data_root(data_root: Path | str) -> tuple[str, str]:

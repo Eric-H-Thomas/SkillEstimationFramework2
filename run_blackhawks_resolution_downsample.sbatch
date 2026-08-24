@@ -17,7 +17,7 @@ TIME_LIMIT="${BH_TIME:-24:00:00}"
 MEM_LIMIT="${BH_MEM:-16G}"
 MAXG_TIME="${BH_MAXG_TIME:-${TIME_LIMIT}}"
 MAXG_MEM="${BH_MAXG_MEM:-16G}"
-BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot-snapshot_v1}"
+BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_legacy_v1}"
 BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey/benchmarks}"
 SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
 

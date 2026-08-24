@@ -267,7 +267,7 @@
   },
   "maxg": {
     "compute": false,
-    "benchmark_tag": "wristshot_snapshot_xgnew_v1",
+    "benchmark_tag": "wristshot_snapshot_v1",
     "benchmark_dir": "Data/Hockey_xg_new/benchmarks"
   },
   "output": {

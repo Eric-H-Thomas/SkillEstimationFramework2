@@ -17,7 +17,7 @@
     "benchmark_size": 1000,
     "max_player_fraction": 0.03,
     "seed": 42,
-    "tag": "wristshot-snapshot_v1",
+    "tag": "wristshot_snapshot_legacy_v1",
     "output_dir": "Data/Hockey/benchmarks",
     "oversample_factor": 3
   },

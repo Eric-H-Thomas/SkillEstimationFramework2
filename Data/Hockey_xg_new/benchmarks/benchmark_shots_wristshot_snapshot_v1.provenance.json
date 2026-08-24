@@ -18,7 +18,7 @@
     "benchmark_size": 1000,
     "max_player_fraction": 0.03,
     "seed": 42,
-    "tag": "wristshot_snapshot_xgnew_v1",
+    "tag": "wristshot_snapshot_v1",
     "output_dir": "Data/Hockey_xg_new/benchmarks",
     "oversample_factor": 3,
     "use_new_xg": true

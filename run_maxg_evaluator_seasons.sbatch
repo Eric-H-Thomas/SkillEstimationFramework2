@@ -19,7 +19,7 @@ export MPLBACKEND=Agg
 
 MODE="${BH_MODE:-old}"
 COMPARISON_MODEL="${BH_COMPARISON_MODEL:-legacy}"
-BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_xgnew_v1}"
+BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_v1}"
 BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey_xg_new/benchmarks}"
 SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
 PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
