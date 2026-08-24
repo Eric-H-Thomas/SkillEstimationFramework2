@@ -144,7 +144,7 @@ def build_mcse_cluster_config(
     split_mode: str,
     min_shots_per_job: int,
     num_particles: int,
-    generate_convergence_png: bool,
+    generate_convergence_png: bool = True,
     sbatch_time: str,
     sbatch_mem: str,
     max_concurrent: int,
@@ -269,7 +269,12 @@ def main() -> None:
     )
     parser.add_argument("--min-shots-per-job", type=int, default=100)
     parser.add_argument("--num-particles", type=int, default=500)
-    parser.add_argument("--generate-convergence-png", action="store_true")
+    parser.add_argument(
+        "--generate-convergence-png",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write intermediate-estimate PNGs (default: on). Use --no-generate-convergence-png to disable.",
+    )
     parser.add_argument("--sbatch-time", default="48:00:00")
     parser.add_argument("--sbatch-mem", default="32G")
     parser.add_argument("--max-concurrent", type=int, default=100)

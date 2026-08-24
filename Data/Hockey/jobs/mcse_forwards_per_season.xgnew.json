@@ -261,7 +261,7 @@
       ]
     },
     "save_intermediate_csv": true,
-    "generate_convergence_png": false,
+    "generate_convergence_png": true,
     "convergence_png_include_map": false,
     "compute_maxg": false
   },

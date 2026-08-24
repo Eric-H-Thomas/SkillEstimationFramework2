@@ -283,6 +283,7 @@ def plot_stability_scatter(frame: pd.DataFrame, metric: str, out_path: Path, min
             lo = float(min(xs.min(), ys.min()))
             hi = float(max(xs.max(), ys.max()))
             ax.plot([lo, hi], [lo, hi], color="grey", lw=1, ls="--")
+            # Calculate Spearman rank correlation coefficient. This is how we actually represent stability.
             rho = stats.spearmanr(xs, ys).statistic if len(pair) >= 5 else math.nan
             ax.set_title(
                 f"{estimator.upper()} / {xg_model} xG\n"

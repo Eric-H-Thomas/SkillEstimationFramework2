@@ -33,6 +33,32 @@ from BlackhawksSkillEstimation.plot_intermediate_estimates import (
 _DEFAULT_DATA_DIR = Path("Data/Hockey")
 _PLAYER_DIR_RE = re.compile(r"player_(\d+)$")
 _SEASON_RE = re.compile(r"^shots_(\d{8})\.parquet$")
+# Intermediate CSVs/PNGs: JEEDS at player_*/logs/, MCSE at player_*/logs/mcse/.
+ESTIMATOR_TAGS = ("JEEDS", "MCSE")
+_ESTIMATOR_LOGS_SUBDIR = {"JEEDS": None, "MCSE": "mcse"}
+
+
+def normalize_estimator(estimator: str | None = None) -> str:
+    """Return a canonical estimator tag (JEEDS or MCSE)."""
+    tag = str(estimator or "JEEDS").strip().upper()
+    if tag not in _ESTIMATOR_LOGS_SUBDIR:
+        raise ValueError(f"Unknown estimator {estimator!r}; expected one of {ESTIMATOR_TAGS}.")
+    return tag
+
+
+def player_logs_dir(
+    player_id: int,
+    *,
+    estimator: str | None = None,
+    data_dir: Path | str | None = None,
+) -> Path:
+    """Return the logs directory for one player and estimator."""
+    root = _resolve_data_dir(data_dir)
+    logs_dir = root / "players" / f"player_{player_id}" / "logs"
+    subdir = _ESTIMATOR_LOGS_SUBDIR[normalize_estimator(estimator)]
+    if subdir:
+        logs_dir = logs_dir / subdir
+    return logs_dir
 
 
 def _resolve_data_dir(data_dir: Path | str | None = None) -> Path:
@@ -165,10 +191,14 @@ def get_all_available_seasons(
     return sorted(season_set)
 
 
-def get_intermediate_csvs(player_id: int, data_dir: Path | str | None = None) -> list[Path]:
+def get_intermediate_csvs(
+    player_id: int,
+    data_dir: Path | str | None = None,
+    *,
+    estimator: str | None = None,
+) -> list[Path]:
     """Return intermediate-estimate CSVs for a player."""
-    root = _resolve_data_dir(data_dir)
-    logs_dir = root / "players" / f"player_{player_id}" / "logs"
+    logs_dir = player_logs_dir(player_id, estimator=estimator, data_dir=data_dir)
     if not logs_dir.exists():
         return []
     return sorted(logs_dir.glob("intermediate_estimates*.csv"))
@@ -609,6 +639,7 @@ def get_convergence_artifact(
     shot_type: str | None = None,
     data_dir: Path | str | None = None,
     suffix: str = ".png",
+    estimator: str | None = None,
 ) -> Path | None:
     """Find a convergence artifact path for season and optional raw shot_type.
 
@@ -616,8 +647,7 @@ def get_convergence_artifact(
     1) Group-specific logs path (if raw shot_type maps to a group)
     2) Flat logs path
     """
-    root = _resolve_data_dir(data_dir)
-    logs_dir = root / "players" / f"player_{player_id}" / "logs"
+    logs_dir = player_logs_dir(player_id, estimator=estimator, data_dir=data_dir)
     if not logs_dir.exists():
         return None
 
@@ -642,10 +672,10 @@ def list_convergence_artifacts(
     shot_type: str | None = None,
     data_dir: Path | str | None = None,
     suffix: str = ".csv",
+    estimator: str | None = None,
 ) -> list[Path]:
     """Return all convergence artifacts for a player-season and optional shot group."""
-    root = _resolve_data_dir(data_dir)
-    logs_dir = root / "players" / f"player_{player_id}" / "logs"
+    logs_dir = player_logs_dir(player_id, estimator=estimator, data_dir=data_dir)
     if not logs_dir.exists():
         return []
 
