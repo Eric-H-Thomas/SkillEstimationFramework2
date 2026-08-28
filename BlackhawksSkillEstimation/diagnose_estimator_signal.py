@@ -1,14 +1,11 @@
 """Confound and signal-content checks for Blackhawks JEEDS / MCSE estimates.
 
-Answers four questions the raw stability numbers cannot:
+Answers three questions the raw stability numbers cannot:
 
 1. Is apparent season-to-season stability just shot-volume leakage? (partial
    correlation of the estimate controlling for shot count)
-2. Do the two xG models agree on the *same* player-season? An estimator that is
-   measuring a real player property should agree with itself far more than an
-   estimator dominated by sampling noise.
-3. Do JEEDS and MCSE agree with each other on the same data?
-4. Has the estimate converged internally? (estimate at half the shots vs the
+2. Do JEEDS and MCSE agree with each other on the same data?
+3. Has the estimate converged internally? (estimate at half the shots vs the
    final estimate, within the same run)
 
 Usage:
@@ -33,9 +30,7 @@ from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from analyze_mcse_run import ROOTS, SEASONS, _iter_csvs  # noqa: E402
-
-COMBOS = [("jeeds", "legacy"), ("jeeds", "new"), ("mcse", "legacy"), ("mcse", "new")]
+from analyze_mcse_run import DATA_ROOT, ESTIMATORS, SEASONS, _iter_csvs  # noqa: E402
 
 
 def partial_corr(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
@@ -55,8 +50,8 @@ def volume_leakage(frame: pd.DataFrame, min_shots: int) -> pd.DataFrame:
     rows = []
     subset = frame[frame["shots"] >= min_shots]
     for metric in ["exec_skill", "log10_eps"]:
-        for estimator, xg_model in COMBOS:
-            group = subset[(subset["estimator"] == estimator) & (subset["xg_model"] == xg_model)]
+        for estimator in ESTIMATORS:
+            group = subset[subset["estimator"] == estimator]
             if group.empty:
                 continue
             corr_with_shots = stats.spearmanr(group[metric], group["shots"]).statistic
@@ -87,7 +82,6 @@ def volume_leakage(frame: pd.DataFrame, min_shots: int) -> pd.DataFrame:
                 {
                     "metric": metric,
                     "estimator": estimator,
-                    "xg_model": xg_model,
                     "spearman_metric_vs_shots": corr_with_shots,
                     "mean_raw_pearson": float(np.mean(raw_vals)),
                     "mean_partial_pearson_given_shots": float(np.nanmean(partial_vals)),
@@ -97,51 +91,24 @@ def volume_leakage(frame: pd.DataFrame, min_shots: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def cross_model_agreement(frame: pd.DataFrame, min_shots: int) -> pd.DataFrame:
-    """Same estimator, same player-season, legacy vs new xG."""
-    rows = []
-    subset = frame[frame["shots"] >= min_shots]
-    for metric in ["exec_skill", "log10_eps"]:
-        for estimator in ["jeeds", "mcse"]:
-            group = subset[subset["estimator"] == estimator]
-            pivot = group.pivot_table(index=["player_id", "season"], columns="xg_model", values=metric)
-            pair = pivot.dropna()
-            if len(pair) < 10:
-                continue
-            rows.append(
-                {
-                    "comparison": "legacy_vs_new_xg",
-                    "metric": metric,
-                    "estimator": estimator,
-                    "n": len(pair),
-                    "pearson_r": float(stats.pearsonr(pair["legacy"], pair["new"]).statistic),
-                    "spearman_rho": float(stats.spearmanr(pair["legacy"], pair["new"]).statistic),
-                }
-            )
-    return pd.DataFrame(rows)
-
-
 def cross_estimator_agreement(frame: pd.DataFrame, min_shots: int) -> pd.DataFrame:
-    """JEEDS vs MCSE, same player-season, same xG model."""
+    """JEEDS vs MCSE, same player-season."""
     rows = []
     subset = frame[frame["shots"] >= min_shots]
     for metric in ["exec_skill", "log10_eps"]:
-        for xg_model in ["legacy", "new"]:
-            group = subset[subset["xg_model"] == xg_model]
-            pivot = group.pivot_table(index=["player_id", "season"], columns="estimator", values=metric)
-            pair = pivot.dropna()
-            if len(pair) < 10:
-                continue
-            rows.append(
-                {
-                    "comparison": "jeeds_vs_mcse",
-                    "metric": metric,
-                    "xg_model": xg_model,
-                    "n": len(pair),
-                    "pearson_r": float(stats.pearsonr(pair["jeeds"], pair["mcse"]).statistic),
-                    "spearman_rho": float(stats.spearmanr(pair["jeeds"], pair["mcse"]).statistic),
-                }
-            )
+        pivot = subset.pivot_table(index=["player_id", "season"], columns="estimator", values=metric)
+        pair = pivot.dropna()
+        if len(pair) < 10:
+            continue
+        rows.append(
+            {
+                "comparison": "jeeds_vs_mcse",
+                "metric": metric,
+                "n": len(pair),
+                "pearson_r": float(stats.pearsonr(pair["jeeds"], pair["mcse"]).statistic),
+                "spearman_rho": float(stats.spearmanr(pair["jeeds"], pair["mcse"]).statistic),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -159,59 +126,49 @@ def internal_convergence(min_shots: int) -> pd.DataFrame:
         ("mcse", "mcse", None, "log10_expected_rationality"),
     ]
     for estimator, logs_subdir, exec_col, rat_col in specs:
-        for xg_model, root in ROOTS.items():
-            half_exec, final_exec, half_rat, final_rat = [], [], [], []
-            for _player_id, _season, csv_path in _iter_csvs(root, logs_subdir):
-                data = pd.read_csv(csv_path)
-                if len(data) < min_shots:
-                    continue
-                mid = len(data) // 2
-                if estimator == "mcse":
-                    exec_series = np.sqrt(data["ees_y"] * data["ees_z"])
-                else:
-                    exec_series = data[exec_col]
-                half_exec.append(float(exec_series.iloc[mid]))
-                final_exec.append(float(exec_series.iloc[-1]))
-                half_rat.append(float(data[rat_col].iloc[mid]))
-                final_rat.append(float(data[rat_col].iloc[-1]))
-            if len(half_exec) < 10:
+        half_exec, final_exec, half_rat, final_rat = [], [], [], []
+        for _player_id, _season, csv_path in _iter_csvs(DATA_ROOT, logs_subdir):
+            data = pd.read_csv(csv_path)
+            if len(data) < min_shots:
                 continue
-            rows.append(
-                {
-                    "estimator": estimator,
-                    "xg_model": xg_model,
-                    "n_runs": len(half_exec),
-                    "exec_half_vs_final_r": float(np.corrcoef(half_exec, final_exec)[0, 1]),
-                    "rationality_half_vs_final_r": float(np.corrcoef(half_rat, final_rat)[0, 1]),
-                }
-            )
+            mid = len(data) // 2
+            if estimator == "mcse":
+                exec_series = np.sqrt(data["ees_y"] * data["ees_z"])
+            else:
+                exec_series = data[exec_col]
+            half_exec.append(float(exec_series.iloc[mid]))
+            final_exec.append(float(exec_series.iloc[-1]))
+            half_rat.append(float(data[rat_col].iloc[mid]))
+            final_rat.append(float(data[rat_col].iloc[-1]))
+        if len(half_exec) < 10:
+            continue
+        rows.append(
+            {
+                "estimator": estimator,
+                "n_runs": len(half_exec),
+                "exec_half_vs_final_r": float(np.corrcoef(half_exec, final_exec)[0, 1]),
+                "rationality_half_vs_final_r": float(np.corrcoef(half_rat, final_rat)[0, 1]),
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def mcse_axis_report(frame: pd.DataFrame, out_path: Path, min_shots: int) -> pd.DataFrame:
     subset = frame[(frame["estimator"] == "mcse") & (frame["shots"] >= min_shots)]
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
-    for xg_model, color in [("legacy", "#1f77b4"), ("new", "#d62728")]:
-        group = subset[subset["xg_model"] == xg_model]
-        axes[0].scatter(group["exec_skill_y"], group["exec_skill_z"], s=10, alpha=0.5, color=color, label=xg_model)
-        axes[1].hist(group["rho"].dropna(), bins=40, alpha=0.55, color=color, label=xg_model)
+    axes[0].scatter(subset["exec_skill_y"], subset["exec_skill_z"], s=10, alpha=0.5, color="#1f77b4")
+    axes[1].hist(subset["rho"].dropna(), bins=40, alpha=0.85, color="#1f77b4")
     axes[0].plot([0.0, 0.25], [0.0, 0.25], ls="--", color="grey", lw=1)
     axes[0].set_xlabel("ees_y (horizontal aim sd, rad)")
     axes[0].set_ylabel("ees_z (vertical aim sd, rad)")
     axes[0].set_title("MCSE: are the two aim axes distinguished?")
-    axes[0].legend(fontsize=8)
     axes[1].axvline(0.0, color="black", ls=":", lw=1)
     axes[1].set_xlabel("rho_ees")
     axes[1].set_ylabel("player-seasons")
     axes[1].set_title("MCSE: estimated aim-error correlation")
-    axes[1].legend(fontsize=8)
 
     jeeds = frame[(frame["estimator"] == "jeeds") & (frame["shots"] >= min_shots)]
-    for xg_model, color in [("legacy", "#1f77b4"), ("new", "#d62728")]:
-        axes[2].hist(
-            jeeds[jeeds["xg_model"] == xg_model]["exec_skill"].dropna(),
-            bins=40, alpha=0.55, color=color, label=f"jeeds {xg_model}",
-        )
+    axes[2].hist(jeeds["exec_skill"].dropna(), bins=40, alpha=0.85, color="#1f77b4")
     axes[2].axvline(0.004, color="black", ls=":", lw=1)
     axes[2].axvline(0.25, color="black", ls=":", lw=1, label="grid bounds")
     axes[2].set_xlabel("expected execution skill (rad)")
@@ -222,17 +179,19 @@ def mcse_axis_report(frame: pd.DataFrame, out_path: Path, min_shots: int) -> pd.
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
 
-    return (
-        subset.groupby("xg_model")
-        .agg(
-            n=("player_id", "size"),
-            median_ees_y=("exec_skill_y", "median"),
-            median_ees_z=("exec_skill_z", "median"),
-            corr_y_z=("exec_skill_y", lambda s: float(np.corrcoef(s, subset.loc[s.index, "exec_skill_z"])[0, 1])),
-            median_rho=("rho", "median"),
-            sd_rho=("rho", "std"),
-        )
-        .reset_index()
+    if subset.empty:
+        return pd.DataFrame()
+    return pd.DataFrame(
+        [
+            {
+                "n": int(len(subset)),
+                "median_ees_y": float(subset["exec_skill_y"].median()),
+                "median_ees_z": float(subset["exec_skill_z"].median()),
+                "corr_y_z": float(np.corrcoef(subset["exec_skill_y"], subset["exec_skill_z"])[0, 1]),
+                "median_rho": float(subset["rho"].median()),
+                "sd_rho": float(subset["rho"].std()),
+            }
+        ]
     )
 
 
@@ -251,11 +210,6 @@ def main() -> None:
     leakage.to_csv(in_dir / "shot_volume_leakage.csv", index=False)
     print("=== SHOT-VOLUME LEAKAGE (does stability survive controlling for shot count?) ===")
     print(leakage.to_string(index=False))
-
-    cross_model = cross_model_agreement(frame, args.min_shots)
-    cross_model.to_csv(in_dir / "cross_xg_model_agreement.csv", index=False)
-    print("\n=== SAME ESTIMATOR, SAME PLAYER-SEASON, LEGACY vs NEW xG ===")
-    print(cross_model.to_string(index=False))
 
     cross_est = cross_estimator_agreement(frame, args.min_shots)
     cross_est.to_csv(in_dir / "cross_estimator_agreement.csv", index=False)

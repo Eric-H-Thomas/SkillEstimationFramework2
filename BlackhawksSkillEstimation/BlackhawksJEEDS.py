@@ -38,7 +38,6 @@ import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import gaussian_filter
 
-import BlackhawksAPI.queries as bh_queries
 from BlackhawksAPI import (
     get_game_shot_maps,
     get_games_shot_maps_batch,
@@ -52,8 +51,9 @@ from Estimators.joint import JointMethodQRE
 # Net center position used for proximity filtering (NHL standard).
 _NET_CENTER = np.array([89.0, 0.0])
 
-# Blackhawks xG grid: Y: [-5, 5] (120 pts), Z: [0, 6] (72 pts)
-# Passed to getAngularHeatmap as grid_y and grid_z to use full native extents.
+# Fallback Blackhawks xG axes if a map has no usable shape (Y: [-5, 5], Z: [0, 6]).
+# These values came from the first (outdated) iteration of the xG model.
+# Prefer `_infer_grid_axes_from_value_map` so axes match the cached map's native resolution.
 _BH_Y = np.linspace(-5.0, 5.0, 120)
 _BH_Z = np.linspace(0.0, 6.0, 72)
 
@@ -61,11 +61,11 @@ _BH_Z = np.linspace(0.0, 6.0, 72)
 def _infer_grid_axes_from_value_map(value_map: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Infer grid_y/grid_z vectors that match a given xG value_map shape.
 
-    The Blackhawks xG maps (legacy and new-table) cover fixed physical extents:
+    The Blackhawks xG maps cover fixed physical extents:
     - Y: [-5, 5]
     - Z: [0, 6]
 
-    But their native grid resolution may vary (e.g., legacy 72×120 vs new 31×51).
+    Native grid resolution may vary (typical net-grid maps are ~31×51).
     This helper constructs axes with lengths that match the map's columns/rows.
 
     Parameters
@@ -110,7 +110,7 @@ DEFAULT_NUM_EXECUTION_SKILLS = 50
 # to 0.25 rad produced an identical EV surface, even though real estimates land at
 # 0.08-0.14 rad. That removed the coupling between execution skill and target choice
 # which is the whole premise of joint estimation, and left execution skill and
-# rationality trading off along a ridge (r = +0.66 on legacy xG).
+# rationality trading off along a ridge.
 #
 # Set BH_EV_BLUR_MAX_SIGMA_BINS=1.0 to reproduce pre-fix runs.
 EV_BLUR_MAX_SIGMA_BINS = float(os.environ.get("BH_EV_BLUR_MAX_SIGMA_BINS", "1e9"))
@@ -444,8 +444,8 @@ class JEEDSInputs:
 #
 # **SimpleHockeySpaces (this module):**
 #   - Uses Blackhawks precomputed reward surfaces (value_map) for each shot
-#   - Retrieved from hawks_analytics.post_shot_xg_value_maps via get_game_shot_maps()
-#   - Each shot's value_map is a 120x72 grid of post-shot xG probabilities
+#   - Retrieved from hawks_analytics.expected_goal_values_post_shot_net_grid via get_game_shot_maps()
+#   - Each shot's value_map is a native-resolution net-grid of post-shot xG probabilities
 #   - Creates a new Space instance per shot, discards it after use
 #   - No expensive local precomputation needed; data comes from Snowflake
 #   - Used by: BlackhawksJEEDS when processing real player data from Snowflake
@@ -558,7 +558,7 @@ def transform_shots_for_jeeds(
                 # dividing by the peak-above-average advantage makes lambda dimensionless:
                 # "how strongly does the player prefer one unit of extra advantage".
                 # Without this, lambda absorbs the EV scale, which shrinks as execution
-                # skill worsens (more blur) and differs between xG models.
+                # skill worsens (more blur).
                 ev_scale = float(np.max(evs) - np.mean(evs))
                 if ev_scale > 1e-12:
                     evs = evs / ev_scale
@@ -836,7 +836,6 @@ def save_player_data_by_games(
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
     tag: str = "games",
-    maps_source: str = "legacy",
     value_column: str = "expected_goals",
 ) -> dict[str, Path]:
     """Fetch and save player shot data + shot maps for specific games.
@@ -898,16 +897,11 @@ def save_player_data_by_games(
         "Fetching shot maps..."
     )
     try:
-        if maps_source == "legacy":
-            shot_maps = get_games_shot_maps_batch(filtered_game_ids, player_id=player_id)
-        elif maps_source == "new":
-            shot_maps = bh_queries.get_games_shot_maps_batch_new_xg(
-                filtered_game_ids,
-                player_id=player_id,
-                value_column=value_column,
-            )
-        else:
-            raise ValueError("maps_source must be one of {'legacy','new'}")
+        shot_maps = get_games_shot_maps_batch(
+            filtered_game_ids,
+            player_id=player_id,
+            value_column=value_column,
+        )
     except Exception as e:
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
@@ -978,7 +972,6 @@ def save_player_data(
     seasons: list[int],
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
-    maps_source: str = "legacy",
     value_column: str = "expected_goals",
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
@@ -1038,16 +1031,11 @@ def save_player_data(
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
         try:
-            if maps_source == "legacy":
-                shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
-            elif maps_source == "new":
-                shot_maps = bh_queries.get_games_shot_maps_batch_new_xg(
-                    game_ids,
-                    player_id=player_id,
-                    value_column=value_column,
-                )
-            else:
-                raise ValueError("maps_source must be one of {'legacy','new'}")
+            shot_maps = get_games_shot_maps_batch(
+                game_ids,
+                player_id=player_id,
+                value_column=value_column,
+            )
         except Exception as e:
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}

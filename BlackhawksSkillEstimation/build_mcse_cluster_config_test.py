@@ -10,6 +10,7 @@ import pytest
 from BlackhawksSkillEstimation.build_mcse_cluster_config import (
     _aggregate_jobs,
     build_mcse_cluster_config,
+    DEFAULT_BENCHMARK_TAG,
 )
 
 
@@ -62,6 +63,7 @@ def test_build_mcse_cluster_config_shape(monkeypatch: pytest.MonkeyPatch) -> Non
     assert config["estimator"]["num_particles"] == 1000
     assert config["estimator"]["ranges"]["end"][0] == 0.25
     assert config["estimator"]["ranges"]["end"][-1] == 4.0
+    assert config["maxg"]["benchmark_tag"] == DEFAULT_BENCHMARK_TAG
     assert config["cluster_plan"]["eligible_jobs"] == 1
     job = config["cluster_plan"]["jobs"][0]
     assert job["player_id"] == 950160
@@ -87,9 +89,9 @@ def test_derive_mcse_config_for_data_root(monkeypatch: pytest.MonkeyPatch) -> No
     import BlackhawksSkillEstimation.build_mcse_cluster_config as mod
 
     monkeypatch.setattr(mod.data_io, "build_observation_summary", lambda *a, **k: summary)
-    derived = mod.derive_mcse_config_for_data_root(base, "Data/Hockey_xg_new")
-    assert derived["data_root"] == "Data/Hockey_xg_new"
-    assert derived["maxg"]["benchmark_tag"] == mod.NEW_XG_BENCHMARK_TAG
+    derived = mod.derive_mcse_config_for_data_root(base, "Data/Hockey")
+    assert derived["data_root"] == "Data/Hockey"
+    assert derived["maxg"]["benchmark_tag"] == mod.DEFAULT_BENCHMARK_TAG
     assert derived["cluster_plan"]["eligible_jobs"] == 0
 
 

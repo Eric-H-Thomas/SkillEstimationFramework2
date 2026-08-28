@@ -1,4 +1,4 @@
-"""Plot rationality versus execution skill for legacy/new JEEDS runs."""
+"""Plot rationality versus execution skill for JEEDS runs."""
 from __future__ import annotations
 
 import argparse
@@ -33,15 +33,6 @@ def _extract_player_id(path: Path) -> int:
         if match:
             return int(match.group(1))
     raise ValueError(f"Unable to parse player_id from path: {path}")
-
-
-def _extract_model(path: Path) -> str | None:
-    for part in path.parts:
-        if part.startswith("player_") and "__" in part:
-            suffix = part.split("__", 1)[1]
-            if suffix in {"legacy", "new"}:
-                return suffix
-    return None
 
 
 def _extract_season(path: Path) -> int | None:
@@ -145,8 +136,6 @@ def _load_rows(
     seasons: list[int],
     data_root: Path,
     shot_group: str,
-    model_filter: str,
-    source_label: str,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
 
@@ -154,10 +143,6 @@ def _load_rows(
         for path in discover_ees_csvs(data_root, str(season), shot_group):
             pid = _extract_player_id(path)
             if pid not in players:
-                continue
-
-            model = _extract_model(path)
-            if model is not None and model != model_filter:
                 continue
 
             season_id = _extract_season(path)
@@ -177,7 +162,6 @@ def _load_rows(
                 {
                     "player_id": pid,
                     "season": int(season_id),
-                    "model": source_label if model is None else model,
                     "xskill_ees": float(xskill),
                     "log10_expected_rationality": float(rationality),
                     "shots": int(shots),
@@ -345,70 +329,55 @@ def run_diagnostic(
     *,
     players_file: Path,
     seasons: list[int],
-    data_root_legacy: Path,
-    data_root_new: Path,
+    data_root: Path,
     shot_group: str,
     output_dir: Path,
 ) -> dict[str, object]:
     player_ids = _read_player_ids(players_file)
-
-    rows: list[dict[str, object]] = []
-    rows.extend(
+    df = pd.DataFrame(
         _load_rows(
             players=player_ids,
             seasons=seasons,
-            data_root=data_root_legacy,
+            data_root=data_root,
             shot_group=shot_group,
-            model_filter="legacy",
-            source_label="legacy",
         )
     )
-    rows.extend(
-        _load_rows(
-            players=player_ids,
-            seasons=seasons,
-            data_root=data_root_new,
-            shot_group=shot_group,
-            model_filter="new",
-            source_label="new",
-        )
-    )
-
-    df = pd.DataFrame(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows: list[dict[str, object]] = []
-    for model in ("legacy", "new"):
-        model_df = df[df["model"] == model]
-        x_vals = model_df["xskill_ees"].dropna().to_numpy(dtype=float)
-        y_vals = model_df["log10_expected_rationality"].dropna().to_numpy(dtype=float)
+    x_vals = df["xskill_ees"].dropna().to_numpy(dtype=float) if not df.empty else np.array([])
+    y_vals = (
+        df["log10_expected_rationality"].dropna().to_numpy(dtype=float) if not df.empty else np.array([])
+    )
+    summary_rows.append(
+        {
+            "scope": "overall",
+            "n_pairs": int(len(df)),
+            "pearson_r": _pearson(x_vals, y_vals),
+            "spearman_r": _spearman(x_vals, y_vals),
+            "xskill_stats": str(_spread_stats(x_vals)),
+            "rationality_stats": str(_spread_stats(y_vals)),
+        }
+    )
+
+    for season in seasons:
+        s_df = df[df["season"] == season] if not df.empty else df
+        x_vals = s_df["xskill_ees"].dropna().to_numpy(dtype=float) if not s_df.empty else np.array([])
+        y_vals = (
+            s_df["log10_expected_rationality"].dropna().to_numpy(dtype=float)
+            if not s_df.empty
+            else np.array([])
+        )
         summary_rows.append(
             {
-                "model": model,
-                "scope": "overall",
-                "n_pairs": int(len(model_df)),
+                "scope": str(season),
+                "n_pairs": int(len(s_df)),
                 "pearson_r": _pearson(x_vals, y_vals),
                 "spearman_r": _spearman(x_vals, y_vals),
                 "xskill_stats": str(_spread_stats(x_vals)),
                 "rationality_stats": str(_spread_stats(y_vals)),
             }
         )
-
-        for season in seasons:
-            s_df = model_df[model_df["season"] == season]
-            x_vals = s_df["xskill_ees"].dropna().to_numpy(dtype=float)
-            y_vals = s_df["log10_expected_rationality"].dropna().to_numpy(dtype=float)
-            summary_rows.append(
-                {
-                    "model": model,
-                    "scope": str(season),
-                    "n_pairs": int(len(s_df)),
-                    "pearson_r": _pearson(x_vals, y_vals),
-                    "spearman_r": _spearman(x_vals, y_vals),
-                    "xskill_stats": str(_spread_stats(x_vals)),
-                    "rationality_stats": str(_spread_stats(y_vals)),
-                }
-            )
 
     summary_csv = output_dir / "rationality_vs_xskill_summary.csv"
     pd.DataFrame(summary_rows).to_csv(summary_csv, index=False)
@@ -417,33 +386,20 @@ def run_diagnostic(
     if not df.empty:
         df.to_csv(pairs_csv, index=False)
 
-    combined_plot = output_dir / "rationality_vs_xskill_combined.png"
+    combined_plot = output_dir / "rationality_vs_xskill.png"
     _plot_scatter(
         df,
         combined_plot,
-        title="Rationality vs xskill - Legacy and New",
+        title="Rationality vs xskill",
         x_label="expected_execution_skill",
         y_label="log10(expected_rationality)",
-        color_by="model",
     )
-
-    for model in ("legacy", "new"):
-        model_df = df[df["model"] == model]
-        if model_df.empty:
-            continue
-        _plot_scatter(
-            model_df,
-            output_dir / f"rationality_vs_xskill_{model}.png",
-            title=f"Rationality vs xskill - {model.title()}",
-            x_label="expected_execution_skill",
-            y_label="log10(expected_rationality)",
-        )
-        per_season = {season: model_df[model_df["season"] == season] for season in seasons}
-        _plot_season_multipanel(
-            per_season,
-            output_dir / f"rationality_vs_xskill_{model}_seasons.png",
-            title=f"Rationality vs xskill by season - {model.title()}",
-        )
+    per_season = {season: df[df["season"] == season] for season in seasons} if not df.empty else {}
+    _plot_season_multipanel(
+        per_season,
+        output_dir / "rationality_vs_xskill_seasons.png",
+        title="Rationality vs xskill by season",
+    )
 
     return {
         "summary_csv": str(summary_csv),
@@ -454,7 +410,7 @@ def run_diagnostic(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plot rationality versus xskill for legacy/new JEEDS runs.")
+    parser = argparse.ArgumentParser(description="Plot rationality versus xskill for JEEDS runs.")
     parser.add_argument(
         "--players-file",
         type=Path,
@@ -474,21 +430,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Shot group subdirectory under logs/.",
     )
     parser.add_argument(
-        "--data-root-legacy",
+        "--data-root",
         type=Path,
         default=Path("Data/Hockey"),
-        help="Root directory for legacy run logs.",
-    )
-    parser.add_argument(
-        "--data-root-new",
-        type=Path,
-        default=Path("Data/Hockey_xg_new"),
-        help="Root directory for new xG run logs.",
+        help="Root directory for JEEDS run logs.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("Data/Hockey_xg_new/rationality_vs_xskill"),
+        default=Path("Data/Hockey/rationality_vs_xskill"),
         help="Output directory for CSV and plots.",
     )
     return parser
@@ -499,8 +449,7 @@ def main() -> None:
     result = run_diagnostic(
         players_file=args.players_file,
         seasons=[int(s) for s in args.seasons],
-        data_root_legacy=args.data_root_legacy,
-        data_root_new=args.data_root_new,
+        data_root=args.data_root,
         shot_group=args.shot_group,
         output_dir=args.output_dir,
     )

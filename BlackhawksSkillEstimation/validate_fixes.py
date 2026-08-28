@@ -21,7 +21,7 @@ import pandas as pd
 from Estimators.joint import hockey_rationality_log10_bounds
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ROOTS = {"legacy": REPO_ROOT / "Data" / "Hockey", "new": REPO_ROOT / "Data" / "Hockey_xg_new"}
+DATA_ROOT = REPO_ROOT / "Data" / "Hockey"
 
 # Prior mean of lambda on the current hockey-multi log10-uniform grid.
 # An estimate pinned here is an estimate that has learned nothing.
@@ -45,18 +45,11 @@ def _players_in_root(root: Path, season: int) -> list[int]:
     return found
 
 
-def _pick_players(roots: dict[str, Path], season: int, n: int) -> list[int]:
-    """Players with enough data in every selected root, so runs are comparable."""
-    eligible: set[int] | None = None
-    for root in roots.values():
-        in_root = set(_players_in_root(root, season))
-        eligible = in_root if eligible is None else (eligible & in_root)
+def _pick_players(root: Path, season: int, n: int) -> list[int]:
+    eligible = _players_in_root(root, season)
     if not eligible:
-        raise SystemExit(
-            f"No players with >=140 shots in season {season} across roots: "
-            f"{', '.join(r.name for r in roots.values())}"
-        )
-    return sorted(eligible)[:n]
+        raise SystemExit(f"No players with >=140 shots in season {season} under {root}")
+    return eligible[:n]
 
 
 def run_mcse(
@@ -153,42 +146,37 @@ def main() -> None:
     parser.add_argument("--season", type=int, default=20242025)
     parser.add_argument("--particles", type=int, default=500)
     parser.add_argument("--max-shots", type=int, default=0, help="0 uses every shot")
-    parser.add_argument("--roots", nargs="+", default=list(ROOTS), choices=list(ROOTS))
+    parser.add_argument("--data-root", type=Path, default=DATA_ROOT)
     parser.add_argument("--skip-jeeds", action="store_true")
     parser.add_argument("--skip-mcse", action="store_true")
     args = parser.parse_args()
-    roots = {k: ROOTS[k] for k in args.roots}
+    root = Path(args.data_root)
 
     pd.set_option("display.width", 200)
 
-    players = _pick_players(roots, args.season, args.n_players)
-    print(
-        f"Validating on players {players}, season {args.season}, "
-        f"roots {', '.join(roots)}\n"
-    )
+    players = _pick_players(root, args.season, args.n_players)
+    print(f"Validating on players {players}, season {args.season}, root {root}\n")
 
     if not args.skip_mcse:
         print("=== MCSE: does rationality respond to the data now? ===")
         print(f"(prior mean sits at log10 lambda = {PRIOR_MEAN_LOG10_LAMBDA:.3f}; "
               "the old code pinned every player there)\n")
         mcse_frames = []
-        for xg_model, root in roots.items():
-            for mode in ["fixed_grid", "estimated"]:
-                frame = run_mcse(
-                    players, args.season, root, mode, args.particles, args.max_shots
-                )
-                frame["xg_model"] = xg_model
-                mcse_frames.append(frame)
+        for mode in ["fixed_grid", "estimated"]:
+            frame = run_mcse(
+                players, args.season, root, mode, args.particles, args.max_shots
+            )
+            mcse_frames.append(frame)
         mcse = pd.concat(mcse_frames, ignore_index=True)
         print()
         print(mcse.to_string(index=False))
 
         print("\n--- spread of log10 rationality across players (0 = no signal) ---")
-        for (xg_model, mode), group in mcse.groupby(["xg_model", "lambda_mode"]):
+        for mode, group in mcse.groupby("lambda_mode"):
             spread = group["log10_eps"].max() - group["log10_eps"].min()
             offset = group["log10_eps"].mean() - PRIOR_MEAN_LOG10_LAMBDA
             print(
-                f"  {xg_model:7s} {mode:11s} range={spread:.3f}  "
+                f"  {mode:11s} range={spread:.3f}  "
                 f"mean offset from prior={offset:+.3f}"
             )
 
@@ -202,36 +190,23 @@ def main() -> None:
         ("1e9", "1", "C: clamp lifted + EV normalized"),
     ]
     jeeds_frames = []
-    for xg_model, root in roots.items():
-        for cap, normalize, _ in variants:
-            frame = run_jeeds(players, args.season, root, cap, args.max_shots, normalize)
-            frame["xg_model"] = xg_model
-            jeeds_frames.append(frame)
+    for cap, normalize, _ in variants:
+        frame = run_jeeds(players, args.season, root, cap, args.max_shots, normalize)
+        jeeds_frames.append(frame)
     jeeds = pd.concat(jeeds_frames, ignore_index=True)
     print()
     print(jeeds.to_string(index=False))
 
-    print("\n--- per variant: median estimate, and do the two xG models agree? ---")
+    print("\n--- per variant: median estimate ---")
     for cap, normalize, label in variants:
         sub = jeeds[(jeeds["blur_cap_bins"] == cap) & (jeeds["ev_normalized"] == normalize)]
-        parts = []
-        for xg_model in roots:
-            group = sub[sub["xg_model"] == xg_model]
-            if group.empty:
-                continue
-            parts.append(
-                f"{xg_model}: ees={group['ees'].median():.4f} "
-                f"log10_lambda={group['log10_eps'].median():.3f} "
-                f"(spread {group['log10_eps'].max() - group['log10_eps'].min():.3f})"
-            )
-        gap = ""
-        if len(roots) > 1:
-            medians = [
-                sub[sub["xg_model"] == m]["ees"].median() for m in roots if not sub[sub["xg_model"] == m].empty
-            ]
-            if len(medians) == 2:
-                gap = f"  | legacy-vs-new ees gap = {abs(medians[0] - medians[1]):.4f}"
-        print(f"  {label}\n      " + "   ".join(parts) + gap)
+        if sub.empty:
+            continue
+        print(
+            f"  {label}\n      ees={sub['ees'].median():.4f} "
+            f"log10_lambda={sub['log10_eps'].median():.3f} "
+            f"(spread {sub['log10_eps'].max() - sub['log10_eps'].min():.3f})"
+        )
 
 
 if __name__ == "__main__":

@@ -9,21 +9,18 @@ from matplotlib import transforms
 
 from . import db
 
-# Shot map grid dimensions (from post_shot_xg_value_maps reshaping)
-# Used (along with covariance extraction helper) in get_game_shot_maps()
-SHOT_MAP_HEIGHT = 120
-SHOT_MAP_WIDTH = 72
+# Shot maps come from hawks_analytics.expected_goal_values_post_shot_net_grid
+# at native net-grid resolution.
 
 
-def _resolve_new_xg_value_column(value_column: str) -> str:
-    """Resolve the requested scalar surface column for the new xG table.
+def _resolve_xg_value_column(value_column: str) -> str:
+    """Resolve the requested scalar surface column for the xG net-grid table.
 
     Parameters
     ----------
     value_column : str
         User-facing column selector (case-insensitive).
-
-        Phase 1 design decision: only ``EXPECTED_GOALS`` is supported.
+        Only ``EXPECTED_GOALS`` is supported.
 
     Returns
     -------
@@ -47,7 +44,7 @@ def _resolve_new_xg_value_column(value_column: str) -> str:
 
     raise ValueError(
         f"Unsupported value_column={value_column!r}. "
-        "Phase 1 uses EXPECTED_GOALS only. Use value_column='expected_goals'."
+        "Only EXPECTED_GOALS is supported. Use value_column='expected_goals'."
     )
 
 
@@ -55,14 +52,13 @@ def _build_shot_map_dict_from_grid_df(
     df: pd.DataFrame,
     value_field: str,
 ) -> dict[int, dict[str, object]]:
-    """Build the legacy-compatible shot-map dict from a per-cell grid DataFrame.
+    """Build the internal shot-map dict from a per-cell grid DataFrame.
 
         Notes
         -----
         - Expects the per-event grid to be rectangular and complete.
         - Builds a Z×Y map using a pivot on (location_z, location_y).
-        - Applies the same Y-axis flip used by legacy maps (reverse columns)
-            to enforce the codebase convention of positive-y-right.
+        - Reverses Y columns so positive-y is to the right (codebase convention).
     """
 
     if df.empty:
@@ -111,7 +107,7 @@ def _build_shot_map_dict_from_grid_df(
             .values
         )
 
-        # Match legacy convention: reverse Y axis so positive-y is to the right.
+        # Reverse Y axis so positive-y is to the right.
         grid = grid[:, ::-1]
         grid_y = y_vals[::-1]
         grid_z = z_vals
@@ -126,15 +122,13 @@ def _build_shot_map_dict_from_grid_df(
     return shot_maps
 
 
-def get_shot_maps_by_event_ids_new_xg(
+def get_shot_maps_by_event_ids(
     event_ids: list[int],
     value_column: str = "expected_goals",
 ) -> dict[int, dict[str, object]]:
-    """Return *new-table* shot maps for the provided event IDs.
+    """Return shot maps for the provided event IDs.
 
-    This is a Phase 1 migration helper that mirrors
-    :func:`get_shot_maps_by_event_ids` but reads from
-    ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
+    Reads ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
 
     Parameters
     ----------
@@ -142,31 +136,29 @@ def get_shot_maps_by_event_ids_new_xg(
         List of event identifiers to fetch shot maps for.
     value_column : str
         Which scalar surface value to use for the map.
-
-        Phase 1: only ``expected_goals`` is supported.
+        Only ``expected_goals`` is supported.
 
     Returns
     -------
     dict[int, dict[str, object]]
         Mapping of event_id_hawks -> shot data dict containing:
-                - 'value_map': 2D numpy array with shape (n_z, n_y) on the new table's
-                    native net-grid resolution (orientation matches legacy: Z rows, Y cols,
-                    with Y flipped to codebase positive-y-right convention).
+                - 'value_map': 2D numpy array with shape (n_z, n_y) at native
+                    net-grid resolution (Z rows, Y cols, Y flipped to
+                    positive-y-right).
         - 'net_cov': 2x2 covariance matrix (from SHOT_TRAJECTORIES)
         - 'net_coords': [y, z] goal line coordinates (from SHOT_TRAJECTORIES)
 
     Notes
     -----
-    - This function keeps the legacy orientation convention:
-      both SHOT_TRAJECTORIES and the legacy map grid use positive-y-left in
-      Snowflake, so we negate ``goalline_y_model`` (net_coords) and we reverse
-      the map's Y axis via ``[:, ::-1]``.
+    SHOT_TRAJECTORIES stores positive-y-left in Snowflake, so we negate
+    ``goalline_y_model`` (net_coords) and reverse the map's Y axis via
+    ``[:, ::-1]``.
     """
 
     if not event_ids:
         return {}
 
-    value_sql = _resolve_new_xg_value_column(value_column)
+    value_sql = _resolve_xg_value_column(value_column)
     event_ids_str = ",".join(str(eid) for eid in event_ids)
 
     query = f"""
@@ -196,20 +188,19 @@ def get_shot_maps_by_event_ids_new_xg(
     if df.empty:
         return {}
 
-    # Match legacy convention: net coords should use positive-y-right.
+    # Net coords should use positive-y-right.
     df["goalline_y_model"] = -df["goalline_y_model"]
     return _build_shot_map_dict_from_grid_df(df, value_field="surface_value")
 
 
-def get_games_shot_maps_batch_new_xg(
+def get_games_shot_maps_batch(
     game_ids: list[int],
     player_id: int | None = None,
     value_column: str = "expected_goals",
 ) -> dict[int, dict[str, object]]:
-    """Return *new-table* shot maps for multiple games keyed by event_id.
+    """Return shot maps for multiple games keyed by event_id.
 
-    Mirrors :func:`get_games_shot_maps_batch` but reads from
-    ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
+    Reads ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
 
     Parameters
     ----------
@@ -218,14 +209,14 @@ def get_games_shot_maps_batch_new_xg(
     player_id : int | None
         Optional player filter (uses PUBLIC.EVENT.PLAYER_ID_HAWKS).
     value_column : str
-        Scalar surface to use (default: ``expected_goals``). Phase 1 supports
-        ``expected_goals`` only.
+        Scalar surface to use (default: ``expected_goals``).
+        Only ``expected_goals`` is supported.
     """
 
     if not game_ids:
         return {}
 
-    value_sql = _resolve_new_xg_value_column(value_column)
+    value_sql = _resolve_xg_value_column(value_column)
     game_ids_str = ",".join(str(gid) for gid in game_ids)
     player_filter = f"AND e.PLAYER_ID_HAWKS = {player_id}" if player_id else ""
 
@@ -258,7 +249,7 @@ def get_games_shot_maps_batch_new_xg(
     if df.empty:
         return {}
 
-    # Match legacy convention: net coords should use positive-y-right.
+    # Net coords should use positive-y-right.
     df["goalline_y_model"] = -df["goalline_y_model"]
     return _build_shot_map_dict_from_grid_df(df, value_field="surface_value")
 
@@ -330,7 +321,7 @@ def shot_games(season: int) -> pd.Series:
 
     query = """
         SELECT DISTINCT e.game_id_hawks
-        FROM hawks_analytics.post_shot_xg_value_maps p
+        FROM hawks_analytics.expected_goal_values_post_shot_net_grid p
         JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
         JOIN public.game g ON g.game_id_hawks = e.game_id_hawks
         WHERE g.season = %(season)s
@@ -356,7 +347,7 @@ def get_games_for_seasons(seasons: list[int]) -> pd.DataFrame:
     query = f"""
         SELECT DISTINCT g.game_id_hawks, g.season
         FROM public.game g
-        JOIN hawks_analytics.post_shot_xg_value_maps p
+        JOIN hawks_analytics.expected_goal_values_post_shot_net_grid p
           ON p.event_id_hawks IN (
               SELECT e.event_id_hawks
               FROM public.event e
@@ -450,6 +441,7 @@ def query_season_shots(
 ) -> pd.DataFrame:
     """Fetch shot-level metadata across all players for the given seasons.
 
+    Requires coverage in ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
     This query mirrors :func:`query_player_season_shots` but omits the
     player constraint, making it suitable for benchmark sampling.
 
@@ -505,7 +497,7 @@ def query_season_shots(
           {shot_type_clause}
           AND EXISTS (
               SELECT 1
-              FROM hawks_analytics.post_shot_xg_value_maps p
+              FROM hawks_analytics.expected_goal_values_post_shot_net_grid p
               WHERE p.event_id_hawks = e.event_id_hawks
           );
     """
@@ -518,122 +510,6 @@ def query_season_shots(
     # Flip Y-coordinate to match the positive-y-right convention.
     df["location_y"] = -df["location_y"]
     return df
-
-
-def query_season_shots_new_xg(
-    seasons: list[int],
-    shot_types: set[str] | None = None,
-    include_null_shot_type: bool = True,
-) -> pd.DataFrame:
-    """Fetch shot-level metadata for seasons, filtered to new xG map coverage.
-
-    Mirrors :func:`query_season_shots` but requires rows in
-    ``hawks_analytics.expected_goal_values_post_shot_net_grid``.
-    """
-    if not seasons:
-        return pd.DataFrame()
-
-    seasons_str = ",".join(str(s) for s in seasons)
-    shot_type_clause = ""
-    if shot_types:
-        shot_types_sql = ",".join(f"'{t}'" for t in sorted(shot_types))
-        if include_null_shot_type:
-            shot_type_clause = (
-                f"AND (e.SHOT_TYPE IN ({shot_types_sql}) OR e.SHOT_TYPE IS NULL)"
-            )
-        else:
-            shot_type_clause = f"AND e.SHOT_TYPE IN ({shot_types_sql})"
-
-    query = f"""
-        SELECT
-            e.PLAYER_ID_HAWKS        AS player_id,
-            e.GAME_ID_HAWKS          AS game_id,
-            e.EVENT_ID_HAWKS         AS event_id,
-            g.SEASON                 AS season,
-            e.SHOT_TYPE              AS shot_type,
-            e.X_ADJ_COORD            AS start_x,
-            e.Y_ADJ_COORD            AS start_y,
-            st.GOALLINE_Y_MODEL      AS location_y,
-            st.GOALLINE_Z_MODEL      AS location_z
-        FROM HAWKS_HOCKEY.PUBLIC.EVENT AS e
-        JOIN HAWKS_HOCKEY.PUBLIC.GAME AS g
-          ON g.GAME_ID_HAWKS = e.GAME_ID_HAWKS
-        JOIN HAWKS_HOCKEY.HAWKS_ANALYTICS.SHOT_TRAJECTORIES AS st
-          ON st.EVENT_ID_HAWKS = e.EVENT_ID_HAWKS
-        WHERE g.SEASON IN ({seasons_str})
-          AND e.EVENT_NAME = 'shot'
-          {shot_type_clause}
-          AND EXISTS (
-              SELECT 1
-              FROM hawks_analytics.expected_goal_values_post_shot_net_grid n
-              WHERE n.event_id_hawks = e.event_id_hawks
-          );
-    """
-
-    df = db.get_df(query).rename(columns=str.lower)
-
-    if df.empty:
-        return df
-
-    # Flip Y-coordinate to match the positive-y-right convention.
-    df["location_y"] = -df["location_y"]
-    return df
-
-
-def get_shot_maps_by_event_ids(event_ids: list[int]) -> dict[int, dict[str, object]]:
-    """Return shot maps for the provided event IDs.
-
-    Parameters
-    ----------
-    event_ids : list[int]
-        List of event identifiers to fetch shot maps for.
-
-    Returns
-    -------
-    dict[int, dict[str, object]]
-        Mapping of event_id_hawks -> shot data dict containing:
-        - 'value_map': 2D numpy array of post-shot xG values
-        - 'net_cov': 2x2 covariance matrix
-        - 'net_coords': [y, z] goal line coordinates
-    """
-    if not event_ids:
-        return {}
-
-    event_ids_str = ",".join(str(eid) for eid in event_ids)
-    query = f"""
-            SELECT p.*
-                , e.game_id_hawks
-                , st.goalline_y_model
-                , st.goalline_z_model
-                , st.cov_00
-                , st.cov_01
-                , st.cov_10
-                , st.cov_11
-                , st.percent_on_net
-            FROM hawks_analytics.post_shot_xg_value_maps p
-            JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
-            JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
-            WHERE e.event_id_hawks IN ({event_ids_str})
-            ORDER BY p.event_id_hawks ASC, location_y ASC, location_z ASC
-            ;
-            """
-    df = db.get_df(query).rename(columns=str.lower)
-
-    if df.empty:
-        return {}
-
-    # Flip Y-coordinate to match the positive-y-right convention.
-    df["goalline_y_model"] = -df["goalline_y_model"]
-
-    shot_maps: dict[int, dict[str, object]] = {}
-    for event_id_hawks in df["event_id_hawks"].unique():
-        shot_df = df[df["event_id_hawks"] == event_id_hawks]
-        shot_maps[event_id_hawks] = {
-            "value_map": shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1],
-            "net_cov": _extract_covariance_matrix(shot_df.iloc[0]),
-            "net_coords": shot_df.iloc[0][["goalline_y_model", "goalline_z_model"]].values,
-        }
-    return shot_maps
 
 
 def get_game_shot_maps(game_id_hawks: int, player_id: int | None = None) -> dict[int, dict[str, object]]:
@@ -649,84 +525,6 @@ def get_game_shot_maps(game_id_hawks: int, player_id: int | None = None) -> dict
         single-player analysis.
     """
     return get_games_shot_maps_batch([game_id_hawks], player_id=player_id)
-
-
-def get_games_shot_maps_batch(
-    game_ids: list[int],
-    player_id: int | None = None,
-) -> dict[int, dict[str, object]]:
-    """Return shot metadata for multiple games keyed by ``event_id_hawks``.
-    
-    This is a batched version of get_game_shot_maps that fetches all games
-    in a single query, significantly reducing database round-trips.
-    
-    Parameters
-    ----------
-    game_ids : list[int]
-        List of game identifiers to fetch shot maps for.
-    player_id : int | None
-        If provided, only fetch shot maps for this player's shots.
-        This dramatically reduces query size (e.g., from ~230 maps to ~37
-        for a typical player across a few games) and is recommended for
-        single-player analysis.
-        
-    Returns
-    -------
-    dict[int, dict[str, object]]
-        Mapping of event_id_hawks -> shot data dict containing:
-        - 'value_map': 2D numpy array of post-shot xG values
-        - 'net_cov': 2x2 covariance matrix
-        - 'net_coords': [y, z] goal line coordinates
-    """
-    if not game_ids:
-        return {}
-    
-    game_ids_str = ",".join(str(g) for g in game_ids)
-    player_filter = f"AND e.player_id_hawks = {player_id}" if player_id else ""
-    query = f"""
-            SELECT p.*
-                , e.game_id_hawks
-                , st.goalline_y_model
-                , st.goalline_z_model
-                , st.cov_00
-                , st.cov_01
-                , st.cov_10
-                , st.cov_11
-                , st.percent_on_net
-            FROM hawks_analytics.post_shot_xg_value_maps p
-            JOIN public.event e ON e.event_id_hawks = p.event_id_hawks
-            JOIN hawks_analytics.shot_trajectories st ON st.event_id_hawks = p.event_id_hawks
-            WHERE e.game_id_hawks IN ({game_ids_str})
-            {player_filter}
-            ORDER BY p.event_id_hawks ASC, location_y ASC, location_z ASC
-            ;
-            """
-    df = db.get_df(query).rename(columns=str.lower)
-    
-    # No data for these games/player
-    if df.empty:
-        return {}
-    
-    # Fix reversed Y-coordinate in database: negate to match expected hockey rink orientation.
-    # Both shot_trajectories and post_shot_xg_value_maps use positive-y-left (Blackhawks analytics
-    # convention), while our codebase uses positive-y-right.  We flip both here so all downstream
-    # code works in one consistent convention.
-    df["goalline_y_model"] = -df["goalline_y_model"]
-
-    shot_maps: dict[int, dict[str, object]] = {}
-    for event_id_hawks in df["event_id_hawks"].unique():
-        shot_df = df[df["event_id_hawks"] == event_id_hawks]
-        # Reshape to (Z, Y) then flip the Y axis so that, like goalline_y_model above,
-        # positive-Y is to the right when facing the net (our convention).
-        # The query reads location_y ASC, so column 0 = BH y=-5 (right) and column 119 = BH y=+5
-        # (left); [:, ::-1] reverses that so column 0 = our y=-5 (left) and column 119 = our y=+5
-        # (right), matching _BH_Y = linspace(-5, 5).
-        shot_maps[event_id_hawks] = {
-            "value_map": shot_df["post_shot_xg"].values.reshape(SHOT_MAP_HEIGHT, SHOT_MAP_WIDTH).T[:, ::-1],
-            "net_cov": _extract_covariance_matrix(shot_df.iloc[0]),
-            "net_coords": shot_df.iloc[0][["goalline_y_model", "goalline_z_model"]].values,
-        }
-    return shot_maps
 
 
 def query_player_game_info(player_id: int, game_ids: list[int]) -> pd.DataFrame:

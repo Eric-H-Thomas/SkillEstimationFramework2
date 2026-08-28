@@ -1,7 +1,7 @@
-"""Aggregate and compare MCSE vs JEEDS Blackhawks runs across xG models.
+"""Aggregate MCSE vs JEEDS Blackhawks runs.
 
 Reads final-row estimates from every per-player/per-season intermediate CSV
-under both data roots for both estimators, then emits tidy CSVs, cross-season
+under Data/Hockey for both estimators, then emits tidy CSVs, cross-season
 stability statistics, and diagnostic plots.
 
 Usage:
@@ -34,10 +34,8 @@ SHOT_GROUP = "wristshot_snapshot"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-ROOTS = {
-    "legacy": REPO_ROOT / "Data" / "Hockey",
-    "new": REPO_ROOT / "Data" / "Hockey_xg_new",
-}
+DATA_ROOT = REPO_ROOT / "Data" / "Hockey"
+ESTIMATORS = ("jeeds", "mcse")
 
 # Rationality grid is log10-uniform on the hockey-multi JEEDS/MCSE bounds
 # (default [-1, 3] when BH_EV_NORMALIZE is on), so a posterior that has
@@ -53,7 +51,6 @@ SEASON_RE = re.compile(r"intermediate_estimates_(\d{8})\.csv$")
 @dataclass(frozen=True)
 class Record:
     estimator: str
-    xg_model: str
     player_id: int
     season: int
     shots: int
@@ -111,7 +108,7 @@ def _iter_csvs(root: Path, logs_subdir: str | None) -> list[tuple[int, int, Path
     return found
 
 
-def load_mcse(root: Path, xg_model: str) -> list[Record]:
+def load_mcse(root: Path) -> list[Record]:
     records: list[Record] = []
     for player_id, season, csv_path in _iter_csvs(root, "mcse"):
         frame = pd.read_csv(csv_path)
@@ -124,7 +121,6 @@ def load_mcse(root: Path, xg_model: str) -> list[Record]:
         records.append(
             Record(
                 estimator="mcse",
-                xg_model=xg_model,
                 player_id=player_id,
                 season=season,
                 shots=int(last["shot_count"]),
@@ -141,7 +137,7 @@ def load_mcse(root: Path, xg_model: str) -> list[Record]:
     return records
 
 
-def load_jeeds(root: Path, xg_model: str) -> list[Record]:
+def load_jeeds(root: Path) -> list[Record]:
     records: list[Record] = []
     for player_id, season, csv_path in _iter_csvs(root, None):
         frame = pd.read_csv(csv_path)
@@ -153,7 +149,6 @@ def load_jeeds(root: Path, xg_model: str) -> list[Record]:
         records.append(
             Record(
                 estimator="jeeds",
-                xg_model=xg_model,
                 player_id=player_id,
                 season=season,
                 shots=int(last["shot_count"]),
@@ -172,17 +167,16 @@ def load_jeeds(root: Path, xg_model: str) -> list[Record]:
 
 def build_table() -> pd.DataFrame:
     records: list[Record] = []
-    for xg_model, root in ROOTS.items():
-        records.extend(load_mcse(root, xg_model))
-        records.extend(load_jeeds(root, xg_model))
+    records.extend(load_mcse(DATA_ROOT))
+    records.extend(load_jeeds(DATA_ROOT))
     frame = pd.DataFrame([r.__dict__ for r in records])
-    return frame.sort_values(["estimator", "xg_model", "player_id", "season"]).reset_index(drop=True)
+    return frame.sort_values(["estimator", "player_id", "season"]).reset_index(drop=True)
 
 
 def stability_stats(frame: pd.DataFrame, metric: str, min_shots: int) -> pd.DataFrame:
     rows = []
     subset = frame[frame["shots"] >= min_shots]
-    for (estimator, xg_model), group in subset.groupby(["estimator", "xg_model"]):
+    for estimator, group in subset.groupby("estimator"):
         pivot = group.pivot_table(index="player_id", columns="season", values=metric)
         for season_a, season_b in zip(SEASONS, SEASONS[1:]):
             if season_a not in pivot.columns or season_b not in pivot.columns:
@@ -197,7 +191,6 @@ def stability_stats(frame: pd.DataFrame, metric: str, min_shots: int) -> pd.Data
             rows.append(
                 {
                     "estimator": estimator,
-                    "xg_model": xg_model,
                     "metric": metric,
                     "season_a": season_a,
                     "season_b": season_b,
@@ -219,7 +212,7 @@ def variance_decomposition(frame: pd.DataFrame, metric: str, min_shots: int) -> 
     """
     rows = []
     subset = frame[frame["shots"] >= min_shots]
-    for (estimator, xg_model), group in subset.groupby(["estimator", "xg_model"]):
+    for estimator, group in subset.groupby("estimator"):
         counts = group.groupby("player_id")[metric].count()
         eligible = counts[counts >= 2].index
         data = group[group["player_id"].isin(eligible)]
@@ -248,7 +241,6 @@ def variance_decomposition(frame: pd.DataFrame, metric: str, min_shots: int) -> 
         rows.append(
             {
                 "estimator": estimator,
-                "xg_model": xg_model,
                 "metric": metric,
                 "n_players": n_groups,
                 "n_observations": n_total,
@@ -261,12 +253,11 @@ def variance_decomposition(frame: pd.DataFrame, metric: str, min_shots: int) -> 
 
 
 def plot_stability_scatter(frame: pd.DataFrame, metric: str, out_path: Path, min_shots: int, label: str) -> None:
-    combos = [("jeeds", "legacy"), ("jeeds", "new"), ("mcse", "legacy"), ("mcse", "new")]
     pairs = list(zip(SEASONS, SEASONS[1:]))
-    fig, axes = plt.subplots(len(combos), len(pairs), figsize=(4 * len(pairs), 3.6 * len(combos)))
+    fig, axes = plt.subplots(len(ESTIMATORS), len(pairs), figsize=(4 * len(pairs), 3.6 * len(ESTIMATORS)))
     subset = frame[frame["shots"] >= min_shots]
-    for row_idx, (estimator, xg_model) in enumerate(combos):
-        group = subset[(subset["estimator"] == estimator) & (subset["xg_model"] == xg_model)]
+    for row_idx, estimator in enumerate(ESTIMATORS):
+        group = subset[subset["estimator"] == estimator]
         pivot = group.pivot_table(index="player_id", columns="season", values=metric)
         for col_idx, (season_a, season_b) in enumerate(pairs):
             ax = axes[row_idx][col_idx]
@@ -286,7 +277,7 @@ def plot_stability_scatter(frame: pd.DataFrame, metric: str, out_path: Path, min
             # Calculate Spearman rank correlation coefficient. This is how we actually represent stability.
             rho = stats.spearmanr(xs, ys).statistic if len(pair) >= 5 else math.nan
             ax.set_title(
-                f"{estimator.upper()} / {xg_model} xG\n"
+                f"{estimator.upper()}\n"
                 f"{SEASON_LABEL[season_a]} vs {SEASON_LABEL[season_b]}  "
                 f"(rho={rho:.2f}, n={len(pair)})",
                 fontsize=9,
@@ -301,14 +292,11 @@ def plot_stability_scatter(frame: pd.DataFrame, metric: str, out_path: Path, min
 
 
 def plot_rationality_distributions(frame: pd.DataFrame, out_path: Path, min_shots: int) -> None:
-    combos = [("jeeds", "legacy"), ("jeeds", "new"), ("mcse", "legacy"), ("mcse", "new")]
     subset = frame[frame["shots"] >= min_shots]
-    fig, axes = plt.subplots(1, len(combos), figsize=(4 * len(combos), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(ESTIMATORS), figsize=(4 * len(ESTIMATORS), 4), sharey=True)
     prior_log10 = math.log10(PRIOR_MEAN_LAMBDA)
-    for ax, (estimator, xg_model) in zip(axes, combos):
-        values = subset[(subset["estimator"] == estimator) & (subset["xg_model"] == xg_model)][
-            "log10_eps"
-        ].dropna()
+    for ax, estimator in zip(axes, ESTIMATORS):
+        values = subset[subset["estimator"] == estimator]["log10_eps"].dropna()
         if values.empty:
             ax.set_visible(False)
             continue
@@ -328,7 +316,7 @@ def plot_rationality_distributions(frame: pd.DataFrame, out_path: Path, min_shot
             label=f"grid cap ({RATIONALITY_LOG10_MAX:g})",
         )
         ax.set_title(
-            f"{estimator.upper()} / {xg_model} xG\nmedian={values.median():.2f}  sd={values.std():.2f}",
+            f"{estimator.upper()}\nmedian={values.median():.2f}  sd={values.std():.2f}",
             fontsize=10,
         )
         ax.set_xlabel("log10 expected rationality")
@@ -346,11 +334,10 @@ def plot_rationality_distributions(frame: pd.DataFrame, out_path: Path, min_shot
 
 
 def plot_player_trajectories(frame: pd.DataFrame, metric: str, out_path: Path, min_shots: int, label: str) -> None:
-    combos = [("jeeds", "legacy"), ("jeeds", "new"), ("mcse", "legacy"), ("mcse", "new")]
     subset = frame[frame["shots"] >= min_shots]
-    fig, axes = plt.subplots(1, len(combos), figsize=(4.2 * len(combos), 4.2), sharey=True)
-    for ax, (estimator, xg_model) in zip(axes, combos):
-        group = subset[(subset["estimator"] == estimator) & (subset["xg_model"] == xg_model)]
+    fig, axes = plt.subplots(1, len(ESTIMATORS), figsize=(4.2 * len(ESTIMATORS), 4.2), sharey=True)
+    for ax, estimator in zip(axes, ESTIMATORS):
+        group = subset[subset["estimator"] == estimator]
         pivot = group.pivot_table(index="player_id", columns="season", values=metric)
         pivot = pivot.dropna(thresh=3)
         for _, series in pivot.iterrows():
@@ -364,7 +351,7 @@ def plot_player_trajectories(frame: pd.DataFrame, metric: str, out_path: Path, m
                 marker="o",
                 ms=2.5,
             )
-        ax.set_title(f"{estimator.upper()} / {xg_model} xG\n(n={len(pivot)} players)", fontsize=10)
+        ax.set_title(f"{estimator.upper()}\n(n={len(pivot)} players)", fontsize=10)
         ax.tick_params(axis="x", rotation=45, labelsize=8)
     axes[0].set_ylabel(label)
     fig.suptitle(f"Per-player {label} across seasons (players with >= 3 seasons)", fontsize=13)
@@ -375,22 +362,19 @@ def plot_player_trajectories(frame: pd.DataFrame, metric: str, out_path: Path, m
 
 def plot_convergence_traces(out_path: Path, n_players: int = 6) -> None:
     """Show raw within-run traces so the reader can see whether estimates settle."""
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
     panels = [
-        ("mcse", "legacy", "expected_rationality", axes[0][0]),
-        ("mcse", "new", "expected_rationality", axes[0][1]),
-        ("mcse", "legacy", "ees_y", axes[1][0]),
-        ("mcse", "new", "ees_y", axes[1][1]),
+        ("expected_rationality", axes[0]),
+        ("ees_y", axes[1]),
     ]
-    for estimator, xg_model, column, ax in panels:
-        root = ROOTS[xg_model]
-        csvs = [p for _, season, p in _iter_csvs(root, "mcse") if season == 20242025]
+    csvs = [p for _, season, p in _iter_csvs(DATA_ROOT, "mcse") if season == 20242025]
+    for column, ax in panels:
         for csv_path in csvs[:n_players]:
             frame = pd.read_csv(csv_path)
             if column not in frame.columns or frame.empty:
                 continue
             ax.plot(frame["shot_count"], frame[column], lw=0.9, alpha=0.8)
-        ax.set_title(f"MCSE / {xg_model} xG - {column} (2024-25, {n_players} players)", fontsize=10)
+        ax.set_title(f"MCSE - {column} (2024-25, {n_players} players)", fontsize=10)
         ax.set_xlabel("shots processed")
         ax.set_ylabel(column)
         if column == "expected_rationality":
@@ -399,7 +383,7 @@ def plot_convergence_traces(out_path: Path, n_players: int = 6) -> None:
             ax.set_ylim(10 ** RATIONALITY_LOG10_MIN, 10 ** RATIONALITY_LOG10_MAX)
             ax.legend(fontsize=8)
     fig.suptitle("MCSE within-run convergence traces", fontsize=13)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
 
@@ -417,7 +401,7 @@ def main() -> None:
     frame.to_csv(out_dir / "final_estimates_all.csv", index=False)
 
     coverage = (
-        frame.groupby(["estimator", "xg_model", "season"])
+        frame.groupby(["estimator", "season"])
         .agg(player_seasons=("player_id", "nunique"), median_shots=("shots", "median"))
         .reset_index()
     )
@@ -445,7 +429,7 @@ def main() -> None:
 
     summary = (
         frame[frame["shots"] >= args.min_shots]
-        .groupby(["estimator", "xg_model"])
+        .groupby("estimator")
         .agg(
             n=("player_id", "size"),
             exec_median=("exec_skill", "median"),

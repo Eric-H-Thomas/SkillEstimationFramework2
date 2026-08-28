@@ -1,9 +1,7 @@
 #!/bin/bash
 # sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_smoke.json
 #
-# Legacy xG only (data_root in config, typically Data/Hockey).
-# For new xG: run_blackhawks_mcse_config_new_xg_root.sbatch <same-config.json>
-# For both:   run_blackhawks_mcse_config_both.sbatch <legacy-config.json>
+# Uses data_root from the config (default Data/Hockey).
 
 #SBATCH --job-name=bh-mcse-bootstrap
 #SBATCH --time=00:05:00

@@ -4,6 +4,8 @@ MAXG (pronounced "Max-G") is the maximum value of the execution-adjusted expecte
 
 This guide describes how to generate the 1000-shot benchmark and compute MAXG scores.
 
+The default output root is `Data/Hockey/benchmarks`.
+
 ## 1) Generate benchmark shots
 
 The benchmark tag is required for all steps and is used to name the output files.

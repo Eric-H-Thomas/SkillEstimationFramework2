@@ -36,17 +36,11 @@ sensitivity reruns (`"ranges": LEGACY_MCSE_RANGES` in a job config JSON).
 Particles default to **1000**. The PFE lambda particle grid is derived from the
 `ranges` log10 endpoints in `joint_pfe.py`.
 
-## Data source: legacy vs new xG
+## Data source
 
-MCSE has **no `maps_source` switch**. It reads whatever is cached under `data_root`:
-
-| `data_root` | xG maps |
-|-------------|---------|
-| `Data/Hockey` | **Legacy** (default download) |
-| `Data/Hockey_xg_new` | **New xG** (separate cache tree) |
-
-Use the submit scripts above to run legacy, new xG, or both. Each array writes to its
-own tree under `players/player_*/logs/mcse/`.
+MCSE reads whatever is cached under `data_root` (default `Data/Hockey`). Shot maps
+come from `hawks_analytics.expected_goal_values_post_shot_net_grid`. Each array
+writes to `players/player_*/logs/mcse/` under that root.
 
 ## Quick start (offline cached data)
 
@@ -78,16 +72,15 @@ Cluster worker: `sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_
 Build a config from cached local data (metadata scan only; no estimator runs):
 
 ```bash
-# Preview job counts (legacy + new-xG eligibility)
+# Preview job counts
 python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
   --player-file Data/Hockey/forwards23-25.txt \
   --all-seasons \
   --min-shots-per-job 100 \
-  --also-write-xgnew \
   --output Data/Hockey/jobs/mcse_forwards_per_season.json \
   --dry-run
 
-# Write legacy + derived new-xG configs
+# Write config
 python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
   --player-file Data/Hockey/forwards23-25.txt \
   --all-seasons \
@@ -95,16 +88,10 @@ python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
   --num-particles 500 \
   --sbatch-time 48:00:00 \
   --sbatch-mem 32G \
-  --also-write-xgnew \
   --output Data/Hockey/jobs/mcse_forwards_per_season.json
 ```
 
-This writes:
-
-| File | `data_root` |
-|------|-------------|
-| `mcse_forwards_per_season.json` | `Data/Hockey` (legacy) |
-| `mcse_forwards_per_season.xgnew.json` | `Data/Hockey_xg_new` (new xG, eligibility refreshed) |
+This writes `mcse_forwards_per_season.json` with `data_root=Data/Hockey`.
 
 Cluster defaults: **500 particles**, **48h**, **32G**, **100 concurrent** per array.
 Production MCSE runs set `retain_history=False` (no growing particle-history lists) and clear
@@ -112,22 +99,8 @@ per-shot PDF/EV caches after each observation.
 
 ### Cluster submit
 
-**Legacy only:**
-
 ```bash
 sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_forwards_per_season.json
-```
-
-**New xG only** (derives `.xgnew.json` on submit, then runs eligible jobs):
-
-```bash
-sbatch run_blackhawks_mcse_config_new_xg_root.sbatch Data/Hockey/jobs/mcse_forwards_per_season.json
-```
-
-**Both legacy and new xG** (two independent arrays):
-
-```bash
-sbatch run_blackhawks_mcse_config_both.sbatch Data/Hockey/jobs/mcse_forwards_per_season.json
 ```
 
 Dry-run workers before submitting:
@@ -135,9 +108,6 @@ Dry-run workers before submitting:
 ```bash
 python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config \
   --config Data/Hockey/jobs/mcse_forwards_per_season.json --dry-run
-
-python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config \
-  --config Data/Hockey/jobs/mcse_forwards_per_season.xgnew.json --dry-run
 ```
 
 Options:
@@ -147,16 +117,12 @@ Options:
 - `--num-particles 1000` (default), `--min-shots-per-job 100` (matches JEEDS cluster norm)
 - `--generate-convergence-png` to enable PNGs (off by default on cluster configs for speed)
 
-After jobs finish, aggregate final EES/rationality rows (run per data root):
+After jobs finish, aggregate final EES/rationality rows:
 
 ```bash
 python -m BlackhawksSkillEstimation.summarize_mcse_runs \
   --data-root Data/Hockey \
-  --output Data/Hockey/jobs/mcse_summary_legacy.csv
-
-python -m BlackhawksSkillEstimation.summarize_mcse_runs \
-  --data-root Data/Hockey_xg_new \
-  --output Data/Hockey/jobs/mcse_summary_xgnew.csv
+  --output Data/Hockey/jobs/mcse_summary.csv
 ```
 
 ## MAXG comparison with JEEDS
@@ -169,7 +135,7 @@ python -m BlackhawksSkillEstimation.maxg_evaluator \
   --season-tag 20232024 \
   --shot-group wristshot_snapshot \
   --estimator mcse \
-  --data-dir Data/Hockey_xg_new
+  --data-dir Data/Hockey
 ```
 
 Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE `(x_y, x_z)`.
@@ -180,6 +146,6 @@ Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE 
 - Ranges: x ∈ [0.004, 0.25] per axis, ρ ∈ [-0.75, 0.75], log₁₀λ ∈ [0, 4]
 - Legacy ranges (pre-alignment): x ∈ [0.004, π/4], log₁₀λ ∈ [-3, 1.6] — see `LEGACY_MCSE_RANGES`
 - Cluster resources: 48h / 32G / 100 concurrent per array
-- Data: cluster config uses legacy `Data/Hockey` only (use `*_both.sbatch` or new-xG wrapper for both)
+- Data: cluster config uses default `Data/Hockey`
 - Resample: 90% with NEFF gate, systematic resampling
 - Memory: `retain_history=False` in Blackhawks MCSE; per-shot PDF/EV caches cleared after each observation

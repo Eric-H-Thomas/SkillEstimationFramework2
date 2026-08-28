@@ -20,19 +20,14 @@ from BlackhawksSkillEstimation.BlackhawksMCSE import (
     DEFAULT_RESAMPLING_METHOD,
 )
 
-LEGACY_DATA_ROOT = Path("Data/Hockey")
-NEW_XG_DATA_ROOT = Path("Data/Hockey_xg_new")
-LEGACY_BENCHMARK_TAG = "wristshot_snapshot_legacy_v1"
-NEW_XG_BENCHMARK_TAG = "wristshot_snapshot_v1"
+DEFAULT_DATA_ROOT = Path("Data/Hockey")
+DEFAULT_BENCHMARK_TAG = "wristshot_snapshot_v1"
 
 
 def benchmark_settings_for_data_root(data_root: Path | str) -> tuple[str, str]:
     """Return (benchmark_tag, benchmark_dir) for a MCSE data root."""
     root = Path(data_root)
-    normalized = str(root).replace("\\", "/")
-    if normalized.endswith("Hockey_xg_new") or "Hockey_xg_new" in normalized:
-        return NEW_XG_BENCHMARK_TAG, str(root / "benchmarks")
-    return LEGACY_BENCHMARK_TAG, str(root / "benchmarks")
+    return DEFAULT_BENCHMARK_TAG, str(root / "benchmarks")
 
 
 def refresh_cluster_jobs(
@@ -84,19 +79,12 @@ def derive_mcse_config_for_data_root(
     benchmark_tag, benchmark_dir = benchmark_settings_for_data_root(root)
     out = dict(config)
     out["data_root"] = str(root).replace("\\", "/")
-    out["notes"] = (
-        f"MCSE cluster config: data_root={root} "
-        f"({'new xG' if 'xg_new' in str(root) else 'legacy xG'})."
-    )
+    out["notes"] = f"MCSE cluster config: data_root={root}."
     maxg = dict(out.get("maxg", {}))
     maxg["benchmark_tag"] = benchmark_tag
     maxg["benchmark_dir"] = benchmark_dir
     out["maxg"] = maxg
     return refresh_cluster_jobs(out, data_root=root, min_shots_per_job=min_shots_per_job)
-
-
-def derived_config_path(config_path: Path, *, suffix: str = "xgnew") -> Path:
-    return config_path.with_name(f"{config_path.stem}.{suffix}{config_path.suffix}")
 
 
 def _json_safe_ranges(ranges: dict[str, list]) -> dict[str, list[float]]:
@@ -172,10 +160,7 @@ def build_mcse_cluster_config(
     return {
         "config_version": 1,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "notes": (
-            f"MCSE cluster config: data_root={data_root} "
-            f"({'new xG' if 'xg_new' in str(data_root) else 'legacy xG'})."
-        ),
+        "notes": f"MCSE cluster config: data_root={data_root}.",
         "data_root": str(data_root).replace("\\", "/"),
         "data_filters": {
             "player_ids": player_ids,
@@ -243,7 +228,7 @@ def _resolve_seasons(args: argparse.Namespace, player_ids: list[int], data_root:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build MCSE cluster job config JSON")
-    parser.add_argument("--data-root", type=Path, default=Path("Data/Hockey"))
+    parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument(
         "--derive-from",
         type=Path,
@@ -280,17 +265,6 @@ def main() -> None:
     parser.add_argument("--max-concurrent", type=int, default=100)
     parser.add_argument("--rng-seed", type=int, default=0)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument(
-        "--also-write-xgnew",
-        action="store_true",
-        help="Also write a derived config for Data/Hockey_xg_new with refreshed eligibility.",
-    )
-    parser.add_argument(
-        "--xgnew-data-root",
-        type=Path,
-        default=NEW_XG_DATA_ROOT,
-        help="New-xG data root used with --also-write-xgnew.",
-    )
     parser.add_argument("--dry-run", action="store_true", help="Print summary only; do not write JSON")
     args = parser.parse_args()
 
@@ -355,37 +329,14 @@ def main() -> None:
     print(f"Particles: {args.num_particles}")
 
     if args.dry_run:
-        if args.also_write_xgnew:
-            xg_config = derive_mcse_config_for_data_root(
-                config,
-                args.xgnew_data_root,
-                min_shots_per_job=args.min_shots_per_job,
-            )
-            print(
-                f"New-xG eligible jobs: {xg_config['cluster_plan']['eligible_jobs']} "
-                f"(data_root={args.xgnew_data_root})"
-            )
         return
 
     if int(cluster.get("eligible_jobs", 0)) <= 0:
-        raise SystemExit("No eligible jobs in legacy config; not writing output.")
+        raise SystemExit("No eligible jobs in config; not writing output.")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(config, indent=2), encoding="utf-8")
     print(f"Wrote config: {args.output}")
-
-    if args.also_write_xgnew:
-        xg_path = derived_config_path(args.output)
-        xg_config = derive_mcse_config_for_data_root(
-            config,
-            args.xgnew_data_root,
-            min_shots_per_job=args.min_shots_per_job,
-        )
-        if int(xg_config["cluster_plan"].get("eligible_jobs", 0)) <= 0:
-            raise SystemExit("No eligible jobs in new-xG derived config; legacy config was written.")
-        xg_path.write_text(json.dumps(xg_config, indent=2), encoding="utf-8")
-        print(f"Wrote new-xG config: {xg_path}")
-        print(f"New-xG eligible jobs: {xg_config['cluster_plan']['eligible_jobs']}")
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ DEFAULT_LAMBDA_MODE = "estimated"
 # Historical MCSE defaults (pre-2026-07 bounds alignment):
 #   execution skill per axis: [0.004, pi/4]  (~0.785 rad upper bound)
 #   rationality log10 lambda: [-3, 1.6]      (~0.001 to ~40 on the particle grid)
-# The smoke run on 950160/950184 (200 particles, legacy Data/Hockey) used those
+# The smoke run on 950160/950184 (200 particles) used those
 # older bounds. joint_pfe.py previously hardcoded the lambda grid as linspace(-3, 1.6).
 DEFAULT_EXECUTION_SKILL_MAX = 0.25
 # Must match the JEEDS rationality grid in Estimators/joint.py, which shifts down

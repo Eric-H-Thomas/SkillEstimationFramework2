@@ -25,10 +25,10 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
 ## Key modeling choices
 
 - **Reward surface from Blackhawks analytics** – The EV surface for each shot comes
-  directly from the precomputed `post_shot_xg_value_maps`, which incorporate
-  detailed models of shooting position, angle, goalie positioning, and other
-  factors. A corresponding (y, z) grid spanning ±30 meters in y and ±7.5 meters
-  in z from the goal line provides the coordinate system.
+  directly from the precomputed `expected_goal_values_post_shot_net_grid` maps, which
+  incorporate detailed models of shooting position, angle, goalie positioning, and
+  other factors. A corresponding (y, z) grid spanning Y ∈ [-5, 5] and Z ∈ [0, 6]
+  from the goal line provides the coordinate system.
 - **Skill-to-variance mapping** – Candidate execution skills are standard 
   deviations in radians: larger skill values expand the covariance (wider 
   execution spread, more misses), smaller skills shrink the covariance (tighter 
@@ -88,21 +88,3 @@ player_{id}/
 Use these functions directly in notebooks or scripts when you already have a
 `DataFrame` of shot rows or want to integrate the estimator into a larger
 pipeline.
-
-## Legacy vs new xG correlation
-
-To compare legacy vs new xG runs (per-player final estimates) and compute
-per-season correlations, use:
-
-```bash
-conda run -n skill-estimation python -m BlackhawksSkillEstimation.compare_legacy_new_xg_correlations \
-  --players-file Data/Hockey/forwards23-25.txt \
-  --seasons 20212022 20222023 20232024 20242025 \
-  --shot-group wristshot_snapshot \
-  --data-root-legacy Data/Hockey \
-  --data-root-new Data/Hockey_xg_new \
-  --metric execution_skill \
-  --output-dir Data/Hockey_xg_new/compare_legacy_new_xg
-```
-
-Outputs include a summary CSV and scatter plots (per-season, multipanel, and overall).

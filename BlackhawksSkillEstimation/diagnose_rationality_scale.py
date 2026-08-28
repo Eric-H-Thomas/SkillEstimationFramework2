@@ -1,4 +1,4 @@
-"""Diagnose rationality scaling/capping for legacy vs new xG JEEDS runs."""
+"""Diagnose rationality scaling/capping for JEEDS runs under Data/Hockey."""
 from __future__ import annotations
 
 import argparse
@@ -65,7 +65,6 @@ def _collect_rows(
     seasons: list[int],
     data_root: Path,
     shot_group: str,
-    model: str,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for pid in players:
@@ -73,7 +72,7 @@ def _collect_rows(
             csv_path = (
                 data_root
                 / "players"
-                / f"player_{pid}__{model}"
+                / f"player_{pid}"
                 / "logs"
                 / shot_group
                 / f"intermediate_estimates_{season}.csv"
@@ -96,7 +95,6 @@ def _collect_rows(
                 {
                     "player_id": int(pid),
                     "season": int(season),
-                    "model": model,
                     "shots": int(shots) if shots is not None else None,
                     "last_eps": last_eps,
                     "last_log10_eps": last_log10_eps,
@@ -167,20 +165,14 @@ def run_diagnostics(
     output_dir: Path,
 ) -> dict[str, object]:
     players = _read_player_ids(players_file)
-    rows: list[dict[str, object]] = []
-
-    for model in ("legacy", "new"):
-        rows.extend(
-            _collect_rows(
-                players=players,
-                seasons=seasons,
-                data_root=data_root,
-                shot_group=shot_group,
-                model=model,
-            )
+    df = pd.DataFrame(
+        _collect_rows(
+            players=players,
+            seasons=seasons,
+            data_root=data_root,
+            shot_group=shot_group,
         )
-
-    df = pd.DataFrame(rows)
+    )
     threshold = float(cap_log10 - cap_tolerance)
 
     payload: dict[str, object] = {
@@ -194,19 +186,13 @@ def run_diagnostics(
             "cap_tolerance": float(cap_tolerance),
             "near_cap_threshold": threshold,
         },
-        "overall": {},
+        "overall": _summarize(df, threshold),
         "per_season": {},
     }
 
-    for model in ("legacy", "new"):
-        model_df = df[df["model"] == model]
-        payload["overall"][model] = _summarize(model_df, threshold)
-
-        per_season: dict[str, object] = {}
-        for season in seasons:
-            s_df = model_df[model_df["season"] == season]
-            per_season[str(season)] = _summarize(s_df, threshold)
-        payload["per_season"][model] = per_season
+    for season in seasons:
+        s_df = df[df["season"] == season] if not df.empty else df
+        payload["per_season"][str(season)] = _summarize(s_df, threshold)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -224,7 +210,7 @@ def run_diagnostics(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Diagnose rationality scaling for legacy vs new xG runs.")
+    parser = argparse.ArgumentParser(description="Diagnose rationality scaling for JEEDS runs.")
     parser.add_argument(
         "--players-file",
         type=Path,
@@ -241,8 +227,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--data-root",
         type=Path,
-        default=Path("Data/Hockey/xg_legacy_new_comparison"),
-        help="Root directory containing player_*__legacy/new logs.",
+        default=Path("Data/Hockey"),
+        help="Root directory containing player_* logs.",
     )
     parser.add_argument(
         "--shot-group",
@@ -264,7 +250,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("Data/Hockey/xg_legacy_new_comparison/reports"),
+        default=Path("Data/Hockey/reports"),
         help="Directory for diagnostic CSV/JSON outputs.",
     )
     return parser

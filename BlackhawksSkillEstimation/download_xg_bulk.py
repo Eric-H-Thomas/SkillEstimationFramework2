@@ -1,4 +1,4 @@
-"""Resumable bulk downloader for new-model xG offline data.
+"""Resumable bulk downloader for xG offline data.
 
 Usage:
     python -m BlackhawksSkillEstimation.download_xg_bulk [args]
@@ -64,7 +64,6 @@ def make_checkpoint(
     pids_file: str,
     output_dir: str,
     seasons: List[int],
-    maps_source: str,
     value_column: str,
     total_pids: int,
     next_index: int,
@@ -78,7 +77,6 @@ def make_checkpoint(
         "pids_file": pids_file,
         "output_dir": output_dir,
         "seasons": seasons,
-        "maps_source": maps_source,
         "value_column": value_column,
         "total_pids": total_pids,
         "next_index": next_index,
@@ -92,7 +90,7 @@ def make_checkpoint(
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Resumable downloader for new xG player data")
+    parser = argparse.ArgumentParser(description="Resumable downloader for xG player data")
     parser.add_argument("--pids-file", default="Data/Hockey/forwards23-25.txt")
     parser.add_argument(
         "--seasons",
@@ -108,7 +106,7 @@ def main(argv=None):
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing season files")
     parser.add_argument(
         "--state-file",
-        default=str(Path("Data") / "Hockey_xg_new" / "download_state.json"),
+        default=str(Path("Data") / "Hockey" / "download_state.json"),
         help="Checkpoint JSON file path",
     )
     parser.add_argument("--value-column", default="expected_goals")
@@ -149,7 +147,6 @@ def main(argv=None):
     last_completed_index = state.get("last_completed_index") if state else None
     last_completed_pid = state.get("last_completed_pid") if state else None
 
-    maps_source = "new"
     value_column = args.value_column
 
     try:
@@ -166,7 +163,6 @@ def main(argv=None):
                     seasons=list(args.seasons),
                     output_dir=output_root,
                     overwrite=args.overwrite,
-                    maps_source=maps_source,
                     value_column=value_column,
                 )
             except Exception as e:
@@ -178,7 +174,6 @@ def main(argv=None):
                     pids_file=str(pids_file),
                     output_dir=str(args.output_dir),
                     seasons=list(args.seasons),
-                    maps_source=maps_source,
                     value_column=value_column,
                     total_pids=total,
                     next_index=next_index,
@@ -207,7 +202,6 @@ def main(argv=None):
                 pids_file=str(pids_file),
                 output_dir=str(args.output_dir),
                 seasons=list(args.seasons),
-                maps_source=maps_source,
                 value_column=value_column,
                 total_pids=total,
                 next_index=next_index,
@@ -227,7 +221,6 @@ def main(argv=None):
             pids_file=str(pids_file),
             output_dir=str(args.output_dir),
             seasons=list(args.seasons),
-            maps_source=maps_source,
             value_column=value_column,
             total_pids=total,
             next_index=resume_index,

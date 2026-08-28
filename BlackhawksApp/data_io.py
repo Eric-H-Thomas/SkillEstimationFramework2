@@ -571,7 +571,7 @@ def add_post_shot_xg_column(
 
     xG is sampled at each shot's observed goal-line coordinates
     (location_y, location_z) using nearest-grid-point lookup on the
-    map's native Y/Z grid (legacy 72×120 or new-table ~31×51).
+    map's native Y/Z grid.
     """
     out = df.copy()
     out[out_column] = np.nan

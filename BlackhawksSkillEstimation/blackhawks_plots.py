@@ -99,8 +99,8 @@ _DEFAULT_DATA_DIR = Path("Data/Hockey")
 _BH_Y_EXTENT = (-5.0, 5.0)  # Y in [-5, 5]
 _BH_Z_EXTENT = (0.0, 6.0)   # Z in [0, 6]
 
-# Legacy reference axes (historical 72×120 maps). Prefer `_infer_bhawks_grid_yz`
-# for rendering so plots work for both legacy and new-table resolutions.
+# Fallback reference axes if a map has no usable shape. Prefer `_infer_bhawks_grid_yz`
+# for rendering so plots match the cached map's native resolution.
 _BH_Y = np.linspace(_BH_Y_EXTENT[0], _BH_Y_EXTENT[1], 120)
 _BH_Z = np.linspace(_BH_Z_EXTENT[0], _BH_Z_EXTENT[1], 72)
 
@@ -159,9 +159,8 @@ def _infer_bhawks_grid_yz(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Infer Blackhawks (grid_y, grid_z) axes from a Z×Y value map.
 
-    Phase 2 migration requirement: legacy maps are 72×120 (Z×Y) and new-table
-    maps are typically 31×51 (Z×Y), but both share the same physical extents:
-    Y∈[-5,5], Z∈[0,6].
+    Native-resolution maps share the same physical extents (Y∈[-5,5], Z∈[0,6])
+    even when the grid shape differs.
 
     Parameters
     ----------
@@ -203,8 +202,7 @@ def plot_xg_map_cartesian_native(
 ) -> tuple[plt.Axes, ScalarMappable]:
     """Render a native-resolution Cartesian (Y/Z) xG map with an optional marker.
 
-    This helper is intentionally *native-only* (no resampling/diff) so it can be
-    used for the Phase 2 migration A/B sanity checks.
+    This helper is intentionally *native-only* (no resampling/diff).
 
     Parameters
     ----------

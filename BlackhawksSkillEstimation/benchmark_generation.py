@@ -33,7 +33,6 @@ class BenchmarkConfig:
     tag: str
     output_dir: Path
     oversample_factor: int = 3
-    use_new_xg: bool = False
 
 
 @dataclass
@@ -109,18 +108,11 @@ def _is_angular_skip(
 
 def _build_pool(config: BenchmarkConfig, stats: BenchmarkStats) -> pd.DataFrame:
     _, allowed_types, include_null = SHOT_TYPE_GROUPS[config.shot_group]
-    if config.use_new_xg:
-        pool = api_queries.query_season_shots_new_xg(
-            seasons=config.seasons,
-            shot_types=allowed_types,
-            include_null_shot_type=include_null,
-        )
-    else:
-        pool = api_queries.query_season_shots(
-            seasons=config.seasons,
-            shot_types=allowed_types,
-            include_null_shot_type=include_null,
-        )
+    pool = api_queries.query_season_shots(
+        seasons=config.seasons,
+        shot_types=allowed_types,
+        include_null_shot_type=include_null,
+    )
     if pool.empty:
         raise RuntimeError("No shots returned for the requested seasons")
 
@@ -186,10 +178,7 @@ def _sample_benchmark(
             idx += batch_size
 
             event_ids = [int(eid) for eid in batch["event_id"].tolist()]
-            if config.use_new_xg:
-                maps = api_queries.get_shot_maps_by_event_ids_new_xg(event_ids)
-            else:
-                maps = api_queries.get_shot_maps_by_event_ids(event_ids)
+            maps = api_queries.get_shot_maps_by_event_ids(event_ids)
 
             for record in batch.to_dict("records"):
                 event_id = int(record["event_id"])
@@ -330,11 +319,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=3,
         help="Oversample factor per stratum to offset rejection filtering.",
     )
-    parser.add_argument(
-        "--use-new-xg",
-        action="store_true",
-        help="Use the new expected_goal_values_post_shot_net_grid table for maps.",
-    )
     return parser
 
 
@@ -352,7 +336,6 @@ def main() -> None:
         tag=args.tag,
         output_dir=args.output_dir,
         oversample_factor=args.oversample_factor,
-        use_new_xg=args.use_new_xg,
     )
 
     paths = generate_benchmark(config)

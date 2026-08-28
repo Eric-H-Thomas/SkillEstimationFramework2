@@ -17,10 +17,10 @@ conda activate skill-estimation
 export PYTHONPATH="$PWD:${PYTHONPATH:-}"
 export MPLBACKEND=Agg
 
-MODE="${BH_MODE:-old}"
-COMPARISON_MODEL="${BH_COMPARISON_MODEL:-legacy}"
+DATA_DIR="${BH_DATA_DIR:-Data/Hockey}"
+OUTPUT_DIR="${BH_OUTPUT_DIR:-Data/Hockey/benchmarks/results}"
 BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_v1}"
-BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey_xg_new/benchmarks}"
+BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey/benchmarks}"
 SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
 PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
 ESTIMATOR="${BH_ESTIMATOR:-jeeds}"
@@ -33,21 +33,6 @@ if [[ "$ESTIMATOR" == "mcse" ]]; then
   ESTIMATOR_ARGS+=(--mcse-profile "$MCSE_PROFILE")
 fi
 
-case "$MODE" in
-  old)
-    DATA_DIR="${BH_DATA_DIR:-Data/Hockey_xg_new}"
-    OUTPUT_DIR="${BH_OUTPUT_DIR:-Data/Hockey_xg_new/benchmarks/results}"
-    ;;
-  comparison)
-    DATA_DIR="${BH_DATA_DIR:-Data/Hockey_model_comparison}"
-    OUTPUT_BASE="${BH_OUTPUT_BASE:-Data/Hockey_xg_new/benchmarks/results_comparison}"
-    ;;
-  *)
-    echo "Invalid BH_MODE=$MODE (expected old or comparison)" >&2
-    exit 1
-    ;;
-esac
-
 SEASONS=(20212022 20222023 20232024 20242025)
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
@@ -58,29 +43,12 @@ fi
 
 SEASON="${SEASONS[$TASK_ID]}"
 
-if [[ "$MODE" == "comparison" ]]; then
-  for MODEL in legacy new; do
-    MODEL_OUTPUT_DIR="${OUTPUT_BASE}/${MODEL}"
-    echo "Running comparison pass for model: $MODEL -> output: $MODEL_OUTPUT_DIR"
-    python -m BlackhawksSkillEstimation.maxg_evaluator \
-      --benchmark-tag "$BENCHMARK_TAG" \
-      --benchmark-dir "$BENCHMARK_DIR" \
-      --season-tag "$SEASON" \
-      --shot-group "$SHOT_GROUP" \
-      --data-dir "$DATA_DIR" \
-      --output-dir "$MODEL_OUTPUT_DIR" \
-      --pids-file "$PIDS_FILE" \
-      --model-filter "$MODEL" \
-      "${ESTIMATOR_ARGS[@]}"
-  done
-else
-  python -m BlackhawksSkillEstimation.maxg_evaluator \
-    --benchmark-tag "$BENCHMARK_TAG" \
-    --benchmark-dir "$BENCHMARK_DIR" \
-    --season-tag "$SEASON" \
-    --shot-group "$SHOT_GROUP" \
-    --data-dir "$DATA_DIR" \
-    --output-dir "$OUTPUT_DIR" \
-    --pids-file "$PIDS_FILE" \
-    "${ESTIMATOR_ARGS[@]}"
-fi
+python -m BlackhawksSkillEstimation.maxg_evaluator \
+  --benchmark-tag "$BENCHMARK_TAG" \
+  --benchmark-dir "$BENCHMARK_DIR" \
+  --season-tag "$SEASON" \
+  --shot-group "$SHOT_GROUP" \
+  --data-dir "$DATA_DIR" \
+  --output-dir "$OUTPUT_DIR" \
+  --pids-file "$PIDS_FILE" \
+  "${ESTIMATOR_ARGS[@]}"
