@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
-
-import sys
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import save_player_data
 
@@ -42,6 +41,14 @@ def load_pids(pids_file: Path) -> List[int]:
                     raise ValueError(f"Could not parse PID from line: {line!r}")
             pids.append(p)
     return pids
+
+
+def resolve_output_root(output_dir: str | Path) -> Path:
+    """Accept ``Data/Hockey`` or the older ``Hockey`` (under ``Data/``)."""
+    path = Path(output_dir)
+    if path.is_absolute() or (path.parts and path.parts[0] == "Data"):
+        return path
+    return Path("Data") / path
 
 
 def read_state(state_file: Path):
@@ -99,11 +106,21 @@ def main(argv=None):
         default=DEFAULT_SEASONS,
         help="Seasons to download (e.g. 20232024)",
     )
-    parser.add_argument("--output-dir", default="Hockey", help="Output root under Data/")
+    parser.add_argument(
+        "--output-dir",
+        default="Data/Hockey",
+        help="Output data root. ``Data/Hockey`` or a name under Data/ (e.g. Hockey).",
+    )
     parser.add_argument(
         "--start-index", type=int, default=None, help="0-based index to start from (overrides checkpoint)")
     parser.add_argument("--max-players", type=int, default=None, help="Max players to process (smoke-test)")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing season files")
+    parser.add_argument(
+        "--sleep-seconds",
+        type=float,
+        default=0.0,
+        help="Optional sleep between players to reduce API/DB pressure.",
+    )
     parser.add_argument(
         "--state-file",
         default=str(Path("Data") / "Hockey" / "download_state.json"),
@@ -138,7 +155,7 @@ def main(argv=None):
         print(f"start-index {start_index} out of range for {total} PIDs")
         return 2
 
-    output_root = Path("Data") / args.output_dir
+    output_root = resolve_output_root(args.output_dir)
 
     # Counters and checkpoint bookkeeping
     successes = state.get("successes", 0) if state else 0
@@ -172,7 +189,7 @@ def main(argv=None):
                 next_index = idx + 1
                 chk = make_checkpoint(
                     pids_file=str(pids_file),
-                    output_dir=str(args.output_dir),
+                    output_dir=str(output_root),
                     seasons=list(args.seasons),
                     value_column=value_column,
                     total_pids=total,
@@ -200,7 +217,7 @@ def main(argv=None):
 
             chk = make_checkpoint(
                 pids_file=str(pids_file),
-                output_dir=str(args.output_dir),
+                output_dir=str(output_root),
                 seasons=list(args.seasons),
                 value_column=value_column,
                 total_pids=total,
@@ -213,13 +230,16 @@ def main(argv=None):
             )
             write_state(state_file, chk)
 
+            if args.sleep_seconds > 0 and next_index < total:
+                time.sleep(args.sleep_seconds)
+
     except KeyboardInterrupt:
         # On clean interrupt, set next_index to current idx (retry current player)
         cur = locals().get("idx", start_index)
         resume_index = cur
         chk = make_checkpoint(
             pids_file=str(pids_file),
-            output_dir=str(args.output_dir),
+            output_dir=str(output_root),
             seasons=list(args.seasons),
             value_column=value_column,
             total_pids=total,

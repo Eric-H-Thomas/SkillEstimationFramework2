@@ -305,7 +305,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--tag",
         required=True,
-        help="Required benchmark tag used in filenames (e.g., WS_v1).",
+        help="Required benchmark tag used in filenames (e.g., wristshot_snapshot_v1).",
     )
     parser.add_argument(
         "--output-dir",

@@ -47,39 +47,27 @@ def _extract_player_id(path: Path) -> int:
     raise ValueError(f"Unable to parse player_id from path: {path}")
 
 
-def _resolve_players_root(data_dir: Path) -> Path:
-    if (data_dir / "players").exists():
-        return data_dir / "players"
-    if data_dir.name == "players":
-        return data_dir
-    if any(data_dir.glob("player_*")):
-        return data_dir
-    return data_dir / "players"
+def _players_root(data_dir: Path) -> Path:
+    return data_dir if data_dir.name == "players" else data_dir / "players"
 
 
-def _normalize_shot_group(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value.lower())
+def _discover_estimate_csvs(
+    data_dir: Path,
+    season_tag: str,
+    shot_group: str,
+    *,
+    logs_subdir: str,
+) -> list[Path]:
+    if not shot_group:
+        raise ValueError("shot_group is required (e.g. wristshot_snapshot)")
+    pattern = (
+        f"player_*/{logs_subdir}/{shot_group}/intermediate_estimates_{season_tag}.csv"
+    )
+    return sorted(_players_root(data_dir).glob(pattern))
 
 
 def discover_ees_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
-    players_root = _resolve_players_root(data_dir)
-    if shot_group:
-        pattern = f"player_*/logs/{shot_group}/intermediate_estimates_{season_tag}.csv"
-        matches = sorted(players_root.glob(pattern))
-        if matches:
-            return matches
-
-        # Fallback: allow shot-group naming variants (spaces, dashes, underscores).
-        pattern = f"player_*/logs/*/intermediate_estimates_{season_tag}.csv"
-        normalized = _normalize_shot_group(shot_group)
-        return sorted(
-            path
-            for path in players_root.glob(pattern)
-            if _normalize_shot_group(path.parent.name) == normalized
-        )
-
-    pattern = f"player_*/logs/intermediate_estimates_{season_tag}.csv"
-    return sorted(players_root.glob(pattern))
+    return _discover_estimate_csvs(data_dir, season_tag, shot_group, logs_subdir="logs")
 
 
 def load_ees_xskills(
@@ -100,12 +88,9 @@ def load_ees_xskills(
         if df.empty:
             continue
 
-        if "expected_execution_skill" in df.columns:
-            xskill = float(df["expected_execution_skill"].iloc[-1])
-        elif "ees" in df.columns:
-            xskill = float(df["ees"].iloc[-1])
-        else:
-            raise ValueError(f"Expected execution skill column missing in {path}")
+        if "expected_execution_skill" not in df.columns:
+            raise ValueError(f"expected_execution_skill column missing in {path}")
+        xskill = float(df["expected_execution_skill"].iloc[-1])
 
         rows.append({"player_id": pid, "xskill_ees": xskill, "csv_path": str(path)})
 
@@ -116,21 +101,9 @@ def load_ees_xskills(
 
 
 def discover_mcse_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
-    players_root = _resolve_players_root(data_dir)
-    if shot_group:
-        pattern = f"player_*/logs/mcse/{shot_group}/intermediate_estimates_{season_tag}.csv"
-        matches = sorted(players_root.glob(pattern))
-        if matches:
-            return matches
-        pattern = f"player_*/logs/mcse/*/intermediate_estimates_{season_tag}.csv"
-        normalized = _normalize_shot_group(shot_group)
-        return sorted(
-            path
-            for path in players_root.glob(pattern)
-            if _normalize_shot_group(path.parent.name) == normalized
-        )
-    pattern = f"player_*/logs/mcse/intermediate_estimates_{season_tag}.csv"
-    return sorted(players_root.glob(pattern))
+    return _discover_estimate_csvs(
+        data_dir, season_tag, shot_group, logs_subdir="logs/mcse"
+    )
 
 
 def load_mcse_skill_profiles(
@@ -371,9 +344,6 @@ def _plot_maxg_over_xskill(results: pd.DataFrame, output_path: Path) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    if "xskill_ees" not in results.columns or "maxg_sum" not in results.columns:
-        return
-
     plt.figure(figsize=(8, 5))
     plt.scatter(results["xskill_ees"], results["maxg_sum"], alpha=0.6, s=20)
     plt.xlabel("xskill (EES)")
@@ -407,7 +377,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--benchmark-tag",
         required=True,
-        help="Required benchmark tag used in filenames (e.g., WS_v1).",
+        help="Required benchmark tag used in filenames (e.g., wristshot_snapshot_v1).",
     )
     parser.add_argument(
         "--benchmark-dir",
@@ -471,11 +441,6 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("Data/Hockey/benchmarks/plots"),
         help="Directory for debug plots.",
-    )
-    parser.add_argument(
-        "--debug-run-tag",
-        default="",
-        help="Optional suffix for debug plot folder (e.g., debug-run-1).",
     )
     parser.add_argument(
         "--smoke-test",
@@ -565,8 +530,7 @@ def main() -> None:
     if args.debug in {"plots", "only"}:
         from BlackhawksSkillEstimation import maxg_plots
 
-        suffix = f"_{args.debug_run_tag}" if args.debug_run_tag else ""
-        debug_dir = args.debug_output / f"{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{suffix}"
+        debug_dir = args.debug_output / f"{args.benchmark_tag}_{args.season_tag}_{args.shot_group}"
         maxg_plots.generate_debug_plots(
             angular_shots=angular_shots,
             xskill_table=xskill_table,
