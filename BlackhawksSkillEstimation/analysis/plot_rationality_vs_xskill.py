@@ -1,4 +1,9 @@
-"""Plot rationality versus execution skill for JEEDS runs."""
+"""Plot rationality versus execution skill for JEEDS runs.
+
+Usage:
+    python -m BlackhawksSkillEstimation.analysis.plot_rationality_vs_xskill \
+        --seasons 20212022 20222023 20232024 20242025
+"""
 from __future__ import annotations
 
 import argparse

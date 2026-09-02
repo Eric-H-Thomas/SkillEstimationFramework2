@@ -5,7 +5,7 @@ under Data/Hockey for both estimators, then emits tidy CSVs, cross-season
 stability statistics, and diagnostic plots.
 
 Usage:
-    python BlackhawksSkillEstimation/analyze_mcse_run.py \
+    python -m BlackhawksSkillEstimation.analysis.analyze_mcse_run \
         --output-dir mcse_analysis
 """
 
@@ -32,7 +32,7 @@ SEASONS = [20212022, 20222023, 20232024, 20242025]
 SEASON_LABEL = {s: f"{str(s)[:4]}-{str(s)[6:]}" for s in SEASONS}
 SHOT_GROUP = "wristshot_snapshot"
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_ROOT = REPO_ROOT / "Data" / "Hockey"
 ESTIMATORS = ("jeeds", "mcse")

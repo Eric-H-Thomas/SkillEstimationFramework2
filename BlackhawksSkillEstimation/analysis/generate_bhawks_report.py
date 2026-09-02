@@ -8,12 +8,12 @@ Default output directory:
 Data/Hockey/_bhawks_reports
 
 Examples:
-python -m BlackhawksSkillEstimation.generate_bhawks_report \
+python -m BlackhawksSkillEstimation.analysis.generate_bhawks_report \
     --pids-file Data/Hockey/forwards23-25.txt \
     --output-dir Data/Hockey/_bhawks_reports/forwards23-25 \
     --shot-types wristshot_snapshot
 
-python -m BlackhawksSkillEstimation.generate_bhawks_report \
+python -m BlackhawksSkillEstimation.analysis.generate_bhawks_report \
     --pids-file Data/Hockey/infoPlayers.txt \
     --output-dir Data/Hockey/_bhawks_reports/infoPlayers
 """

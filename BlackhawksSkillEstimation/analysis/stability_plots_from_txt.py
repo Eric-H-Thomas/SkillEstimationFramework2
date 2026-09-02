@@ -12,17 +12,17 @@ Data/Hockey/general_plots/stability/<txt_stem>/
 
 Usage examples
 --------------
-python -m BlackhawksSkillEstimation.stability_plots_from_txt \
+python -m BlackhawksSkillEstimation.analysis.stability_plots_from_txt \
   --players-file Data/Hockey/forwards23-25.txt \
   --seasons 20212022 20222023 20232024 20242025 \
   --also-save-under-player-dirs 
 
-python -m BlackhawksSkillEstimation.stability_plots_from_txt \
+python -m BlackhawksSkillEstimation.analysis.stability_plots_from_txt \
   --players-file Data/Hockey/stability9.txt \
   --jobs-config Data/Hockey/jobs/stability9.json \
   --shot-group wristshot_snapshot
 
-python -m BlackhawksSkillEstimation.stability_plots_from_txt \
+python -m BlackhawksSkillEstimation.analysis.stability_plots_from_txt \
   --players-file Data/Hockey/forwards23-25.txt \
   --min-observations 150 \
   --output-root Data/Hockey/general_plots/stability/min150_custom

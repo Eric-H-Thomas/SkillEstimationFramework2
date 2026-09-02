@@ -1,4 +1,8 @@
-"""Diagnose rationality scaling/capping for JEEDS runs under Data/Hockey."""
+"""Diagnose rationality scaling/capping for JEEDS runs under Data/Hockey.
+
+Usage:
+    python -m BlackhawksSkillEstimation.analysis.diagnose_rationality_scale
+"""
 from __future__ import annotations
 
 import argparse

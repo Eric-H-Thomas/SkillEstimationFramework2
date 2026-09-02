@@ -9,14 +9,13 @@ Answers three questions the raw stability numbers cannot:
    final estimate, within the same run)
 
 Usage:
-    python BlackhawksSkillEstimation/diagnose_estimator_signal.py
+    python -m BlackhawksSkillEstimation.analysis.diagnose_estimator_signal
 """
 
 from __future__ import annotations
 
 import argparse
 import math
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -28,9 +27,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from analyze_mcse_run import DATA_ROOT, ESTIMATORS, SEASONS, _iter_csvs  # noqa: E402
+from BlackhawksSkillEstimation.analysis.analyze_mcse_run import (
+    DATA_ROOT,
+    ESTIMATORS,
+    SEASONS,
+    _iter_csvs,
+)
 
 
 def partial_corr(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
