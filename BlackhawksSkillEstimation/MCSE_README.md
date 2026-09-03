@@ -21,7 +21,14 @@ MCSE defaults match the Blackhawks JEEDS grids:
 |-----------|-----------------|
 | Execution skill (y, z) | `[0.004, 0.25]` rad |
 | Correlation rho | `[-0.75, 0.75]` |
-| Rationality lambda | `log10` in `[0, 4]` (same as JEEDS `logspace(0, 4)`) |
+| Rationality lambda | `log10` in `[-1, 3]` (`λ ∈ [0.1, 1000]`) with `BH_EV_NORMALIZE=1` |
+
+**EV / rationality normalization (current test; model change)** – Same switch as JEEDS
+(`BH_EV_NORMALIZE`, default on). Each skill-blurred EV surface is divided by its
+peak-above-average before the QRE softmax, so λ is dimensionless rather than
+absorbing the raw xG scale. JEEDS and MCSE share this so their λ values stay
+comparable. `BH_EV_NORMALIZE=0` restores raw xG units and the older log10 `[0, 4]`
+grid; estimates from the two conventions are not comparable.
 
 **Historical MCSE bounds** (used in early smoke runs before 2026-07 alignment):
 
@@ -143,7 +150,7 @@ Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE 
 ## Defaults
 
 - Particles: 1000 locally / smoke; **500** for league cluster configs
-- Ranges: x ∈ [0.004, 0.25] per axis, ρ ∈ [-0.75, 0.75], log₁₀λ ∈ [0, 4]
+- Ranges: x ∈ [0.004, 0.25] per axis, ρ ∈ [-0.75, 0.75], log₁₀λ ∈ [-1, 3] (`BH_EV_NORMALIZE=1`)
 - Legacy ranges (pre-alignment): x ∈ [0.004, π/4], log₁₀λ ∈ [-3, 1.6] — see `LEGACY_MCSE_RANGES`
 - Cluster resources: 48h / 32G / 100 concurrent per array
 - Data: cluster config uses default `Data/Hockey`
