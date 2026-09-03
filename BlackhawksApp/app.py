@@ -33,7 +33,7 @@ from BlackhawksSkillEstimation.BlackhawksJEEDS import save_player_data
 from BlackhawksSkillEstimation.player_cache import lookup_player
 
 st.set_page_config(layout="wide")
-st.title("Blackhawks JEEDS Shot Inspector")
+st.title("Blackhawks Shot Inspector")
 
 @st.cache_data(show_spinner=False)
 def _cached_players(data_root: str) -> list[int]:
@@ -81,13 +81,20 @@ def _cached_partition_values(player_ids: tuple[int, ...], seasons: tuple[int, ..
 
 
 @st.cache_data(show_spinner=False)
-def _cached_convergence_artifacts(player_id: int, season: int, shot_group: str, data_root: str):
+def _cached_convergence_artifacts(
+    player_id: int,
+    season: int,
+    shot_group: str,
+    data_root: str,
+    estimator: str,
+):
     return data_io.list_convergence_artifacts(
         player_id=player_id,
         season=season,
         shot_group=shot_group,
         data_dir=data_root,
         suffix=".csv",
+        estimator=estimator,
     )
 
 
@@ -165,7 +172,19 @@ shot_group = st.sidebar.selectbox(
     format_func=lambda g: f"{g} ({data_io.get_shot_group_display(g)})",
 )
 
-available_estimate_csvs = _cached_convergence_artifacts(player_id, season, shot_group, data_root)
+estimator = st.sidebar.selectbox(
+    "Estimator",
+    options=list(data_io.ESTIMATOR_TAGS),
+    index=0,
+    help=(
+        "JEEDS reads player_*/logs/<shot_group>/; "
+        "MCSE reads player_*/logs/mcse/<shot_group>/."
+    ),
+)
+
+available_estimate_csvs = _cached_convergence_artifacts(
+    player_id, season, shot_group, data_root, estimator
+)
 selected_estimate_csv = None
 selected_estimate_info = {
     "label": "baseline",
@@ -173,9 +192,9 @@ selected_estimate_info = {
     "partition_values": [],
 }
 if available_estimate_csvs:
-    # Context-key the selectbox state to force reset when player/season/shot-group changes.
+    # Context-key the selectbox state to force reset when player/season/shot-group/estimator changes.
     # This prevents stale CSV selection when filters are updated.
-    estimate_run_key = f"estimate_run_{player_id}_{season}_{shot_group}"
+    estimate_run_key = f"estimate_run_{estimator}_{player_id}_{season}_{shot_group}"
     selected_estimate_csv = st.sidebar.selectbox(
         "Estimate run",
         options=available_estimate_csvs,
@@ -216,6 +235,7 @@ csv_path = selected_estimate_csv or data_io.get_convergence_artifact(
     shot_group=shot_group,
     data_dir=data_root,
     suffix=".csv",
+    estimator=estimator,
 )
 png_path = csv_path.with_suffix(".png") if csv_path is not None else data_io.get_convergence_artifact(
     player_id=player_id,
@@ -223,7 +243,19 @@ png_path = csv_path.with_suffix(".png") if csv_path is not None else data_io.get
     shot_group=shot_group,
     data_dir=data_root,
     suffix=".png",
+    estimator=estimator,
 )
+if png_path is not None and not Path(png_path).is_file():
+    png_path = data_io.get_convergence_artifact(
+        player_id=player_id,
+        season=season,
+        shot_group=shot_group,
+        data_dir=data_root,
+        suffix=".png",
+        estimator=estimator,
+    )
+    if png_path is not None and not Path(png_path).is_file():
+        png_path = None
 
 estimates = None
 if csv_path is not None:
@@ -241,15 +273,26 @@ if nav_max <= 0:
     st.warning("No shot index available for navigation.")
     st.stop()
 
-st.subheader("Convergence")
+st.subheader(f"Convergence ({estimator})")
 if png_path is None:
-    st.warning("Missing pre-generated convergence PNG for this player/season/shot-group context.")
+    st.warning(
+        "No convergence PNG found for this estimate run. "
+        "The CSV is still used for shot navigation and deltas when present."
+    )
 else:
     # Keep the plot centered while allowing it to occupy most of the viewport width.
     center_cols = st.columns([1, 12, 1])
     center_cols[1].image(str(png_path), caption=f"{png_path.name}", width='stretch')
 
-selection_context = (player_id, season, shot_group, str(csv_path) if csv_path else None, len(filtered_df), nav_max)
+selection_context = (
+    player_id,
+    season,
+    shot_group,
+    estimator,
+    str(csv_path) if csv_path else None,
+    len(filtered_df),
+    nav_max,
+)
 if st.session_state.get("selection_context") != selection_context:
     st.session_state["selection_context"] = selection_context
     _sync_shot_index(1)
@@ -422,9 +465,9 @@ else:
 
 confirm_col = st.columns(1)[0]
 if confirm_col.button("Load visuals for selected shot"):
-    st.session_state["confirmed_context"] = (player_id, season, shot_group, selected_idx)
+    st.session_state["confirmed_context"] = (player_id, season, shot_group, estimator, selected_idx)
 
-if st.session_state.get("confirmed_context") == (player_id, season, shot_group, selected_idx):
+if st.session_state.get("confirmed_context") == (player_id, season, shot_group, estimator, selected_idx):
     with st.spinner("Rendering selected-shot visuals..."):
         try:
             if selected_row is None or selected_event_id is None:

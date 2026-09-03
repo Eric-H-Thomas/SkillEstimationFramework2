@@ -1,0 +1,54 @@
+#!/bin/bash
+
+#SBATCH --job-name=bh-maxg
+#SBATCH --time=32:00:00
+#SBATCH --mem=16G
+#SBATCH --output=slurm-maxg-%A_%a.out
+#SBATCH --array=0-3
+
+set -euo pipefail
+
+cd ~/research/SkillEstimationFramework2
+
+module load miniforge3
+eval "$(conda shell.bash hook)"
+conda activate skill-estimation
+
+export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+export MPLBACKEND=Agg
+
+DATA_DIR="${BH_DATA_DIR:-Data/Hockey}"
+OUTPUT_DIR="${BH_OUTPUT_DIR:-Data/Hockey/benchmarks/results}"
+BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_v1}"
+BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey/benchmarks}"
+SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
+PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
+ESTIMATOR="${BH_ESTIMATOR:-jeeds}"
+MCSE_PROFILE="${BH_MCSE_PROFILE:-ees}"
+
+# maxg_evaluator appends "_mcse" to its output filename, so both estimators can
+# share an output directory without colliding.
+ESTIMATOR_ARGS=(--estimator "$ESTIMATOR")
+if [[ "$ESTIMATOR" == "mcse" ]]; then
+  ESTIMATOR_ARGS+=(--mcse-profile "$MCSE_PROFILE")
+fi
+
+SEASONS=(20212022 20222023 20232024 20242025)
+TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
+
+if (( TASK_ID < 0 || TASK_ID >= ${#SEASONS[@]} )); then
+  echo "Invalid SLURM_ARRAY_TASK_ID=${TASK_ID} for ${#SEASONS[@]} seasons" >&2
+  exit 1
+fi
+
+SEASON="${SEASONS[$TASK_ID]}"
+
+python -m BlackhawksSkillEstimation.maxg_evaluator \
+  --benchmark-tag "$BENCHMARK_TAG" \
+  --benchmark-dir "$BENCHMARK_DIR" \
+  --season-tag "$SEASON" \
+  --shot-group "$SHOT_GROUP" \
+  --data-dir "$DATA_DIR" \
+  --output-dir "$OUTPUT_DIR" \
+  --pids-file "$PIDS_FILE" \
+  "${ESTIMATOR_ARGS[@]}"

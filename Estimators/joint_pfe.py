@@ -40,16 +40,22 @@ class QREMethod_Multi_Particles():
         self.particles = np.empty((N,self.dimensions))
 
 
-        # Quantal Response (logit) inverse-temperature (lambda) grid.
-        # We sample lambda on a log10 scale from 10^-3 to 10^1.6 (~0.001 → ~40).
-        # Rationale: this spans very noisy behavior (near-random choice) up to
-        # highly rational/peaked responses, which is a standard practical range
-        # for inverse temperatures in QRE/softmax models.
-        exponents = np.linspace(-3, 1.6, num=self.N)
+        self.ranges = ranges
+
+        # Quantal Response (logit) inverse-temperature (lambda) grid on log10 scale.
+        # Endpoints come from ranges["start"/"end"] on the lambda dimension so
+        # domain configs (e.g. hockey MCSE hockey_rationality_log10_bounds()) control
+        # the particle grid. Historical default before ranges-driven init:
+        # linspace(-3, 1.6) -> ~0.001 to ~40.
+        lambda_log_start = float(self.ranges["start"][-1])
+        lambda_log_end = float(self.ranges["end"][-1])
+        exponents = np.linspace(lambda_log_start, lambda_log_end, num=self.N)
         self.pskills = np.power(10, exponents)
 
-
-        self.ranges = ranges
+        # Kept on the instance so the noise step can jitter lambda in log10 space,
+        # which is the space the grid and the prior are uniform in.
+        self.lambdaLog10Start = lambda_log_start
+        self.lambdaLog10End = lambda_log_end
 
         WS = []
 
@@ -91,7 +97,25 @@ class QREMethod_Multi_Particles():
             raise TypeError(f"Unsupported noise type: {type(noise)}")
 
         self.ranges["noise"] = noise_list
-        print(self.ranges["noise"])  # Debug: confirm per-dimension noise divisors
+
+        # "estimated": lambda is a real particle dimension - it survives resampling
+        #   and is jittered in log10 space, so evidence about rationality accumulates.
+        # "fixed_grid": every particle's lambda is overwritten with the fixed log10
+        #   grid after each resample. Because resampling also resets the weights,
+        #   this discards the rationality posterior and returns it to the prior.
+        #   Retained only to reproduce runs made before 2026-08.
+        self.lambdaMode = str(otherArgs.get("lambda_mode", "estimated")) if otherArgs else "estimated"
+        if self.lambdaMode not in ("estimated", "fixed_grid"):
+            raise ValueError(
+                f"lambda_mode must be 'estimated' or 'fixed_grid', got {self.lambdaMode!r}"
+            )
+
+        self.verbose = bool(otherArgs.get("verbose", False)) if otherArgs else False
+        # When False, skip growing allParticles / allProbs / allNoises history
+        # (Blackhawks production runs). Paper experiments keep the default True.
+        self.retain_history = bool(otherArgs.get("retain_history", True)) if otherArgs else True
+        if self.verbose:
+            print(self.ranges["noise"])
         # code.interact("...", local=dict(globals(), **locals()))
 
 
@@ -442,7 +466,7 @@ class QREMethod_Multi_Particles():
             # Means there's no way you'll be of this xskill
             # So no need to update probs, can remain 0.0
             if np.sum(pdfs) == 0.0 or np.isnan(np.sum(pdfs)):
-                self.probs[xi] = [0.0] * len(each)
+                self.probs[ii] = [0.0] * len(each)
                 # print(f"skipping (pdfs sum = 0) - x hyp: {x}")
                 continue
 
@@ -508,7 +532,8 @@ class QREMethod_Multi_Particles():
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
         self.probs /= np.sum(self.probs)
-        self.allProbs.append(self.probs.tolist())
+        if self.retain_history:
+            self.allProbs.append(self.probs.tolist())
 
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -562,10 +587,11 @@ class QREMethod_Multi_Particles():
 
 
         # '''
-        print(self.methodType)
-        print(f"EES:{ees}  |  MAP: {self.estimatesXskills[self.names[0]][-1]}")
-        print(f"ERS:{ers}  |  MAP: {self.estimatesRhos[self.names[0]][-1]}")
-        print(f"EPS:{eps}  |  MAP: {self.estimatesPskills[self.names[0]][-1]}")
+        if self.verbose:
+            print(self.methodType)
+            print(f"EES:{ees}  |  MAP: {self.estimatesXskills[self.names[0]][-1]}")
+            print(f"ERS:{ers}  |  MAP: {self.estimatesRhos[self.names[0]][-1]}")
+            print(f"EPS:{eps}  |  MAP: {self.estimatesPskills[self.names[0]][-1]}")
         # code.interact("...", local=dict(globals(), **locals()))
         # '''
 
@@ -614,10 +640,8 @@ class QREMethod_Multi_Particles():
 
 
 
-            ###################################
-            # TESTING ENFORCING SAME PSKILLS
-            self.particles[:,-1] = self.pskills
-            ####################################
+            if self.lambdaMode == "fixed_grid":
+                self.particles[:,-1] = self.pskills
 
 
 
@@ -637,15 +661,16 @@ class QREMethod_Multi_Particles():
                 self.plotParticles(temp1,temp2,otherArgs["agent"],f"{otherArgs['i']}{label}",[[ees,ers,eps],[self.estimatesXskills[self.names[0]][-1],self.estimatesRhos[self.names[0]][-1],self.estimatesPskills[self.names[0]][-1]]])
 
 
-        if rr:
-            # Save actual noisy version (but remember which
-            # where resampled and which were randomly added)
-            # self.allParticles.append([temp1.tolist(),temp2.tolist()])
-            tempN = int(self.N*self.percent)
-            self.allParticles.append([self.particles[:tempN,:].tolist(),self.particles[tempN:,:].tolist()])
+        if self.retain_history:
+            if rr:
+                # Save actual noisy version (but remember which
+                # where resampled and which were randomly added)
+                # self.allParticles.append([temp1.tolist(),temp2.tolist()])
+                tempN = int(self.N*self.percent)
+                self.allParticles.append([self.particles[:tempN,:].tolist(),self.particles[tempN:,:].tolist()])
 
-        else:
-            self.allParticles.append([self.particles.tolist(),[]])
+            else:
+                self.allParticles.append([self.particles.tolist(),[]])
 
 
         # print("allNoises: ",self.allNoises[-1][:2])
@@ -674,15 +699,16 @@ class QREMethod_Multi_Particles():
 
         folder = resultsFolder
 
-        #If the folder doesn't exist already, create it
-        if not os.path.exists("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep):
-            os.mkdir("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep)
+        if folder and (os.path.isabs(folder) or str(folder).startswith("Data")):
+            times_dir = os.path.join(folder, "times", "mcse", "estimators")
+            os.makedirs(times_dir, exist_ok=True)
+            times_path = os.path.join(times_dir, f"JT-QRE-Times-{tag}")
+        else:
+            base = os.path.join("Experiments", folder, "times")
+            os.makedirs(os.path.join(base, "estimators"), exist_ok=True)
+            times_path = os.path.join(base, "estimators", f"JT-QRE-Times-{tag}")
 
-        #If the folder doesn't exist already, create it
-        if not os.path.exists("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators"):
-            os.mkdir("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators")
-
-        with open("Experiments" + os.path.sep + folder + os.path.sep + "times" + os.path.sep + "estimators" + os.path.sep + "JT-QRE-Times-"+ tag, "a") as file:
+        with open(times_path, "a") as file:
             file.write(str(totalTimeEst) + "\n")
 
 
@@ -738,11 +764,11 @@ class QREMethod_Multi_Particles():
         # New set of particles
         self.particles = np.concatenate((temp1,temp2),axis=0)
 
-        self.allParticlesNoNoise.append(deepcopy(self.particles.tolist()))
+        if self.retain_history:
+            self.allParticlesNoNoise.append(deepcopy(self.particles.tolist()))
+            self.allResampledProbs.append(tempProbs.tolist())
 
         # print("allParticlesNoNoise: ",self.allParticlesNoNoise[-1][:2])
-
-        self.allResampledProbs.append(tempProbs.tolist())
 
         # code.interact("...", local=dict(globals(), **locals()))
 
@@ -760,17 +786,22 @@ class QREMethod_Multi_Particles():
         # tempN = ceil(self.N*percent)
         tempParticles = np.empty((tempN,self.dimensions))
 
-        exponents = np.linspace(-3, 1.6, num=tempN)
-        pskills = np.power(10, exponents)
+        if self.lambdaMode == "fixed_grid":
+            # Overwritten by the fixed grid immediately after resampling anyway.
+            pskills = np.power(10, np.linspace(-3, 1.6, num=tempN))
+        else:
+            # Fresh particles are prior draws, and the lambda prior is uniform in
+            # log10 over the configured range.
+            pskills = np.power(
+                10,
+                np.random.uniform(self.lambdaLog10Start, self.lambdaLog10End, size=tempN),
+            )
 
         for d in range(self.dimensions):
             # Not including endpoint
 
             # For pskill dimension
             if d == self.dimensions-1:
-                # temp = np.random.uniform(self.ranges["start"][d],self.ranges["end"][d],size=tempN)
-                # tempParticles[:,d] = np.power(10,temp) # Exponentiate
-
                 tempParticles[:,d] = pskills
 
             else:
@@ -839,13 +870,13 @@ class QREMethod_Multi_Particles():
             tempIndexes = rng.choice(range(self.N),size=tempN,replace=True,p=self.probs.flatten())
 
         elif self.resamplingMethod == "systematic":
-            tempIndexes = systematic_resample(weights=self.probs.flatten())
+            tempIndexes = systematic_resample(weights=self.probs.flatten())[:tempN]
 
         elif self.resamplingMethod == "stratified":
-            tempIndexes = stratified_resample(weights=self.probs.flatten())
+            tempIndexes = stratified_resample(weights=self.probs.flatten())[:tempN]
 
         elif self.resamplingMethod == "residual":
-            tempIndexes = residual_resample(weights=self.probs.flatten())
+            tempIndexes = residual_resample(weights=self.probs.flatten())[:tempN]
 
 
         # tempIndexes = rng.choice(tempIndexes2,size=tempN)
@@ -1018,25 +1049,34 @@ class QREMethod_Multi_Particles():
 
             for ei in range(len(each)):
 
+                isPskillDim = ei == len(self.ranges["start"])-1
+
+                if isPskillDim:
+                    # Lambda spans several decades, so a linear step of fixed size is
+                    # meaningless at one end of the range and destructive at the other.
+                    # Jitter in log10 space, where the grid and prior are uniform.
+                    if self.lambdaMode == "fixed_grid":
+                        noise = 0.0
+                        upd = each[ei]
+                    else:
+                        widthLog10 = self.lambdaLog10End-self.lambdaLog10Start
+                        noise = rng.normal(0.0,(widthLog10/self.ranges["noise"][ei]))
+                        currentLog10 = np.log10(max(float(each[ei]),1e-12))
+                        updLog10 = min(
+                            max(currentLog10+noise,self.lambdaLog10Start),
+                            self.lambdaLog10End,
+                        )
+                        upd = float(np.power(10,updLog10))
+
+                    noisy.append(upd)
+                    noises.append(noise)
+                    continue
+
                 start = self.ranges["start"][ei]
                 stop = self.ranges["end"][ei]
 
-                # if pskill dimension
-                if ei == len(self.ranges["start"])-1:
-                    start = np.power(10,float(start))
-                    stop =  np.power(10,float(stop))
-
-
-                if ei == len(self.ranges["start"])-1:
-                    noise = 0.0
-                else:
-                    # Drawn gaussian
-                    noise = rng.normal(0.0,(self.ranges["W"][ei]/self.ranges["noise"][ei]))
-
-                # Drawn uniform random
-                # number = np.sqrt(3)*(self.ranges["W"][ei]/self.ranges["noise"][ei])
-                # noise = each[ei]+rng.uniform(low=-number,high=number,size=1)[0]
-
+                # Drawn gaussian
+                noise = rng.normal(0.0,(self.ranges["W"][ei]/self.ranges["noise"][ei]))
 
                 upd = each[ei]+noise
 
@@ -1055,10 +1095,12 @@ class QREMethod_Multi_Particles():
 
             self.particles[ii] = noisy
 
-            tempAllNoises.append(noises)
+            if self.retain_history:
+                tempAllNoises.append(noises)
 
 
-        self.allNoises.append(tempAllNoises)
+        if self.retain_history:
+            self.allNoises.append(tempAllNoises)
 
         # self.particles = np.round(self.particles,4)
 
@@ -1089,5 +1131,8 @@ class QREMethod_Multi_Particles():
 
         return results
 
+    add_observation = addObservation
+    get_results = getResults
+    get_estimator_name = getEstimatorName
 
 

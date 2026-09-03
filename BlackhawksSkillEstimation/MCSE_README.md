@@ -1,0 +1,158 @@
+# Blackhawks MCSE Skill Estimation
+
+MCSE (paper name for `QREMethod_Multi_Particles` / PFE) estimates a **2D execution-skill profile**
+(direction y, elevation z) plus correlation `rho` and rationality `lambda` from Blackhawks shot data.
+
+## Outputs
+
+| Artifact | Purpose |
+|----------|---------|
+| `logs/mcse/<shot_group>/intermediate_estimates_*.csv` | Per-shot 2D skill traces (visualization) |
+| `maxg_ees` in result dict | **Primary scalar** for reporting and JEEDS comparison |
+| 2D fields `ees_y`, `ees_z`, `rho_ees` | Full MCSE profile |
+
+Lower execution skill (rad) = better aim precision.
+
+## Parameter bounds (JEEDS-aligned)
+
+MCSE defaults match the Blackhawks JEEDS grids:
+
+| Parameter | Range (current) |
+|-----------|-----------------|
+| Execution skill (y, z) | `[0.004, 0.25]` rad |
+| Correlation rho | `[-0.75, 0.75]` |
+| Rationality lambda | `log10` in `[-1, 3]` (`λ ∈ [0.1, 1000]`) with `BH_EV_NORMALIZE=1` |
+
+**EV / rationality normalization (current test; model change)** – Same switch as JEEDS
+(`BH_EV_NORMALIZE`, default on). Each skill-blurred EV surface is divided by its
+peak-above-average before the QRE softmax, so λ is dimensionless rather than
+absorbing the raw xG scale. JEEDS and MCSE share this so their λ values stay
+comparable. `BH_EV_NORMALIZE=0` restores raw xG units and the older log10 `[0, 4]`
+grid; estimates from the two conventions are not comparable.
+
+**Historical MCSE bounds** (used in early smoke runs before 2026-07 alignment):
+
+| Parameter | Range (legacy) |
+|-----------|----------------|
+| Execution skill (y, z) | `[0.004, π/4]` rad |
+| Rationality lambda | `log10` in `[-3, 1.6]` (~0.001–40; `joint_pfe.py` hardcoded this grid) |
+
+Constants `LEGACY_MCSE_RANGES` in `BlackhawksMCSE.py` preserve the old endpoints for
+sensitivity reruns (`"ranges": LEGACY_MCSE_RANGES` in a job config JSON).
+
+Particles default to **1000**. The PFE lambda particle grid is derived from the
+`ranges` log10 endpoints in `joint_pfe.py`.
+
+## Data source
+
+MCSE reads whatever is cached under `data_root` (default `Data/Hockey`). Shot maps
+come from `hawks_analytics.expected_goal_values_post_shot_net_grid`. Each array
+writes to `players/player_*/logs/mcse/` under that root.
+
+## Quick start (offline cached data)
+
+```bash
+conda activate skill-estimation
+python -m BlackhawksSkillEstimation.BlackhawksMCSE \
+  950160 \
+  --seasons 20232024 \
+  --shot-group wristshot_snapshot \
+  --data-dir Data/Hockey \
+  --num-particles 1000 \
+  --save-intermediate-csv
+```
+
+## Config runner
+
+```bash
+python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config \
+  --config Data/Hockey/jobs/mcse_smoke.json --dry-run
+
+python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config \
+  --config Data/Hockey/jobs/mcse_smoke.json --job-index 0
+```
+
+Cluster worker: `sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_smoke.json`
+
+## League-wide cluster sweep
+
+Build a config from cached local data (metadata scan only; no estimator runs):
+
+```bash
+# Preview job counts
+python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
+  --player-file Data/Hockey/forwards23-25.txt \
+  --all-seasons \
+  --min-shots-per-job 100 \
+  --output Data/Hockey/jobs/mcse_forwards_per_season.json \
+  --dry-run
+
+# Write config
+python -m BlackhawksSkillEstimation.build_mcse_cluster_config \
+  --player-file Data/Hockey/forwards23-25.txt \
+  --all-seasons \
+  --min-shots-per-job 100 \
+  --num-particles 500 \
+  --sbatch-time 48:00:00 \
+  --sbatch-mem 32G \
+  --output Data/Hockey/jobs/mcse_forwards_per_season.json
+```
+
+This writes `mcse_forwards_per_season.json` with `data_root=Data/Hockey`.
+
+Cluster defaults: **500 particles**, **48h**, **32G**, **100 concurrent** per array.
+Production MCSE runs set `retain_history=False` (no growing particle-history lists) and clear
+per-shot PDF/EV caches after each observation.
+
+### Cluster submit
+
+```bash
+sbatch run_blackhawks_mcse_config.sbatch Data/Hockey/jobs/mcse_forwards_per_season.json
+```
+
+Dry-run workers before submitting:
+
+```bash
+python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config \
+  --config Data/Hockey/jobs/mcse_forwards_per_season.json --dry-run
+```
+
+Options:
+
+- `--all-cached-players` instead of `--player-file` to sweep every player under a data root
+- `--split-mode all_selected_seasons_together` for one job per player across all selected seasons
+- `--num-particles 1000` (default), `--min-shots-per-job 100` (matches JEEDS cluster norm)
+- `--generate-convergence-png` to enable PNGs (off by default on cluster configs for speed)
+
+After jobs finish, aggregate final EES/rationality rows:
+
+```bash
+python -m BlackhawksSkillEstimation.summarize_mcse_runs \
+  --data-root Data/Hockey \
+  --output Data/Hockey/jobs/mcse_summary.csv
+```
+
+## MAXG comparison with JEEDS
+
+MAXG uses the EES profile `(ees_y, ees_z, rho_ees)` with anisotropic convolution (see `maxg_evaluator.py`).
+
+```bash
+python -m BlackhawksSkillEstimation.maxg_evaluator \
+  --benchmark-tag wristshot_snapshot_v1 \
+  --season-tag 20232024 \
+  --shot-group wristshot_snapshot \
+  --estimator mcse \
+  --data-dir Data/Hockey
+```
+
+Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE `(x_y, x_z)`.
+
+## Defaults
+
+- Particles: 1000 locally / smoke; **500** for league cluster configs
+- Ranges: x ∈ [0.004, 0.25] per axis, ρ ∈ [-0.75, 0.75], log₁₀λ ∈ [-1, 3] (`BH_EV_NORMALIZE=1`)
+- Legacy ranges (pre-alignment): x ∈ [0.004, π/4], log₁₀λ ∈ [-3, 1.6] — see `LEGACY_MCSE_RANGES`
+- Cluster resources: 48h / 32G / 100 concurrent per array
+- Data: cluster config uses default `Data/Hockey`
+- Resample: 90% with NEFF gate, systematic resampling
+- Memory: `retain_history=False` in Blackhawks MCSE; per-shot PDF/EV caches cleared after each observation

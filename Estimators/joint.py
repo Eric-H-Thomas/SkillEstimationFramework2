@@ -209,6 +209,23 @@ class JointMethodFlip:
         return results
 
 
+def hockey_rationality_log10_bounds() -> tuple[float, float]:
+    """Return (log10_min, log10_max) for the hockey-multi lambda grid.
+
+    The grid has to match the units of the EV surface it is applied to.
+    With BH_EV_NORMALIZE on (the default), EV is rescaled to unit
+    peak-above-average and the identifiable lambda range is log10 in
+    ``[-1, 3]`` (lambda in ``[0.1, 1000]``). On raw xG units the old
+    ``[0, 4]`` applies. Either endpoint can be overridden via
+    ``BH_RATIONALITY_LOG10_MIN`` / ``BH_RATIONALITY_LOG10_MAX``.
+    """
+    normalized = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
+    default_start, default_end = ("-1", "3.0") if normalized else ("0", "4.0")
+    log_start = float(os.environ.get("BH_RATIONALITY_LOG10_MIN", default_start))
+    log_end = float(os.environ.get("BH_RATIONALITY_LOG10_MAX", default_end))
+    return log_start, log_end
+
+
 # Note: JEEDS is the same thing as JointMethodQRE
 class JointMethodQRE:
 
@@ -340,7 +357,8 @@ class JointMethodQRE:
                 return np.logspace(other_args["minLambda"], 3.6, num_rationality_levels)
             return np.logspace(-3, 3.6, num_rationality_levels)
         if domain_name == "hockey-multi":
-            return np.round(np.logspace(0, 3.6, num_rationality_levels), 4)
+            log_start, log_end = hockey_rationality_log10_bounds()
+            return np.round(np.logspace(log_start, log_end, num_rationality_levels), 4)
         return None
 
     def get_estimator_name(self):

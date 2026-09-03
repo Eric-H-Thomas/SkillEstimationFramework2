@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -50,10 +51,43 @@ from Estimators.joint import JointMethodQRE
 # Net center position used for proximity filtering (NHL standard).
 _NET_CENTER = np.array([89.0, 0.0])
 
-# Blackhawks xG grid: Y: [-5, 5] (120 pts), Z: [0, 6] (72 pts)
-# Passed to getAngularHeatmap as grid_y and grid_z to use full native extents.
+# Fallback Blackhawks xG axes if a map has no usable shape (Y: [-5, 5], Z: [0, 6]).
+# These values came from the first (outdated) iteration of the xG model.
+# Prefer `_infer_grid_axes_from_value_map` so axes match the cached map's native resolution.
 _BH_Y = np.linspace(-5.0, 5.0, 120)
 _BH_Z = np.linspace(0.0, 6.0, 72)
+
+
+def _infer_grid_axes_from_value_map(value_map: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Infer grid_y/grid_z vectors that match a given xG value_map shape.
+
+    The Blackhawks xG maps cover fixed physical extents:
+    - Y: [-5, 5]
+    - Z: [0, 6]
+
+    Native grid resolution may vary (typical net-grid maps are ~31×51).
+    This helper constructs axes with lengths that match the map's columns/rows.
+
+    Parameters
+    ----------
+    value_map : np.ndarray
+        2D array with shape (n_z, n_y): rows are Z, columns are Y.
+    """
+
+    if value_map is None:
+        return _BH_Y, _BH_Z
+    if not isinstance(value_map, np.ndarray):
+        value_map = np.asarray(value_map)
+    if value_map.ndim != 2:
+        raise ValueError(f"Expected 2D value_map, got shape={value_map.shape!r}")
+
+    n_z, n_y = int(value_map.shape[0]), int(value_map.shape[1])
+    if n_z <= 1 or n_y <= 1:
+        raise ValueError(f"value_map has invalid grid shape {value_map.shape!r}")
+
+    grid_y = np.linspace(-5.0, 5.0, n_y)
+    grid_z = np.linspace(0.0, 6.0, n_z)
+    return grid_y, grid_z
 
 # Minimum distance (in feet) from the net center below which a shot is
 # discarded.  The Blackhawks analytics team cannot accurately model shots
@@ -68,9 +102,36 @@ MIN_DISTANCE_FROM_NET_FT = 10.0
 #   50 hypotheses: ~0.015 rad spacing, high precision for research
 DEFAULT_NUM_EXECUTION_SKILLS = 50
 
+# Upper bound, in grid bins, on the Gaussian blur that turns the raw xG surface into
+# the EV surface a player of a given execution skill plans against.
+#
+# This was 1.0 before 2026-08. On the 100x100 angular grid one bin is ~0.004 rad, so a
+# cap of 1.0 clamped 98-99% of the candidate skills: every hypothesis from ~0.008 rad up
+# to 0.25 rad produced an identical EV surface, even though real estimates land at
+# 0.08-0.14 rad. That removed the coupling between execution skill and target choice
+# which is the whole premise of joint estimation, and left execution skill and
+# rationality trading off along a ridge.
+#
+# Set BH_EV_BLUR_MAX_SIGMA_BINS=1.0 to reproduce pre-fix runs.
+EV_BLUR_MAX_SIGMA_BINS = float(os.environ.get("BH_EV_BLUR_MAX_SIGMA_BINS", "1e9"))
+
+# Rescale each shot's EV surface to unit peak-above-average before it reaches the
+# softmax, so rationality is measured on a scale that does not depend on the xG model
+# or on how much the surface was blurred.
+#
+# This is required once the blur clamp above is lifted. Correct blurring flattens the
+# EV surface for poor execution skill, which shrinks the raw EV scale; lambda then
+# absorbs that shrinkage and pins itself against the top of its grid, wiping out
+# between-player variation. Normalizing keeps lambda interior and interpretable.
+#
+# Set BH_EV_NORMALIZE=0 for raw xG units (and note that the rationality grid default
+# in Estimators/joint.py shifts to match).
+EV_NORMALIZE = os.environ.get("BH_EV_NORMALIZE", "1") not in ("0", "", "false", "False")
+
 # Default number of planning/rationality skill hypotheses for JEEDS estimation.
 # Higher values give finer rationality resolution but increase compute cost.
-# These are currently between the range of 0-3.5 in logspace.
+# Endpoints come from hockey_rationality_log10_bounds() in Estimators/joint.py
+# (default log10 in [-1, 3] when BH_EV_NORMALIZE is on).
 DEFAULT_NUM_PLANNING_SKILLS = 100
 
 # ---------------------------------------------------------------------------
@@ -270,7 +331,7 @@ def save_intermediate_estimates_csv(
         writer.writerow([
             "shot_count",
             "expected_execution_skill",
-            "map_execution_skill", 
+            "map_execution_skill",
             "expected_rationality",
             "map_rationality",
             "log10_expected_rationality",
@@ -383,8 +444,8 @@ class JEEDSInputs:
 #
 # **SimpleHockeySpaces (this module):**
 #   - Uses Blackhawks precomputed reward surfaces (value_map) for each shot
-#   - Retrieved from hawks_analytics.post_shot_xg_value_maps via get_game_shot_maps()
-#   - Each shot's value_map is a 120x72 grid of post-shot xG probabilities
+#   - Retrieved from hawks_analytics.expected_goal_values_post_shot_net_grid via get_game_shot_maps()
+#   - Each shot's value_map is a native-resolution net-grid of post-shot xG probabilities
 #   - Creates a new Space instance per shot, discards it after use
 #   - No expensive local precomputation needed; data comes from Snowflake
 #   - Used by: BlackhawksJEEDS when processing real player data from Snowflake
@@ -440,7 +501,9 @@ def transform_shots_for_jeeds(
             continue
 
         shot_map_data = shot_maps[event_id]
-        base_ev = shot_map_data["value_map"]  # native (72×120) over Y∈[-5,5] Z∈[0,6]
+        base_ev = shot_map_data["value_map"]  # native (n_z×n_y) over Y∈[-5,5] Z∈[0,6]
+
+        grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
 
         # Convert Blackhawks Cartesian reward surface to angular coordinates.
         (
@@ -459,8 +522,8 @@ def transform_shots_for_jeeds(
             base_ev,
             player_location,
             executed_action,
-            grid_y=_BH_Y,
-            grid_z=_BH_Z,
+            grid_y=grid_y,
+            grid_z=grid_z,
         )
 
         if skip:
@@ -486,9 +549,19 @@ def transform_shots_for_jeeds(
         for skill in candidate_skills:
             key = spaces.get_key([skill, skill], r=0.0)
             # sigma in grid bins: skill (rad) / avg_bin_size (rad/bin) = bins
-            # Clamp to avoid extreme smoothing or no smoothing.
-            sigma = max(min(skill / avg_bin_size, 1.0), 1e-3)
-            evs = gaussian_filter(grid_utilities_computed, sigma=sigma)
+            sigma = max(min(skill / avg_bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
+            evs = gaussian_filter(
+                grid_utilities_computed, sigma=sigma, mode="constant", cval=0.0
+            )
+            if EV_NORMALIZE:
+                # The softmax exp(lambda * EV) only cares about the scale of EV, so
+                # dividing by the peak-above-average advantage makes lambda dimensionless:
+                # "how strongly does the player prefer one unit of extra advantage".
+                # Without this, lambda absorbs the EV scale, which shrinks as execution
+                # skill worsens (more blur).
+                ev_scale = float(np.max(evs) - np.mean(evs))
+                if ev_scale > 1e-12:
+                    evs = evs / ev_scale
 
             entry["evsPerXskill"][key] = evs
             entry["maxEVPerXskill"][key] = float(np.max(evs))
@@ -513,6 +586,12 @@ def transform_shots_for_jeeds(
         info_rows=info_rows,
         skipped_proximity=skipped_proximity,
     )
+
+
+def _nearest_execution_skill(skill: float, candidate_skills: Sequence[float]) -> float:
+    """Snap a continuous EES value to the nearest candidate execution-skill grid point."""
+    arr = np.asarray(candidate_skills, dtype=float)
+    return float(arr[np.argmin(np.abs(arr - skill))])
 
 
 def ensure_player_directories(player_dir: Path) -> None:
@@ -595,12 +674,13 @@ def _filter_estimable_shots_for_persistence(
 
         base_ev = shot_maps[event_id]["value_map"]
         try:
+            grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
             angular_out = angular_heatmaps.getAngularHeatmap(
                 base_ev,
                 player_location,
                 executed_action,
-                grid_y=_BH_Y,
-                grid_z=_BH_Z,
+                grid_y=grid_y,
+                grid_z=grid_z,
             )
             skip = bool(angular_out[9])
         except Exception:
@@ -659,8 +739,8 @@ def _save_shot_maps_npz(
     Parameters
     ----------
     shot_maps : dict[int, dict[str, object]]
-        Mapping of event_id_hawks -> shot data containing 
-        'value_map' (72x120 array), 'net_cov' (2x2), 'net_coords' (2,).
+        Mapping of event_id_hawks -> shot data containing
+        'value_map', 'net_cov', 'net_coords', and optional 'grid_y'/'grid_z'.
     path : Path | str
         Output .npz file path.
     """
@@ -682,13 +762,28 @@ def _save_shot_maps_npz(
         dtype=np.float64
     )
     
-    np.savez_compressed(
-        str(path),
-        event_ids=np.array(event_ids, dtype=np.int64),
-        value_maps=value_maps,
-        net_covs=net_covs,
-        net_coords=net_coords,
+    save_kwargs = {
+        "event_ids": np.array(event_ids, dtype=np.int64),
+        "value_maps": value_maps,
+        "net_covs": net_covs,
+        "net_coords": net_coords,
+    }
+
+    has_grid = all(
+        ("grid_y" in shot_maps[eid]) and ("grid_z" in shot_maps[eid])
+        for eid in event_ids
     )
+    if has_grid:
+        save_kwargs["grid_ys"] = np.array(
+            [shot_maps[eid]["grid_y"] for eid in event_ids],
+            dtype=np.float64,
+        )
+        save_kwargs["grid_zs"] = np.array(
+            [shot_maps[eid]["grid_z"] for eid in event_ids],
+            dtype=np.float64,
+        )
+
+    np.savez_compressed(str(path), **save_kwargs)
 
 
 def _load_shot_maps_npz(
@@ -716,12 +811,17 @@ def _load_shot_maps_npz(
         return {}
     
     shot_maps = {}
+    has_grid = ("grid_ys" in data) and ("grid_zs" in data)
     for i, eid in enumerate(event_ids):
-        shot_maps[int(eid)] = {
+        entry = {
             "value_map": data["value_maps"][i].astype(np.float64),
             "net_cov": data["net_covs"][i],
             "net_coords": data["net_coords"][i],
         }
+        if has_grid:
+            entry["grid_y"] = data["grid_ys"][i]
+            entry["grid_z"] = data["grid_zs"][i]
+        shot_maps[int(eid)] = entry
     return shot_maps
 
 
@@ -736,6 +836,7 @@ def save_player_data_by_games(
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
     tag: str = "games",
+    value_column: str = "expected_goals",
 ) -> dict[str, Path]:
     """Fetch and save player shot data + shot maps for specific games.
 
@@ -796,7 +897,11 @@ def save_player_data_by_games(
         "Fetching shot maps..."
     )
     try:
-        shot_maps = get_games_shot_maps_batch(filtered_game_ids, player_id=player_id)
+        shot_maps = get_games_shot_maps_batch(
+            filtered_game_ids,
+            player_id=player_id,
+            value_column=value_column,
+        )
     except Exception as e:
         print(f"  Warning: Could not fetch shot maps: {e}")
         shot_maps = {}
@@ -867,6 +972,7 @@ def save_player_data(
     seasons: list[int],
     output_dir: Path | str = Path("Data/Hockey"),
     overwrite: bool = False,
+    value_column: str = "expected_goals",
 ) -> dict[int, dict[str, Path]]:
     """Fetch and save player shot data + shot maps to disk for offline use.
 
@@ -925,7 +1031,11 @@ def save_player_data(
 
         print(f"  Found {len(df)} shots across {len(game_ids)} games. Fetching shot maps...")
         try:
-            shot_maps = get_games_shot_maps_batch(game_ids, player_id=player_id)
+            shot_maps = get_games_shot_maps_batch(
+                game_ids,
+                player_id=player_id,
+                value_column=value_column,
+            )
         except Exception as e:
             print(f"  Warning: Could not fetch shot maps: {e}")
             shot_maps = {}
@@ -1154,11 +1264,13 @@ def _run_jeeds_estimation(
             if map_xskill and map_rationality and ees and eps:
                 eps_val = float(eps[-1])
                 map_rat_val = float(map_rationality[-1])
+                ees_val = float(ees[-1])
+                map_xskill_val = float(map_xskill[-1])
                 skill_log.append({
                     "shot_count": idx + 1,  # 1-indexed
-                    "ees": float(ees[-1]),  # Expected Execution Skill
-                    "map_execution_skill": float(map_xskill[-1]),
-                    "eps": eps_val,  # Expected Rationality
+                    "ees": ees_val,
+                    "map_execution_skill": map_xskill_val,
+                    "eps": eps_val,
                     "map_rationality": map_rat_val,
                     "log10_eps": np.log10(eps_val) if eps_val > 0 else None,
                     "log10_map_rationality": np.log10(map_rat_val) if map_rat_val > 0 else None,
@@ -1181,6 +1293,7 @@ def _run_jeeds_estimation(
 
     final_rationality = float(map_rationality_estimates[-1])
     final_eps = float(eps_estimates[-1]) if eps_estimates else None
+    final_ees = float(ees_estimates[-1]) if ees_estimates else None
 
     result: dict[str, object] = {
         # MAP estimates (primary)
@@ -1188,7 +1301,7 @@ def _run_jeeds_estimation(
         "rationality": final_rationality,
         "log10_rationality": np.log10(final_rationality) if final_rationality > 0 else None,
         # EES/EPS estimates (expected values under posterior)
-        "ees": float(ees_estimates[-1]) if ees_estimates else None,
+        "ees": final_ees,
         "eps": final_eps,
         "log10_eps": np.log10(final_eps) if final_eps and final_eps > 0 else None,
         "num_shots": len(jeeds_inputs.actions),
@@ -1227,6 +1340,7 @@ def estimate_player_skill(
     return_intermediate_estimates: bool = False,
     save_intermediate_csv: bool = False,
     data_dir: Path | str = Path("Data/Hockey"),
+    player_dir_name: str | None = None,
     confirm: bool = True,
     offline_data: tuple[pd.DataFrame, dict[int, dict[str, object]]] | None = None,
     shot_group: str = "",
@@ -1266,6 +1380,9 @@ def estimate_player_skill(
         Base directory for player data. Default is "Data/Hockey".
         Each player's outputs (timing logs, CSVs, plots) live under
         ``data_dir/players/player_{id}/{data,logs,plots,times}/``.
+    player_dir_name : str | None
+        Override the per-player output directory name under ``data_dir/players``.
+        Defaults to ``player_{player_id}`` when unset.
     confirm : bool
         If True (default), prompt for confirmation before running estimation.
         Set to False for batch/automated runs.
@@ -1321,6 +1438,7 @@ def estimate_player_skill(
                 return_intermediate_estimates=return_intermediate_estimates,
                 save_intermediate_csv=save_intermediate_csv,
                 data_dir=data_dir,
+                player_dir_name=player_dir_name,
                 confirm=False,  # already confirmed or batch
                 offline_data=offline_data,
                 shot_group=grp,
@@ -1339,7 +1457,8 @@ def estimate_player_skill(
         candidate_skills or np.linspace(0.004, 0.25, DEFAULT_NUM_EXECUTION_SKILLS)
     )
     data_dir = Path(data_dir)
-    player_data_dir = data_dir / "players" / f"player_{player_id}"
+    player_dir_name = player_dir_name or f"player_{player_id}"
+    player_data_dir = data_dir / "players" / player_dir_name
 
     # Mode 0: Offline data (pre-loaded from disk)
     if offline_data is not None:

@@ -33,6 +33,7 @@ Data/**/data/
 Data/**/times/
 Data/**/plots/
 Data/**/logs/
+
 /.idea/dictionaries
 /.idea
 *.so

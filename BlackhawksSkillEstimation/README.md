@@ -19,16 +19,17 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
    the production JEEDS estimator (`JointMethodQRE`) and returns both MAP estimates:
    - **Execution skill (xskill)**: Mechanical accuracy in radians. **Lower is better** 
      (tight shot clustering). Range: [0.004, π/4].
-   - **Rationality (pskill)**: Decision-making optimality. **Higher is better**
-     (aims at high-value targets). **EXPERIMENTAL** - see interpretation notes below.
+   - **Rationality (pskill)**: Raw λ from the JEEDS grid. **Higher is better**
+     (more weight on high-EV targets). Grid endpoints follow EV normalization (see
+     below). **EXPERIMENTAL** - see interpretation notes below.
 
 ## Key modeling choices
 
 - **Reward surface from Blackhawks analytics** – The EV surface for each shot comes
-  directly from the precomputed `post_shot_xg_value_maps`, which incorporate
-  detailed models of shooting position, angle, goalie positioning, and other
-  factors. A corresponding (y, z) grid spanning ±30 meters in y and ±7.5 meters
-  in z from the goal line provides the coordinate system.
+  directly from the precomputed `expected_goal_values_post_shot_net_grid` maps, which
+  incorporate detailed models of shooting position, angle, goalie positioning, and
+  other factors. A corresponding (y, z) grid spanning Y ∈ [-5, 5] and Z ∈ [0, 6]
+  from the goal line provides the coordinate system.
 - **Skill-to-variance mapping** – Candidate execution skills are standard 
   deviations in radians: larger skill values expand the covariance (wider 
   execution spread, more misses), smaller skills shrink the covariance (tighter 
@@ -37,11 +38,18 @@ MAP estimates for both **execution skill** and **rationality** across a set of g
   transformation mirrors this: higher skills blur the reward surface more widely 
   (accounting for greater shot error), while lower skills keep probability mass 
   concentrated near the intended target.
-- **Rationality interpretation (EXPERIMENTAL)** – The rationality estimate measures
-  how optimally a player selects aim points given the expected value surface.
-  Higher rationality means nearly always choosing the highest-value shot location.
-  However, this metric may not fully account for real-world constraints like
-  defender positioning, time pressure, or play development. Use with caution.
+- **Rationality interpretation (EXPERIMENTAL)** – Raw λ (and `log10_eps`) summarize the
+  posterior over decision skill on a fixed grid. They should be interpreted cautiously,
+  especially when comparing across different xG surfaces or data regimes.
+- **EV / rationality normalization (current test; model change)** – By default
+  (`BH_EV_NORMALIZE=1`), each skill-blurred EV surface is divided by its
+  peak-above-average (`max − mean`) before the QRE softmax. That makes λ
+  dimensionless — preference per unit of extra advantage — instead of absorbing
+  the raw xG scale, which otherwise shrinks as execution skill worsens (more blur).
+  The λ grid then defaults to log10 in `[-1, 3]` (`λ ∈ [0.1, 1000]`) rather than
+  `[0, 4]` on raw xG units. JEEDS and MCSE share this switch so their λ values
+  stay comparable. Set `BH_EV_NORMALIZE=0` to recover the old units; estimates
+  from the two conventions are not comparable, and this is still under test.
 - **JEEDS compatibility** – The helper `SimpleHockeySpaces` mirrors the fields
   JEEDS reads for the hockey domain (`possibleTargets`, `delta`, `allCovs`, and
   `get_key`), allowing the official estimator to run unmodified.
@@ -63,8 +71,8 @@ python -m BlackhawksSkillEstimation.BlackhawksJEEDS \
 
 **Output interpretation:**
 - **Execution skill**: Value in radians. **Lower = better shooter** (0.004 = elite, 0.785 = poor)
-- **Rationality**: Dimensionless optimality measure. **Higher = better decision-maker**
-  (EXPERIMENTAL - see notes above)
+- **Rationality**: Raw λ on the JEEDS grid (log10 `[-1, 3]` with EV normalization on).
+  **Higher = more weight on high-EV targets** (EXPERIMENTAL - see notes above)
 
 The command prints the MAP execution-skill estimate. All per-player outputs
 (timing logs, intermediate estimate CSVs, plots) are stored under
@@ -90,3 +98,30 @@ player_{id}/
 Use these functions directly in notebooks or scripts when you already have a
 `DataFrame` of shot rows or want to integrate the estimator into a larger
 pipeline.
+
+## Entrypoints
+
+Run from the repo root with `PYTHONPATH=.` (or `python -m`). JEEDS/MCSE runners
+stay at the package root; post-run scripts live under `analysis/`.
+
+**Estimation and cluster runners**
+
+| Module | Role |
+|--------|------|
+| `python -m BlackhawksSkillEstimation.BlackhawksJEEDS` | Single-player JEEDS |
+| `python -m BlackhawksSkillEstimation.run_blackhawks_config` | JEEDS from a job JSON |
+| `python -m BlackhawksSkillEstimation.BlackhawksMCSE` | Single-player MCSE |
+| `python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config` | MCSE from a job JSON |
+| `python -m BlackhawksSkillEstimation.maxg_evaluator` | MAXG evaluation over JEEDS/MCSE CSVs |
+| `python -m BlackhawksSkillEstimation.summarize_mcse_runs` | Aggregate cluster MCSE logs |
+
+**Post-run analysis** (`BlackhawksSkillEstimation/analysis/`)
+
+| Module | Role |
+|--------|------|
+| `python -m BlackhawksSkillEstimation.analysis.analyze_mcse_run` | Tidy CSVs, cross-season stability, diagnostic plots |
+| `python -m BlackhawksSkillEstimation.analysis.diagnose_estimator_signal` | Shot-volume leakage, JEEDS vs MCSE, internal convergence |
+| `python -m BlackhawksSkillEstimation.analysis.diagnose_rationality_scale` | Rationality cap / scaling diagnostics |
+| `python -m BlackhawksSkillEstimation.analysis.plot_rationality_vs_xskill` | Rationality vs execution-skill scatter |
+| `python -m BlackhawksSkillEstimation.analysis.stability_plots_from_txt` | Cross-season stability plots from a player list |
+| `python -m BlackhawksSkillEstimation.analysis.generate_bhawks_report` | Ranking tables / BYU-style report from a PID file |

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -40,17 +41,33 @@ def load_benchmark(benchmark_dir: Path, tag: str) -> tuple[pd.DataFrame, dict[in
 
 def _extract_player_id(path: Path) -> int:
     for part in path.parts:
-        if part.startswith("player_"):
-            return int(part.split("player_")[1])
+        match = re.match(r"player_(\d+)", part)
+        if match:
+            return int(match.group(1))
     raise ValueError(f"Unable to parse player_id from path: {path}")
 
 
+def _players_root(data_dir: Path) -> Path:
+    return data_dir if data_dir.name == "players" else data_dir / "players"
+
+
+def _discover_estimate_csvs(
+    data_dir: Path,
+    season_tag: str,
+    shot_group: str,
+    *,
+    logs_subdir: str,
+) -> list[Path]:
+    if not shot_group:
+        raise ValueError("shot_group is required (e.g. wristshot_snapshot)")
+    pattern = (
+        f"player_*/{logs_subdir}/{shot_group}/intermediate_estimates_{season_tag}.csv"
+    )
+    return sorted(_players_root(data_dir).glob(pattern))
+
+
 def discover_ees_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
-    if shot_group:
-        pattern = f"players/player_*/logs/{shot_group}/intermediate_estimates_{season_tag}.csv"
-    else:
-        pattern = f"players/player_*/logs/intermediate_estimates_{season_tag}.csv"
-    return sorted(data_dir.glob(pattern))
+    return _discover_estimate_csvs(data_dir, season_tag, shot_group, logs_subdir="logs")
 
 
 def load_ees_xskills(
@@ -71,12 +88,9 @@ def load_ees_xskills(
         if df.empty:
             continue
 
-        if "expected_execution_skill" in df.columns:
-            xskill = float(df["expected_execution_skill"].iloc[-1])
-        elif "ees" in df.columns:
-            xskill = float(df["ees"].iloc[-1])
-        else:
-            raise ValueError(f"Expected execution skill column missing in {path}")
+        if "expected_execution_skill" not in df.columns:
+            raise ValueError(f"expected_execution_skill column missing in {path}")
+        xskill = float(df["expected_execution_skill"].iloc[-1])
 
         rows.append({"player_id": pid, "xskill_ees": xskill, "csv_path": str(path)})
 
@@ -84,6 +98,89 @@ def load_ees_xskills(
         raise RuntimeError("No EES CSVs found for the requested season/shot group")
 
     return pd.DataFrame(rows).sort_values("xskill_ees").reset_index(drop=True)
+
+
+def discover_mcse_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
+    return _discover_estimate_csvs(
+        data_dir, season_tag, shot_group, logs_subdir="logs/mcse"
+    )
+
+
+def load_mcse_skill_profiles(
+    data_dir: Path,
+    season_tag: str,
+    shot_group: str,
+    player_ids: Sequence[int] | None = None,
+    *,
+    use_map: bool = False,
+) -> pd.DataFrame:
+    csv_paths = discover_mcse_csvs(data_dir, season_tag, shot_group)
+    rows: list[dict[str, object]] = []
+
+    for path in csv_paths:
+        pid = _extract_player_id(path)
+        if player_ids is not None and pid not in player_ids:
+            continue
+
+        df = pd.read_csv(path)
+        if df.empty:
+            continue
+
+        if use_map:
+            x_y = float(df["map_execution_skill_y"].iloc[-1])
+            x_z = float(df["map_execution_skill_z"].iloc[-1])
+            rho = float(df["map_rho"].iloc[-1])
+        else:
+            x_y = float(df["ees_y"].iloc[-1])
+            x_z = float(df["ees_z"].iloc[-1])
+            rho = float(df["rho_ees"].iloc[-1])
+
+        rows.append({
+            "player_id": pid,
+            "x_y": x_y,
+            "x_z": x_z,
+            "rho": rho,
+            "csv_path": str(path),
+        })
+
+    if not rows:
+        raise RuntimeError("No MCSE CSVs found for the requested season/shot group")
+
+    return pd.DataFrame(rows).sort_values("player_id").reset_index(drop=True)
+
+
+def evaluate_maxg_mcse(
+    angular_shots: list[AngularBenchmarkShot],
+    skill_table: pd.DataFrame,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+    *,
+    use_map: bool = False,
+) -> pd.DataFrame:
+    results: list[dict[str, object]] = []
+    for _, row in skill_table.iterrows():
+        player_id = int(row["player_id"])
+        maxg_sum = compute_maxg_sum_anisotropic(
+            angular_shots,
+            float(row["x_y"]),
+            float(row["x_z"]),
+            rho=float(row["rho"]),
+        )
+        print(f"MAXG (MCSE) finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
+        results.append({
+            "player_id": player_id,
+            "x_y": float(row["x_y"]),
+            "x_z": float(row["x_z"]),
+            "rho": float(row["rho"]),
+            "maxg_sum": maxg_sum,
+            "estimator": "mcse_map" if use_map else "mcse_ees",
+            "benchmark_tag": benchmark_tag,
+            "season_tag": season_tag,
+            "shot_group": shot_group,
+            "num_benchmark_shots": len(angular_shots),
+        })
+    return pd.DataFrame(results)
 
 
 def build_angular_cache(
@@ -98,6 +195,8 @@ def build_angular_cache(
             raise RuntimeError(f"Missing shot map for event_id {event_id}")
 
         base_ev = shot_maps[event_id]["value_map"]
+        grid_y = shot_maps[event_id].get("grid_y")
+        grid_z = shot_maps[event_id].get("grid_z")
         player_location = np.array([float(row["start_x"]), float(row["start_y"])])
         executed_action = np.array([float(row["location_y"]), float(row["location_z"])])
 
@@ -105,8 +204,8 @@ def build_angular_cache(
             base_ev,
             player_location,
             executed_action,
-            grid_y=_BH_Y,
-            grid_z=_BH_Z,
+            grid_y=_BH_Y if grid_y is None else grid_y,
+            grid_z=_BH_Z if grid_z is None else grid_z,
         )
 
         dirs = np.array(angular_out[0])
@@ -142,9 +241,17 @@ def compute_convolved_evs(
     shot: AngularBenchmarkShot,
     xskill: float,
 ) -> np.ndarray:
-    rng = np.random.default_rng(0)
+    return compute_convolved_evs_anisotropic(shot, xskill, xskill, rho=0.0)
 
-    cov = getCovMatrix([xskill, xskill], 0.0)
+
+def compute_convolved_evs_anisotropic(
+    shot: AngularBenchmarkShot,
+    x_y: float,
+    x_z: float,
+    rho: float = 0.0,
+) -> np.ndarray:
+    rng = np.random.default_rng(0)
+    cov = getCovMatrix([x_y, x_z], rho)
     pdf = getNormalDistribution(
         rng,
         cov,
@@ -152,19 +259,51 @@ def compute_convolved_evs(
         shot.mean,
         shot.grid_targets_angular,
     )
-    evs = convolve2d(shot.grid_utilities, pdf, mode="same", fillvalue=0.0)
-    return evs
+    return convolve2d(shot.grid_utilities, pdf, mode="same", fillvalue=0.0)
 
 
 def compute_maxg_sum(
     angular_shots: Iterable[AngularBenchmarkShot],
     xskill: float,
 ) -> float:
+    return compute_maxg_sum_anisotropic(angular_shots, xskill, xskill, rho=0.0)
+
+
+def compute_maxg_sum_anisotropic(
+    angular_shots: Iterable[AngularBenchmarkShot],
+    x_y: float,
+    x_z: float,
+    rho: float = 0.0,
+) -> float:
     total = 0.0
     for shot in angular_shots:
-        evs = compute_convolved_evs(shot, xskill)
+        evs = compute_convolved_evs_anisotropic(shot, x_y, x_z, rho=rho)
         total += float(np.max(evs))
     return total
+
+
+_ANGULAR_BENCHMARK_CACHE: dict[tuple[str, str], list[AngularBenchmarkShot]] = {}
+
+
+def compute_maxg_for_mcse_profile(
+    *,
+    benchmark_dir: Path,
+    benchmark_tag: str,
+    x_y: float,
+    x_z: float,
+    rho: float,
+) -> float:
+    """Compute MAXG sum for one MCSE (x_y, x_z, rho) profile on a tagged benchmark."""
+    cache_key = (str(benchmark_dir), benchmark_tag)
+    if cache_key not in _ANGULAR_BENCHMARK_CACHE:
+        shots_df, shot_maps = load_benchmark(benchmark_dir, benchmark_tag)
+        _ANGULAR_BENCHMARK_CACHE[cache_key] = build_angular_cache(shots_df, shot_maps)
+    return compute_maxg_sum_anisotropic(
+        _ANGULAR_BENCHMARK_CACHE[cache_key],
+        x_y,
+        x_z,
+        rho=rho,
+    )
 
 
 def evaluate_maxg(
@@ -205,9 +344,6 @@ def _plot_maxg_over_xskill(results: pd.DataFrame, output_path: Path) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    if "xskill_ees" not in results.columns or "maxg_sum" not in results.columns:
-        return
-
     plt.figure(figsize=(8, 5))
     plt.scatter(results["xskill_ees"], results["maxg_sum"], alpha=0.6, s=20)
     plt.xlabel("xskill (EES)")
@@ -241,7 +377,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--benchmark-tag",
         required=True,
-        help="Required benchmark tag used in filenames (e.g., WS_v1).",
+        help="Required benchmark tag used in filenames (e.g., wristshot_snapshot_v1).",
     )
     parser.add_argument(
         "--benchmark-dir",
@@ -307,11 +443,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Directory for debug plots.",
     )
     parser.add_argument(
-        "--debug-run-tag",
-        default="",
-        help="Optional suffix for debug plot folder (e.g., debug-run-1).",
-    )
-    parser.add_argument(
         "--smoke-test",
         action="store_true",
         help="Run a quick smoke test on a small subset.",
@@ -334,6 +465,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Seed for debug and smoke-test sampling.",
     )
+    parser.add_argument(
+        "--estimator",
+        choices=("jeeds", "mcse"),
+        default="jeeds",
+        help="Skill profile source: JEEDS scalar EES CSVs or MCSE 2D CSVs under logs/mcse/.",
+    )
+    parser.add_argument(
+        "--mcse-profile",
+        choices=("ees", "map"),
+        default="ees",
+        help="For --estimator mcse, use final EES or MAP skill vector from intermediate CSV.",
+    )
     return parser
 
 
@@ -350,12 +493,21 @@ def main() -> None:
             player_ids = file_ids
         else:
             player_ids = sorted(set(player_ids).union(file_ids))
-    xskill_table = load_ees_xskills(
-        data_dir=args.data_dir,
-        season_tag=args.season_tag,
-        shot_group=args.shot_group,
-        player_ids=player_ids,
-    )
+    if args.estimator == "mcse":
+        xskill_table = load_mcse_skill_profiles(
+            data_dir=args.data_dir,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+            player_ids=player_ids,
+            use_map=(args.mcse_profile == "map"),
+        )
+    else:
+        xskill_table = load_ees_xskills(
+            data_dir=args.data_dir,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+            player_ids=player_ids,
+        )
 
     rng = np.random.default_rng(args.rng_seed)
     if args.debug == "only" and args.debug_shots > 0:
@@ -378,8 +530,7 @@ def main() -> None:
     if args.debug in {"plots", "only"}:
         from BlackhawksSkillEstimation import maxg_plots
 
-        suffix = f"_{args.debug_run_tag}" if args.debug_run_tag else ""
-        debug_dir = args.debug_output / f"{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{suffix}"
+        debug_dir = args.debug_output / f"{args.benchmark_tag}_{args.season_tag}_{args.shot_group}"
         maxg_plots.generate_debug_plots(
             angular_shots=angular_shots,
             xskill_table=xskill_table,
@@ -392,23 +543,37 @@ def main() -> None:
     if args.debug == "only":
         return
 
-    results = evaluate_maxg(
-        angular_shots,
-        xskill_table,
-        benchmark_tag=args.benchmark_tag,
-        season_tag=args.season_tag,
-        shot_group=args.shot_group,
-    )
+    if args.estimator == "mcse":
+        results = evaluate_maxg_mcse(
+            angular_shots,
+            xskill_table,
+            benchmark_tag=args.benchmark_tag,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+            use_map=(args.mcse_profile == "map"),
+        )
+    else:
+        results = evaluate_maxg(
+            angular_shots,
+            xskill_table,
+            benchmark_tag=args.benchmark_tag,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+        )
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"maxg_results_{args.benchmark_tag}_{args.season_tag}_{args.shot_group}.csv"
+    est_suffix = f"_{args.estimator}" if args.estimator != "jeeds" else ""
+    output_path = output_dir / (
+        f"maxg_results_{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{est_suffix}.csv"
+    )
     results.to_csv(output_path, index=False)
     print(f"Saved results to {output_path}")
 
     plot_path = output_path.with_name(output_path.stem + "_maxg_over_xskill.png")
-    _plot_maxg_over_xskill(results, plot_path)
-    print(f"Saved plot to {plot_path}")
+    if args.estimator == "jeeds":
+        _plot_maxg_over_xskill(results, plot_path)
+        print(f"Saved plot to {plot_path}")
 
 
 if __name__ == "__main__":
