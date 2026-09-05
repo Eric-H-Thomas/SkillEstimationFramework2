@@ -34,6 +34,10 @@ Data/**/times/
 Data/**/plots/
 Data/**/logs/
 
+# Per-job experiment outputs (one JSON per array task)
+Data/Hockey/experiments/**/results/
+Data/Hockey/experiments/**/work/
+
 /.idea/dictionaries
 /.idea
 *.so

@@ -1,0 +1,53 @@
+{
+  "cluster_plan": {
+    "eligible_jobs": 1,
+    "jobs": [
+      {
+        "count": 365,
+        "eligible": true,
+        "missing_local_data": false,
+        "player_id": 950160,
+        "season": 20252026,
+        "shot_group": "wristshot_snapshot"
+      }
+    ],
+    "sbatch_recommendation": {
+      "max_concurrent": 1,
+      "mem": "16G",
+      "time": "24:00:00"
+    },
+    "split_by_partition_value": false,
+    "split_mode": "per_season",
+    "total_jobs": 1
+  },
+  "config_version": 1,
+  "data_filters": {
+    "player_ids": [
+      950160
+    ],
+    "seasons": [
+      20252026
+    ],
+    "shot_groups": [
+      "wristshot_snapshot"
+    ]
+  },
+  "data_root": "Data/Hockey",
+  "estimator": {
+    "convergence_png_include_map": false,
+    "generate_convergence_png": true,
+    "num_execution_skills": 250,
+    "num_planning_skills": 250,
+    "per_season": true,
+    "rng_seed": 0,
+    "save_intermediate_csv": true
+  },
+  "notes": "Backfills the 2025-26 per-season JEEDS estimate for 950160. Grids match jeeds_forwards_all_seasons.json so the resulting season dot is comparable to 2021-22 through 2024-25.",
+  "output": {
+    "write_run_summary": false
+  },
+  "validation": {
+    "fail_policy": "skip",
+    "min_shots_per_job": 100
+  }
+}

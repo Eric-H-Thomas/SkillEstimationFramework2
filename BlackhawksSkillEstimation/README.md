@@ -114,6 +114,8 @@ stay at the package root; post-run scripts live under `analysis/`.
 | `python -m BlackhawksSkillEstimation.run_blackhawks_mcse_config` | MCSE from a job JSON |
 | `python -m BlackhawksSkillEstimation.maxg_evaluator` | MAXG evaluation over JEEDS/MCSE CSVs |
 | `python -m BlackhawksSkillEstimation.summarize_mcse_runs` | Aggregate cluster MCSE logs |
+| `python -m BlackhawksSkillEstimation.build_player_subsample_config` | Build a subsample-stability job JSON |
+| `python -m BlackhawksSkillEstimation.run_player_subsample_config` | Run subsample-stability jobs from a job JSON |
 
 **Post-run analysis** (`BlackhawksSkillEstimation/analysis/`)
 
@@ -124,4 +126,63 @@ stay at the package root; post-run scripts live under `analysis/`.
 | `python -m BlackhawksSkillEstimation.analysis.diagnose_rationality_scale` | Rationality cap / scaling diagnostics |
 | `python -m BlackhawksSkillEstimation.analysis.plot_rationality_vs_xskill` | Rationality vs execution-skill scatter |
 | `python -m BlackhawksSkillEstimation.analysis.stability_plots_from_txt` | Cross-season stability plots from a player list |
+| `python -m BlackhawksSkillEstimation.analysis.plot_player_subsample_stability` | Subsample-stability plots for one player |
 | `python -m BlackhawksSkillEstimation.analysis.generate_bhawks_report` | Ranking tables / BYU-style report from a PID file |
+
+## Player subsample stability
+
+Season-to-season execution and decision estimates for the same player move more than
+real skill plausibly does. This experiment separates sampling noise from genuine
+change: hold one player fixed, pool every cached season, and re-estimate on many
+random N-shot subsets. If 200-shot redraws already span as much as the season
+estimates do, the season-to-season instability is mostly noise.
+
+```bash
+conda activate skill-estimation
+
+# 1. Draw the samples (metadata scan only, no estimator runs)
+python -m BlackhawksSkillEstimation.build_player_subsample_config \
+  --player-id 950160 --all-seasons \
+  --n-shots 100 200 400 --num-seeds 50 \
+  --output Data/Hockey/jobs/player_subsample_950160.json --dry-run
+
+# 2. Check the expanded job list
+python -m BlackhawksSkillEstimation.run_player_subsample_config \
+  --config Data/Hockey/jobs/player_subsample_950160.json --dry-run
+
+# 3. Submit (bootstrap reads the config and sizes the array)
+sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json
+
+# 4. Plot (local, post-hoc; a partial array still plots)
+python -m BlackhawksSkillEstimation.analysis.plot_player_subsample_stability \
+  --config Data/Hockey/jobs/player_subsample_950160.json
+```
+
+Defaults for 950160: **all five cached seasons** (1,937 `wristshot_snapshot` shots),
+N ∈ {100, 200, 400} × 50 seeds, plus one full-sample baseline, run through **both**
+JEEDS and MCSE — 302 jobs. `--smoke` shrinks the grids and seed count for a local check.
+
+Notes:
+
+- **Every season is pooled, including 20252026.** The per-season cluster configs
+  `jeeds_forwards_all_seasons.json` and `mcse_forwards_per_season.json` cover the same
+  five seasons, so the season dots they produce line up with the subsample pool.
+- **Grids must match production.** Defaults are JEEDS 250×250 and MCSE 500 particles,
+  matching the existing per-season cluster configs. The local CLI defaults (50×100,
+  1000 particles) produce estimates that cannot be compared to the season dots, which
+  is why `--smoke` output is labelled as such.
+- **Draws happen once, at build time.** The config stores event ids, so JEEDS and MCSE
+  run on byte-identical shot sets and reruns are reproducible. Each `(N, seed)` pair
+  has its own RNG stream, so adding N values or seeds later does not disturb draws
+  that already ran.
+- **Outputs are isolated** under
+  `Data/Hockey/experiments/player_subsample_stability/<run_name>/`. Nothing is written
+  into the per-season `logs/` tree that `stability_plots_from_txt` and
+  `analyze_mcse_run` glob over.
+- **Reruns resume.** Successful result JSONs are skipped; failed or unreadable
+  ones are retried. Pass `--overwrite` to force a successful job to run again.
+- **MCSE on the full baseline is the long pole.** Cost scales with shots × particles,
+  so the 1,937-shot MCSE baseline can approach the 24h default wall. If it times out,
+  rebuild with `--sbatch-time 48:00:00`.
+- Pooled draws mix seasons. If seasons are not exchangeable, subsample spread is not a
+  pure N-shot noise floor — the `season_mix_*` figures exist to check exactly that.

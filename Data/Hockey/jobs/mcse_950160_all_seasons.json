@@ -1,0 +1,116 @@
+{
+  "config_version": 1,
+  "created_at": "2026-09-05T17:40:00+00:00",
+  "notes": "MCSE cluster config: data_root=Data/Hockey.",
+  "data_root": "Data/Hockey",
+  "data_filters": {
+    "player_ids": [
+      950160
+    ],
+    "seasons": [
+      20212022,
+      20222023,
+      20232024,
+      20242025,
+      20252026
+    ],
+    "shot_groups": [
+      "wristshot_snapshot"
+    ]
+  },
+  "estimator": {
+    "method": "mcse",
+    "per_season": true,
+    "num_particles": 500,
+    "noise": [
+      200,
+      200
+    ],
+    "resample_percent": 0.9,
+    "resample_neff": true,
+    "resampling_method": "systematic",
+    "rng_seed": 0,
+    "ranges": {
+      "start": [
+        0.004,
+        0.004,
+        -0.75,
+        -1.0
+      ],
+      "end": [
+        0.25,
+        0.25,
+        0.75,
+        3.0
+      ]
+    },
+    "save_intermediate_csv": true,
+    "generate_convergence_png": true,
+    "convergence_png_include_map": false,
+    "compute_maxg": false
+  },
+  "maxg": {
+    "compute": false,
+    "benchmark_tag": "wristshot_snapshot_v1",
+    "benchmark_dir": "Data/Hockey/benchmarks"
+  },
+  "output": {
+    "write_run_summary": false
+  },
+  "validation": {
+    "min_shots_per_job": 100,
+    "fail_policy": "skip"
+  },
+  "cluster_plan": {
+    "split_mode": "per_season",
+    "total_jobs": 5,
+    "eligible_jobs": 5,
+    "jobs": [
+      {
+        "player_id": 950160,
+        "season": 20212022,
+        "shot_group": "wristshot_snapshot",
+        "count": 220,
+        "missing_local_data": false,
+        "eligible": true
+      },
+      {
+        "player_id": 950160,
+        "season": 20222023,
+        "shot_group": "wristshot_snapshot",
+        "count": 447,
+        "missing_local_data": false,
+        "eligible": true
+      },
+      {
+        "player_id": 950160,
+        "season": 20232024,
+        "shot_group": "wristshot_snapshot",
+        "count": 498,
+        "missing_local_data": false,
+        "eligible": true
+      },
+      {
+        "player_id": 950160,
+        "season": 20242025,
+        "shot_group": "wristshot_snapshot",
+        "count": 407,
+        "missing_local_data": false,
+        "eligible": true
+      },
+      {
+        "player_id": 950160,
+        "season": 20252026,
+        "shot_group": "wristshot_snapshot",
+        "count": 365,
+        "missing_local_data": false,
+        "eligible": true
+      }
+    ],
+    "sbatch_recommendation": {
+      "time": "24:00:00",
+      "mem": "16G",
+      "max_concurrent": 5
+    }
+  }
+}
