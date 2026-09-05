@@ -62,7 +62,7 @@ def test_build_mcse_cluster_config_shape(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert config["estimator"]["num_particles"] == 1000
     assert config["estimator"]["ranges"]["end"][0] == 0.25
-    assert config["estimator"]["ranges"]["end"][-1] == 4.0
+    assert config["estimator"]["ranges"]["end"][-1] == 3.0
     assert config["maxg"]["benchmark_tag"] == DEFAULT_BENCHMARK_TAG
     assert config["cluster_plan"]["eligible_jobs"] == 1
     job = config["cluster_plan"]["jobs"][0]

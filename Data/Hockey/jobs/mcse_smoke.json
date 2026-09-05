@@ -16,8 +16,8 @@
     "resampling_method": "systematic",
     "rng_seed": 0,
     "ranges": {
-      "start": [0.004, 0.004, -0.75, 0.0],
-      "end": [0.25, 0.25, 0.75, 4.0]
+      "start": [0.004, 0.004, -0.75, -1.0],
+      "end": [0.25, 0.25, 0.75, 3.0]
     },
     "save_intermediate_csv": true,
     "generate_convergence_png": true,

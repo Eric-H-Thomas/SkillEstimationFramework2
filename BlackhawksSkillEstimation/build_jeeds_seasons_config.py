@@ -1,14 +1,15 @@
-"""Derive a JEEDS cluster config for seasons a base config does not cover.
+"""Derive a JEEDS cluster config for a chosen set of seasons.
 
-forwards21-25.json holds the 218 forwards with 100+ shots across 2021-2025, but its
-``data_filters.seasons`` and precomputed ``cluster_plan.jobs`` only cover 2021-22 and
-2022-23. This regenerates the job list for other seasons, recomputing eligibility with
-the same shot-type filter and 100-shot threshold the original used.
+jeeds_forwards_all_seasons.json is the canonical base: it holds the 218 forwards and the
+250x250 estimator block every JEEDS cluster run uses. This rewrites
+``data_filters.seasons`` and ``cluster_plan.jobs`` for the requested seasons, recomputing
+eligibility with the same shot-type filter and 100-shot threshold, and copies the roster,
+estimator settings, and sbatch recommendation from the base unchanged.
 
 Usage:
     python BlackhawksSkillEstimation/build_jeeds_seasons_config.py \
-        --seasons 20232024 20242025 \
-        --out Data/Hockey/jobs/forwards23-25.json
+        --seasons 20252026 \
+        --out Data/Hockey/jobs/jeeds_forwards_20252026.json
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ def count_group_shots(parquet_path: Path, shot_group: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="Data/Hockey/jobs/forwards21-25.json")
+    parser.add_argument("--base", default="Data/Hockey/jobs/jeeds_forwards_all_seasons.json")
     parser.add_argument("--seasons", type=int, nargs="+", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--min-shots", type=int, default=MIN_SHOTS)
