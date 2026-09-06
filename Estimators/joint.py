@@ -542,6 +542,10 @@ class JointMethodQRE:
                 self.current_probs[exec_skill_index] = [0.0] * self.num_rationality_levels
                 print(f"skipping (pdfs sum = 0) - x hyp: {execution_skill}")
                 continue
+            if not np.isfinite(np.asarray(evs)).all():
+                self.current_probs[exec_skill_index] = [0.0] * self.num_rationality_levels
+                print(f"skipping (non-finite evs) - x hyp: {execution_skill}")
+                continue
 
             # For each rationality level hypothesis
             for rationality_index, rationality_level in enumerate(self.rationality_levels):
@@ -638,10 +642,22 @@ class JointMethodQRE:
             other_args
         )
 
+        previous_probs = np.array(self.current_probs, copy=True)
         self._perform_update(pdfs_per_execution_skill, evs_per_execution_skill)
 
-        # Normalize to ensure a valid probability distribution
-        self.current_probs /= np.sum(self.current_probs)
+        # Normalize to ensure a valid probability distribution. A single
+        # degenerate observation (all-NaN EV, all-zero PDFs) can zero the
+        # entire posterior; restore the previous one instead of writing NaNs
+        # into the rest of the trace.
+        total = np.sum(self.current_probs)
+        if (not np.isfinite(total)) or total <= 0.0:
+            print(
+                "JT-QRE: degenerate posterior after update "
+                "(non-finite or zero mass); skipping this observation."
+            )
+            self.current_probs = previous_probs
+            total = np.sum(self.current_probs)
+        self.current_probs /= total
 
         # Update the probs history
         self.probs_history.append(self.current_probs.tolist())

@@ -419,12 +419,29 @@ class SimpleHockeySpaces:
         return "|".join(map(str, info)) + f"|{r}"
 
 
+def value_map_is_finite(value_map: object) -> bool:
+    """Return True if an xG surface is a 2D grid with every cell finite.
+
+    All-NaN Blackhawks maps pass the angular-PDF skip check (that check looks
+    at execution noise, not EV) and then poison JEEDS: ``exp(lambda * NaN)``
+    zeros the joint posterior, after which MAP collapses to the first grid
+    cell (0.004 rad, lambda=0.1 when bounds are ``[-1, 3]``).
+    """
+    if value_map is None:
+        return False
+    arr = np.asarray(value_map)
+    if arr.ndim != 2 or arr.size == 0:
+        return False
+    return bool(np.isfinite(arr).all())
+
+
 @dataclass
 class JEEDSInputs:
     spaces_per_shot: list[SimpleHockeySpaces]
     actions: list[list[float]]
     info_rows: list[dict[str, object]]
     skipped_proximity: int = 0
+    skipped_invalid_map: int = 0
 
 
 # ============================================================================
@@ -476,6 +493,7 @@ def transform_shots_for_jeeds(
     df = df.rename(columns=str.lower)
 
     skipped_proximity = 0
+    skipped_invalid_map = 0
 
     info_rows: list[dict[str, object]] = []
     actions: list[list[float]] = []
@@ -502,6 +520,9 @@ def transform_shots_for_jeeds(
 
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]  # native (n_z×n_y) over Y∈[-5,5] Z∈[0,6]
+        if not value_map_is_finite(base_ev):
+            skipped_invalid_map += 1
+            continue
 
         grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
 
@@ -527,6 +548,9 @@ def transform_shots_for_jeeds(
         )
 
         if skip:
+            continue
+        if not np.isfinite(np.asarray(grid_utilities_computed)).all():
+            skipped_invalid_map += 1
             continue
 
         spaces = SimpleHockeySpaces(
@@ -579,12 +603,15 @@ def transform_shots_for_jeeds(
 
     if skipped_proximity:
         print(f"  Filtered {skipped_proximity} shot(s) within {MIN_DISTANCE_FROM_NET_FT}ft of the net.")
+    if skipped_invalid_map:
+        print(f"  Filtered {skipped_invalid_map} shot(s) with non-finite xG value maps.")
 
     return JEEDSInputs(
         spaces_per_shot=spaces_per_shot,
         actions=actions,
         info_rows=info_rows,
         skipped_proximity=skipped_proximity,
+        skipped_invalid_map=skipped_invalid_map,
     )
 
 
@@ -648,6 +675,7 @@ def _filter_estimable_shots_for_persistence(
         "kept": 0,
         "rejected_missing_map": 0,
         "rejected_proximity": 0,
+        "rejected_invalid_map": 0,
         "rejected_angular_skip": 0,
         "maps_pruned": 0,
     }
@@ -673,6 +701,11 @@ def _filter_estimable_shots_for_persistence(
             continue
 
         base_ev = shot_maps[event_id]["value_map"]
+        if not value_map_is_finite(base_ev):
+            stats["rejected_invalid_map"] += 1
+            keep_mask.append(False)
+            continue
+
         try:
             grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
             angular_out = angular_heatmaps.getAngularHeatmap(
@@ -706,6 +739,7 @@ def _log_persistence_filter_stats(stats: dict[str, int]) -> None:
     rejected_total = (
         stats["rejected_missing_map"]
         + stats["rejected_proximity"]
+        + stats.get("rejected_invalid_map", 0)
         + stats["rejected_angular_skip"]
     )
     print(
@@ -713,6 +747,7 @@ def _log_persistence_filter_stats(stats: dict[str, int]) -> None:
         f"kept {stats['kept']}/{stats['total']} shots; "
         f"rejected missing_map={stats['rejected_missing_map']}, "
         f"proximity<{MIN_DISTANCE_FROM_NET_FT}ft={stats['rejected_proximity']}, "
+        f"invalid_map={stats.get('rejected_invalid_map', 0)}, "
         f"angular_skip={stats['rejected_angular_skip']}"
     )
     if stats["maps_pruned"]:
@@ -1220,6 +1255,7 @@ def _run_jeeds_estimation(
             "status": "no_usable_shots",
             "warning": "No usable shot data remained after angular conversion.",
             "skipped_proximity": jeeds_inputs.skipped_proximity,
+            "skipped_invalid_map": jeeds_inputs.skipped_invalid_map,
         }
 
     estimator = JointMethodQRE(
@@ -1305,6 +1341,10 @@ def _run_jeeds_estimation(
         "eps": final_eps,
         "log10_eps": np.log10(final_eps) if final_eps and final_eps > 0 else None,
         "num_shots": len(jeeds_inputs.actions),
+        # Shots dropped before estimation. Without these, num_shots silently
+        # disagrees with the job config's count and the reason is lost.
+        "skipped_invalid_map": jeeds_inputs.skipped_invalid_map,
+        "skipped_proximity": jeeds_inputs.skipped_proximity,
         "status": "success",
     }
     

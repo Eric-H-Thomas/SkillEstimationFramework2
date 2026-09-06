@@ -245,6 +245,10 @@ def run_single_job(
         {
             "status": str(result.get("status", "unknown")),
             "num_shots": int(result.get("num_shots", 0) or 0),
+            # A sample's drawn size and its estimated size differ whenever the pool
+            # contributed a shot with an unusable xG map, which 2025-26 data does.
+            "skipped_invalid_map": int(result.get("skipped_invalid_map", 0) or 0),
+            "skipped_proximity": int(result.get("skipped_proximity", 0) or 0),
             "estimates": estimates,
             # Flattened, estimator-agnostic metrics so plotting does not have to
             # branch on which estimator produced the row.

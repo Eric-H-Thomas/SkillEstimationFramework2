@@ -31,6 +31,7 @@ from .BlackhawksJEEDS import (
     load_player_data,
     query_player_game_info,
     query_player_season_shots,
+    value_map_is_finite,
 )
 from .BlackhawksPFESpaces import BlackhawksPFESpaces
 from .plot_intermediate_estimates_mcse import plot_intermediate_estimates_mcse
@@ -86,6 +87,7 @@ class MCSEInputs:
     actions: list[list[float]]
     info_rows: list[dict[str, object]]
     skipped_proximity: int = 0
+    skipped_invalid_map: int = 0
 
 
 def ensure_mcse_directories(player_dir: Path) -> None:
@@ -101,6 +103,7 @@ def transform_shots_for_mcse(
     """Convert shot rows into per-shot PFE spaces and angular utility grids."""
     df = df.rename(columns=str.lower)
     skipped_proximity = 0
+    skipped_invalid_map = 0
     info_rows: list[dict[str, object]] = []
     actions: list[list[float]] = []
     spaces_per_shot: list[BlackhawksPFESpaces] = []
@@ -120,6 +123,9 @@ def transform_shots_for_mcse(
 
         shot_map_data = shot_maps[event_id]
         base_ev = shot_map_data["value_map"]
+        if not value_map_is_finite(base_ev):
+            skipped_invalid_map += 1
+            continue
         grid_y, grid_z = _infer_grid_axes_from_value_map(base_ev)
 
         angular_out = angular_heatmaps.getAngularHeatmap(
@@ -137,6 +143,9 @@ def transform_shots_for_mcse(
         skip = bool(angular_out[9])
         if skip:
             continue
+        if not np.isfinite(np.asarray(grid_utilities_computed)).all():
+            skipped_invalid_map += 1
+            continue
 
         spaces = BlackhawksPFESpaces(dirs, elevations, grid_targets_angular)
         info_rows.append({"Zs": grid_utilities_computed})
@@ -145,12 +154,15 @@ def transform_shots_for_mcse(
 
     if skipped_proximity:
         print(f"  Filtered {skipped_proximity} shot(s) within {MIN_DISTANCE_FROM_NET_FT}ft of the net.")
+    if skipped_invalid_map:
+        print(f"  Filtered {skipped_invalid_map} shot(s) with non-finite xG value maps.")
 
     return MCSEInputs(
         spaces_per_shot=spaces_per_shot,
         actions=actions,
         info_rows=info_rows,
         skipped_proximity=skipped_proximity,
+        skipped_invalid_map=skipped_invalid_map,
     )
 
 
@@ -339,6 +351,7 @@ def _run_mcse_estimation(
             "num_shots": 0,
             "warning": "No usable shots after angular conversion.",
             "skipped_proximity": mcse_inputs.skipped_proximity,
+            "skipped_invalid_map": mcse_inputs.skipped_invalid_map,
         }
 
     noise = list(noise or DEFAULT_MCSE_NOISE)
@@ -417,6 +430,10 @@ def _run_mcse_estimation(
         "log10_eps": np.log10(final["eps"]) if final.get("eps") and final["eps"] > 0 else None,
         "num_shots": len(mcse_inputs.actions),
         "num_particles": int(num_particles),
+        # Shots dropped before estimation. Without these, num_shots silently
+        # disagrees with the job config's count and the reason is lost.
+        "skipped_invalid_map": mcse_inputs.skipped_invalid_map,
+        "skipped_proximity": mcse_inputs.skipped_proximity,
         "status": "success",
         "maxg_ees": None,
         "maxg_map": None,
