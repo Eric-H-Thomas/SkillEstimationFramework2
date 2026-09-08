@@ -25,6 +25,13 @@ Run one job from a Slurm array index:
 
     SLURM_ARRAY_TASK_ID=1 python -m BlackhawksSkillEstimation.run_player_subsample_config \
       --config Data/Hockey/jobs/player_subsample_950160.json
+
+Array task 1 is the JEEDS full-pool baseline; task 2 is the MCSE full-pool
+baseline. On the cluster those are split out of the 16G/24h subsample array:
+
+    sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json fullpool-jeeds
+    sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json fullpool-mcse
+    sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json fullpool
 """
 from __future__ import annotations
 

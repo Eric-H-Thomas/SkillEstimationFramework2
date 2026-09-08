@@ -150,8 +150,10 @@ python -m BlackhawksSkillEstimation.build_player_subsample_config \
 python -m BlackhawksSkillEstimation.run_player_subsample_config \
   --config Data/Hockey/jobs/player_subsample_950160.json --dry-run
 
-# 3. Submit (bootstrap reads the config and sizes the array)
-sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json
+# 3. Submit. Full-pool JEEDS/MCSE are split out of the N-shot array:
+#    fullpool-jeeds | fullpool-mcse | fullpool | subsample | all
+sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json subsample
+sbatch run_player_subsample_config.sbatch Data/Hockey/jobs/player_subsample_950160.json fullpool
 
 # 4. Plot (local, post-hoc; a partial array still plots)
 python -m BlackhawksSkillEstimation.analysis.plot_player_subsample_stability \
@@ -181,8 +183,10 @@ Notes:
   `analyze_mcse_run` glob over.
 - **Reruns resume.** Successful result JSONs are skipped; failed or unreadable
   ones are retried. Pass `--overwrite` to force a successful job to run again.
-- **MCSE on the full baseline is the long pole.** Cost scales with shots × particles,
-  so the 1,937-shot MCSE baseline can approach the 24h default wall. If it times out,
-  rebuild with `--sbatch-time 48:00:00`.
+- **MCSE on the full baseline is the long pole.** Cost scales with shots × particles.
+  The 1,937-shot MCSE baseline timed out at 24h; n=400 finished in ~15h, which
+  extrapolates to ~73h. It is submitted on its own at 96h / 16G. Full-pool JEEDS
+  is a separate 48G / 48h job. Use ``fullpool-mcse``, ``fullpool-jeeds``, or
+  ``fullpool`` rather than stuffing either into the subsample array.
 - Pooled draws mix seasons. If seasons are not exchangeable, subsample spread is not a
   pure N-shot noise floor — the `season_mix_*` figures exist to check exactly that.

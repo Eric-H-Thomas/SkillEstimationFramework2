@@ -39130,7 +39130,10 @@
         "n_requested": null,
         "seed": null,
         "n_shots": 1937,
-        "eligible": true
+        "eligible": true,
+        "mem": "48G",
+        "time": "48:00:00",
+        "submit_group": "fullpool-jeeds"
       },
       {
         "estimator": "mcse",
@@ -39139,7 +39142,9 @@
         "n_requested": null,
         "seed": null,
         "n_shots": 1937,
-        "eligible": true
+        "eligible": true,
+        "time": "96:00:00",
+        "submit_group": "fullpool-mcse"
       },
       {
         "estimator": "jeeds",
@@ -41847,6 +41852,9 @@
     "sbatch_recommendation": {
       "time": "24:00:00",
       "mem": "16G",
+      "high_mem": "48G",
+      "jeeds_baseline_time": "48:00:00",
+      "mcse_baseline_time": "96:00:00",
       "max_concurrent": 100
     }
   }

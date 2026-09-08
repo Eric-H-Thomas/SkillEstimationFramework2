@@ -15,6 +15,9 @@ import pandas as pd
 import pytest
 
 from BlackhawksSkillEstimation.build_player_subsample_config import (
+    DEFAULT_SBATCH_HIGH_MEM,
+    DEFAULT_SBATCH_JEEDS_BASELINE_TIME,
+    DEFAULT_SBATCH_MCSE_BASELINE_TIME,
     build_config,
     build_estimator_settings,
     build_jobs,
@@ -160,6 +163,19 @@ def test_jobs_share_sample_keys_across_estimators() -> None:
     # The whole point of drawing at build time: both estimators run identical shots.
     assert by_estimator["jeeds"] == by_estimator["mcse"] == set(samples)
     assert jobs[0]["is_baseline"] is True
+    assert jobs[0]["estimator"] == "jeeds"
+    assert jobs[0]["mem"] == DEFAULT_SBATCH_HIGH_MEM
+    assert jobs[0]["time"] == DEFAULT_SBATCH_JEEDS_BASELINE_TIME
+    assert jobs[0]["submit_group"] == "fullpool-jeeds"
+    mcse_baseline = next(j for j in jobs if j["is_baseline"] and j["estimator"] == "mcse")
+    assert mcse_baseline["time"] == DEFAULT_SBATCH_MCSE_BASELINE_TIME
+    assert mcse_baseline["submit_group"] == "fullpool-mcse"
+    assert "mem" not in mcse_baseline
+    assert all(
+        "mem" not in job
+        for job in jobs
+        if not (job["is_baseline"] and job["estimator"] == "jeeds")
+    )
 
 
 def test_estimator_settings_default_to_production_grids() -> None:
@@ -236,7 +252,19 @@ def test_build_config_pools_every_cached_season(tmp_path: Path) -> None:
     assert len(config["sampling"]["pool_season_counts"]) == 5
     assert config["cluster_plan"]["total_jobs"] == 2 * (1 + 2 * 5)
     assert config["cluster_plan"]["sbatch_recommendation"]["mem"] == "16G"
+    assert config["cluster_plan"]["sbatch_recommendation"]["high_mem"] == DEFAULT_SBATCH_HIGH_MEM
+    assert config["cluster_plan"]["sbatch_recommendation"]["jeeds_baseline_time"] == DEFAULT_SBATCH_JEEDS_BASELINE_TIME
+    assert config["cluster_plan"]["sbatch_recommendation"]["mcse_baseline_time"] == DEFAULT_SBATCH_MCSE_BASELINE_TIME
     assert config["cluster_plan"]["sbatch_recommendation"]["time"] == "24:00:00"
+    jeeds_baseline = config["cluster_plan"]["jobs"][0]
+    assert jeeds_baseline["estimator"] == "jeeds"
+    assert jeeds_baseline["is_baseline"] is True
+    assert jeeds_baseline["mem"] == DEFAULT_SBATCH_HIGH_MEM
+    assert jeeds_baseline["time"] == DEFAULT_SBATCH_JEEDS_BASELINE_TIME
+    mcse_baseline = config["cluster_plan"]["jobs"][1]
+    assert mcse_baseline["estimator"] == "mcse"
+    assert mcse_baseline["submit_group"] == "fullpool-mcse"
+    assert mcse_baseline["time"] == DEFAULT_SBATCH_MCSE_BASELINE_TIME
 
 
 def test_build_config_is_json_serializable_and_round_trips(tmp_path: Path) -> None:

@@ -64,6 +64,11 @@ from BlackhawksSkillEstimation.player_subsample_stability import (
 
 DEFAULT_SBATCH_TIME = "24:00:00"
 DEFAULT_SBATCH_MEM = "16G"
+# Full-pool JEEDS (~2k shots × 250×250 grid) has OOM'd at 16G; 3× is the split-out default.
+DEFAULT_SBATCH_HIGH_MEM = "48G"
+DEFAULT_SBATCH_JEEDS_BASELINE_TIME = "48:00:00"
+# Linear from n=400 ≈ 15h is ~73h for 1937 shots; 96h leaves a buffer 72h does not.
+DEFAULT_SBATCH_MCSE_BASELINE_TIME = "96:00:00"
 DEFAULT_MAX_CONCURRENT = 100
 
 
@@ -136,8 +141,17 @@ def build_estimator_settings(
 def build_jobs(
     samples: dict[str, dict[str, Any]],
     estimators: Sequence[str],
+    *,
+    high_mem: str = DEFAULT_SBATCH_HIGH_MEM,
+    jeeds_baseline_time: str = DEFAULT_SBATCH_JEEDS_BASELINE_TIME,
+    mcse_baseline_time: str = DEFAULT_SBATCH_MCSE_BASELINE_TIME,
 ) -> list[dict[str, Any]]:
-    """One job per (estimator, sample). Baseline first, then N ascending."""
+    """One job per (estimator, sample). Baseline first, then N ascending.
+
+    Full-pool baselines are tagged so the bootstrap sbatch can submit them as
+    their own jobs: JEEDS needs extra RAM, MCSE needs extra walltime, and the
+    N-shot array stays on the default 16G / 24h allocation.
+    """
 
     def sort_key(sample_key: str) -> tuple[int, int, int]:
         if sample_key == BASELINE_SAMPLE_KEY:
@@ -149,17 +163,23 @@ def build_jobs(
     for sample_key in sorted(samples, key=sort_key):
         sample = samples[sample_key]
         for estimator in estimators:
-            jobs.append(
-                {
-                    "estimator": estimator,
-                    "sample_key": sample_key,
-                    "is_baseline": sample_key == BASELINE_SAMPLE_KEY,
-                    "n_requested": sample["n_requested"],
-                    "seed": sample["seed"],
-                    "n_shots": sample["n_shots"],
-                    "eligible": True,
-                }
-            )
+            job: dict[str, Any] = {
+                "estimator": estimator,
+                "sample_key": sample_key,
+                "is_baseline": sample_key == BASELINE_SAMPLE_KEY,
+                "n_requested": sample["n_requested"],
+                "seed": sample["seed"],
+                "n_shots": sample["n_shots"],
+                "eligible": True,
+            }
+            if sample_key == BASELINE_SAMPLE_KEY and estimator == "jeeds":
+                job["mem"] = high_mem
+                job["time"] = jeeds_baseline_time
+                job["submit_group"] = "fullpool-jeeds"
+            elif sample_key == BASELINE_SAMPLE_KEY and estimator == "mcse":
+                job["time"] = mcse_baseline_time
+                job["submit_group"] = "fullpool-mcse"
+            jobs.append(job)
     return jobs
 
 
@@ -183,6 +203,9 @@ def build_config(
     save_intermediate_csv: bool = True,
     sbatch_time: str = DEFAULT_SBATCH_TIME,
     sbatch_mem: str = DEFAULT_SBATCH_MEM,
+    sbatch_high_mem: str = DEFAULT_SBATCH_HIGH_MEM,
+    sbatch_jeeds_baseline_time: str = DEFAULT_SBATCH_JEEDS_BASELINE_TIME,
+    sbatch_mcse_baseline_time: str = DEFAULT_SBATCH_MCSE_BASELINE_TIME,
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> dict[str, Any]:
     data_root = Path(data_root)
@@ -225,7 +248,13 @@ def build_config(
     for n in skipped_n:
         print(f"  Skipping N={n}: larger than the {len(pool_df)}-shot pool.")
 
-    jobs = build_jobs(samples, estimators)
+    jobs = build_jobs(
+        samples,
+        estimators,
+        high_mem=sbatch_high_mem,
+        jeeds_baseline_time=sbatch_jeeds_baseline_time,
+        mcse_baseline_time=sbatch_mcse_baseline_time,
+    )
     run_name = run_name or f"player_{player_id}"
 
     return {
@@ -264,6 +293,9 @@ def build_config(
             "sbatch_recommendation": {
                 "time": sbatch_time,
                 "mem": sbatch_mem,
+                "high_mem": sbatch_high_mem,
+                "jeeds_baseline_time": sbatch_jeeds_baseline_time,
+                "mcse_baseline_time": sbatch_mcse_baseline_time,
                 "max_concurrent": int(max_concurrent),
             },
         },
@@ -347,6 +379,25 @@ def main() -> None:
     )
     parser.add_argument("--sbatch-time", default=DEFAULT_SBATCH_TIME)
     parser.add_argument("--sbatch-mem", default=DEFAULT_SBATCH_MEM)
+    parser.add_argument(
+        "--sbatch-high-mem",
+        default=DEFAULT_SBATCH_HIGH_MEM,
+        help="Memory for the JEEDS full-pool baseline, submitted as its own job "
+        f"(default: {DEFAULT_SBATCH_HIGH_MEM}, 3× the 16G array default).",
+    )
+    parser.add_argument(
+        "--sbatch-jeeds-baseline-time",
+        default=DEFAULT_SBATCH_JEEDS_BASELINE_TIME,
+        help="Walltime for the JEEDS full-pool baseline "
+        f"(default: {DEFAULT_SBATCH_JEEDS_BASELINE_TIME}).",
+    )
+    parser.add_argument(
+        "--sbatch-mcse-baseline-time",
+        default=DEFAULT_SBATCH_MCSE_BASELINE_TIME,
+        help="Walltime for the MCSE full-pool baseline "
+        f"(default: {DEFAULT_SBATCH_MCSE_BASELINE_TIME}). "
+        "72h is the linear extrapolation from n=400 with no buffer.",
+    )
     parser.add_argument("--max-concurrent", type=int, default=DEFAULT_MAX_CONCURRENT)
     parser.add_argument("--output", type=Path, default=None, help="Config JSON output path.")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan without writing.")
@@ -372,6 +423,9 @@ def main() -> None:
         save_intermediate_csv=not args.no_intermediate_csv,
         sbatch_time=args.sbatch_time,
         sbatch_mem=args.sbatch_mem,
+        sbatch_high_mem=args.sbatch_high_mem,
+        sbatch_jeeds_baseline_time=args.sbatch_jeeds_baseline_time,
+        sbatch_mcse_baseline_time=args.sbatch_mcse_baseline_time,
         max_concurrent=args.max_concurrent,
     )
 
