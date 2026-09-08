@@ -12,6 +12,9 @@ Figures
 ``subsample_by_n``        Spread of subsample estimates at each N, with the
                           full-sample baseline and the player's actual season
                           estimates on the same axes.
+``subsample_by_n_shared_ylim``
+                          Same figure, but JEEDS and MCSE share a y-scale per
+                          metric so the two spreads can be compared by eye.
 ``spread_vs_n``           How that spread shrinks with N, against the observed
                           season-to-season spread.
 ``jeeds_vs_mcse``         Do the two estimators react the same way to the same draw?
@@ -48,10 +51,10 @@ from BlackhawksSkillEstimation.player_subsample_stability import (
 )
 from Estimators.joint import hockey_rationality_log10_bounds
 
-# (column, axis label, short label)
-METRICS: tuple[tuple[str, str, str], ...] = (
-    ("exec_skill", "Execution skill (rad, lower = better)", "Execution skill"),
-    ("log10_eps", "log10 rationality (EXPERIMENTAL)", "log10 rationality"),
+# (column, axis label)
+METRICS: tuple[tuple[str, str], ...] = (
+    ("exec_skill", "Execution skill"),
+    ("log10_eps", "log10 rationality"),
 )
 
 ESTIMATOR_LABELS = {"jeeds": "JEEDS", "mcse": "MCSE"}
@@ -193,6 +196,41 @@ def _apply_metric_limits(ax: plt.Axes, metric: str, values: Sequence[float]) -> 
     ax.set_ylim(min(low, float(finite.min())) - pad, max(high, float(finite.max())) + pad)
 
 
+def _share_row_ylim(row_axes: Sequence[plt.Axes]) -> None:
+    """Set every axis in a row to the union of their current y-limits."""
+    limits = [ax.get_ylim() for ax in row_axes if ax.has_data()]
+    if not limits:
+        return
+    low = min(limit[0] for limit in limits)
+    high = max(limit[1] for limit in limits)
+    for ax in row_axes:
+        ax.set_ylim(low, high)
+
+
+def _pool_size_from_frame(frame: pd.DataFrame) -> int | None:
+    """Shot count of the full-sample baseline, if that job finished."""
+    if frame.empty or "is_baseline" not in frame.columns or "num_shots" not in frame.columns:
+        return None
+    match = frame.loc[frame["is_baseline"], "num_shots"].dropna()
+    if match.empty:
+        return None
+    return int(match.iloc[0])
+
+
+def _subsample_n_values(frame: pd.DataFrame, planned: Sequence[int] | None) -> list[int]:
+    """N values to plot: planned sizes, plus any extras that actually finished."""
+    observed = {int(x) for x in frame.loc[~frame["is_baseline"], "n_requested"].dropna()}
+    planned_set = {int(x) for x in planned} if planned else set()
+    return sorted(planned_set | observed)
+
+
+def _draw_count_tick(n: int, completed: int, planned: int | None) -> str:
+    """X-tick for one subsample size, with how many draws actually finished."""
+    if planned is None:
+        return f"N={n}\n(n={completed})"
+    return f"N={n}\n(n={completed}/{planned})"
+
+
 def plot_subsample_by_n(
     frame: pd.DataFrame,
     season_finals: pd.DataFrame,
@@ -200,11 +238,19 @@ def plot_subsample_by_n(
     estimators: Sequence[str],
     title_prefix: str,
     output_path: Path,
+    pool_size: int | None = None,
+    n_shots: Sequence[int] | None = None,
+    num_seeds: int | None = None,
+    share_y: bool = False,
 ) -> None:
-    """Subsample spread at each N, next to the observed season-to-season spread."""
+    """Subsample spread at each N, next to the observed season-to-season spread.
+
+    ``share_y`` puts JEEDS and MCSE on the same y-scale per metric (the union of
+    the two auto-scaled limits) so a wider cloud is actually wider, not just
+    plotted on a taller axis.
+    """
     rng = np.random.default_rng(_JITTER_SEED)
-    n_values = sorted({int(x) for x in frame.loc[~frame["is_baseline"], "n_requested"].dropna()})
-    categories = [f"N={n}" for n in n_values] + [SEASON_CATEGORY]
+    n_values = _subsample_n_values(frame, n_shots)
 
     fig, axes = plt.subplots(
         len(METRICS),
@@ -213,7 +259,7 @@ def plot_subsample_by_n(
         squeeze=False,
     )
 
-    for row, (metric, y_label, _short) in enumerate(METRICS):
+    for row, (metric, y_label) in enumerate(METRICS):
         for col, estimator in enumerate(estimators):
             ax = axes[row][col]
             subsamples = _subsample_rows(frame, estimator)
@@ -266,9 +312,14 @@ def plot_subsample_by_n(
                     label="Full-sample baseline",
                 )
 
+            tick_labels = [
+                _draw_count_tick(n, int(groups[i].size), num_seeds)
+                for i, n in enumerate(n_values)
+            ] + [f"{SEASON_CATEGORY}\n(n={int(season_values.size)})"]
             ax.set_xticks(positions)
-            ax.set_xticklabels(categories, rotation=0)
-            ax.set_ylabel(y_label)
+            ax.set_xticklabels(tick_labels, rotation=0)
+            if not share_y or col == 0:
+                ax.set_ylabel(y_label)
             ax.set_title(f"{ESTIMATOR_LABELS.get(estimator, estimator)}")
             ax.grid(alpha=0.25, axis="y")
             _apply_metric_limits(
@@ -279,11 +330,31 @@ def plot_subsample_by_n(
                 if handles:
                     ax.legend(handles, labels, fontsize=8, loc="best")
 
-    fig.suptitle(
-        f"{title_prefix}: subsample spread by sample size vs actual seasons",
-        fontsize=14,
-    )
-    _save(fig, output_path, rect=(0, 0, 1, 0.96))
+        if share_y and len(estimators) > 1:
+            _share_row_ylim([axes[row][c] for c in range(len(estimators))])
+            for c in range(1, len(estimators)):
+                axes[row][c].tick_params(labelleft=False)
+
+    title = f"{title_prefix}: subsample spread by sample size vs actual seasons"
+    if share_y:
+        title += " (shared y-scale)"
+    fig.suptitle(title, fontsize=14, y=0.99)
+    notes = []
+    if pool_size is not None:
+        notes.append(f"Full population size: N = {pool_size:,}")
+    if share_y:
+        notes.append("JEEDS and MCSE share a y-scale per metric")
+    if notes:
+        fig.text(
+            0.5,
+            0.955,
+            "  ·  ".join(notes),
+            ha="center",
+            va="top",
+            fontsize=11,
+            style="italic",
+        )
+    _save(fig, output_path, rect=(0, 0, 1, 0.93 if notes else 0.96))
 
 
 def spread_table(frame: pd.DataFrame, estimators: Sequence[str]) -> pd.DataFrame:
@@ -292,7 +363,7 @@ def spread_table(frame: pd.DataFrame, estimators: Sequence[str]) -> pd.DataFrame
     for estimator in estimators:
         subsamples = _subsample_rows(frame, estimator)
         for n in sorted({int(x) for x in subsamples["n_requested"].dropna()}):
-            for metric, _label, short in METRICS:
+            for metric, label in METRICS:
                 values = _finite(subsamples.loc[subsamples["n_requested"] == n, metric])
                 if values.size < 2:
                     continue
@@ -301,7 +372,7 @@ def spread_table(frame: pd.DataFrame, estimators: Sequence[str]) -> pd.DataFrame
                     {
                         "estimator": estimator,
                         "metric": metric,
-                        "metric_label": short,
+                        "metric_label": label,
                         "n_shots": n,
                         "num_samples": int(values.size),
                         "mean": float(values.mean()),
@@ -320,7 +391,7 @@ def season_spread_table(season_finals: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(rows)
 
     for estimator, group in season_finals.groupby("estimator"):
-        for metric, _label, short in METRICS:
+        for metric, label in METRICS:
             values = _finite(group[metric])
             if values.size < 2:
                 continue
@@ -329,7 +400,7 @@ def season_spread_table(season_finals: pd.DataFrame) -> pd.DataFrame:
                 {
                     "estimator": estimator,
                     "metric": metric,
-                    "metric_label": short,
+                    "metric_label": label,
                     "num_seasons": int(values.size),
                     "mean": float(values.mean()),
                     "std": float(values.std(ddof=1)),
@@ -355,7 +426,7 @@ def plot_spread_vs_n(
         squeeze=False,
     )
 
-    for row, (metric, y_label, short) in enumerate(METRICS):
+    for row, (metric, label) in enumerate(METRICS):
         for col, estimator in enumerate(estimators):
             ax = axes[row][col]
             subset = spread[(spread["estimator"] == estimator) & (spread["metric"] == metric)]
@@ -386,7 +457,7 @@ def plot_spread_vs_n(
 
             ax.set_xscale("log")
             ax.set_xlabel("Shots per subsample (N)")
-            ax.set_ylabel(f"Spread of {short.lower()}")
+            ax.set_ylabel(f"Spread of {label.lower()}")
             ax.set_title(ESTIMATOR_LABELS.get(estimator, estimator))
             ax.grid(alpha=0.25, which="both")
             if not subset.empty:
@@ -417,7 +488,7 @@ def plot_jeeds_vs_mcse(
 
     fig, axes = plt.subplots(1, len(METRICS), figsize=(6.2 * len(METRICS), 5.6), squeeze=False)
 
-    for col, (metric, label, short) in enumerate(METRICS):
+    for col, (metric, label) in enumerate(METRICS):
         ax = axes[0][col]
         xs = jeeds.loc[shared, metric].to_numpy(dtype=float)
         ys = mcse.loc[shared, metric].to_numpy(dtype=float)
@@ -460,7 +531,7 @@ def plot_jeeds_vs_mcse(
 
         ax.set_xlabel(f"JEEDS {label}")
         ax.set_ylabel(f"MCSE {label}")
-        ax.set_title(short)
+        ax.set_title(label)
         ax.grid(alpha=0.25)
 
     fig.suptitle(f"{title_prefix}: JEEDS vs MCSE on identical subsamples", fontsize=14)
@@ -494,7 +565,7 @@ def plot_season_mix(
         squeeze=False,
     )
 
-    for row, (metric, y_label, _short) in enumerate(METRICS):
+    for row, (metric, y_label) in enumerate(METRICS):
         for col, season in enumerate(available):
             ax = axes[row][col]
             xs = subsamples[f"frac_{season}"].to_numpy(dtype=float)
@@ -595,12 +666,31 @@ def main() -> None:
 
     player_name = lookup_player(player_id) or str(player_id)
     title_prefix = f"{player_name} ({player_id})"
+    configured_pool = config.get("sampling", {}).get("pool_size")
+    pool_size = int(configured_pool) if configured_pool is not None else _pool_size_from_frame(frame)
+    planned_n = [int(x) for x in (config.get("sampling", {}).get("n_shots") or [])]
+    planned_seeds = config.get("sampling", {}).get("num_seeds")
+    num_seeds = int(planned_seeds) if planned_seeds is not None else None
+    n_values = _subsample_n_values(frame, planned_n)
 
     expected = len(config.get("cluster_plan", {}).get("jobs", [])) or len(records)
     print(f"Player:      {title_prefix}")
     print(f"Run dir:     {run_dir}")
     print(f"Results:     {len(frame)} successful of {len(records)} written ({expected} planned)")
     print(f"Estimators:  {', '.join(estimators)}")
+    for estimator in estimators:
+        subs = _subsample_rows(frame, estimator)
+        parts = []
+        for n in n_values:
+            got = 0 if subs.empty else int((subs["n_requested"] == n).sum())
+            parts.append(
+                f"N={n} {got}/{num_seeds}" if num_seeds is not None else f"N={n} {got}"
+            )
+        has_baseline = bool(
+            not frame.empty
+            and ((frame["estimator"] == estimator) & frame["is_baseline"]).any()
+        )
+        print(f"  {estimator}: {', '.join(parts)}; baseline={'yes' if has_baseline else 'pending'}")
 
     season_finals = load_season_finals(player_id, shot_group=shot_group, data_root=args.data_root)
     missing_season_dots = sorted(set(seasons) - set(season_finals.get("season", pd.Series(dtype=int))))
@@ -630,7 +720,22 @@ def main() -> None:
         estimators=estimators,
         title_prefix=title_prefix,
         output_path=out_dir / "subsample_by_n.png",
+        pool_size=pool_size,
+        n_shots=planned_n or None,
+        num_seeds=num_seeds,
     )
+    if len(estimators) > 1:
+        plot_subsample_by_n(
+            frame,
+            season_finals,
+            estimators=estimators,
+            title_prefix=title_prefix,
+            output_path=out_dir / "subsample_by_n_shared_ylim.png",
+            pool_size=pool_size,
+            n_shots=planned_n or None,
+            num_seeds=num_seeds,
+            share_y=True,
+        )
     plot_spread_vs_n(
         spread,
         season_spread,
