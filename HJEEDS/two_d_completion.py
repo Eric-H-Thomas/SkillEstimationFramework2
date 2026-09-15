@@ -26,6 +26,7 @@ import numpy as np
 import scipy
 
 from . import config as experiment_config
+from .config import add_require_paper_config_argument, paper_config_required
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -373,13 +374,14 @@ def run_paper_two_d_part(
         expected_num_seeds=num_seeds,
         expected_agents_per_seed=expected_agents_per_seed,
         effective_launch_configuration=effective_launch,
+        require_paper_configuration=True,
     )
     from .darts_hierarchical_vs_jeeds import main as experiment_main
 
     return_code = experiment_main(experiment_argv)
     if return_code != 0:
         raise RuntimeError(f"Canonical 2D worker returned nonzero status {return_code}.")
-    return finalize_two_d_part_metadata(part_dir)
+    return finalize_two_d_part_metadata(part_dir, require_paper_configuration=True)
 
 
 def require_current_paper_two_d_defaults() -> None:
@@ -512,6 +514,7 @@ def begin_two_d_part_metadata(
     expected_num_seeds: int,
     expected_agents_per_seed: int,
     effective_launch_configuration: dict[str, Any],
+    require_paper_configuration: bool | None = None,
 ) -> Path:
     """Invalidate one worker partition before its simulation begins."""
 
@@ -519,17 +522,18 @@ def begin_two_d_part_metadata(
         raise ValueError("A 2D part requires a nonnegative start and positive seed count.")
     if expected_agents_per_seed <= 0:
         raise ValueError("A 2D part requires a positive agent count.")
-    require_current_paper_two_d_defaults()
-    expected_launch = paper_two_d_effective_launch(
-        part_dir,
-        seed_start=expected_seed_start,
-        num_seeds=expected_num_seeds,
-    )
-    if effective_launch_configuration != expected_launch:
-        raise ValueError(
-            "The effective 2D worker configuration is not the canonical paper launch. "
-            f"actual={effective_launch_configuration}, expected={expected_launch}"
+    if paper_config_required(require_paper_configuration):
+        require_current_paper_two_d_defaults()
+        expected_launch = paper_two_d_effective_launch(
+            part_dir,
+            seed_start=expected_seed_start,
+            num_seeds=expected_num_seeds,
         )
+        if effective_launch_configuration != expected_launch:
+            raise ValueError(
+                "The effective 2D worker configuration is not the canonical paper launch. "
+                f"actual={effective_launch_configuration}, expected={expected_launch}"
+            )
     if expected_agents_per_seed != effective_launch_configuration["model_configuration"]["num_agents"]:
         raise ValueError("The 2D worker metadata agent count disagrees with its resolved argv.")
     expected_seeds = list(
@@ -577,21 +581,26 @@ def _load_part_metadata(part_dir: Path) -> tuple[Path, dict[str, Any]]:
     return path, payload
 
 
-def finalize_two_d_part_metadata(part_dir: Path) -> Path:
+def finalize_two_d_part_metadata(
+    part_dir: Path,
+    *,
+    require_paper_configuration: bool | None = None,
+) -> Path:
     """Seal one completed worker partition under its source/config fingerprint."""
 
     path, payload = _load_part_metadata(part_dir)
     if payload.get("completion_status") != "incomplete":
         raise ValueError("2D part metadata must be incomplete before finalization.")
-    if payload.get("paper_configuration") != paper_two_d_configuration():
-        raise ValueError("2D part configuration changed before finalization.")
-    expected_launch = paper_two_d_effective_launch(
-        part_dir,
-        seed_start=int(payload.get("expected_seed_start", -1)),
-        num_seeds=int(payload.get("expected_num_seeds", -1)),
-    )
-    if payload.get("effective_launch_configuration") != expected_launch:
-        raise ValueError("2D part effective worker configuration is not the paper launch.")
+    if paper_config_required(require_paper_configuration):
+        if payload.get("paper_configuration") != paper_two_d_configuration():
+            raise ValueError("2D part configuration changed before finalization.")
+        expected_launch = paper_two_d_effective_launch(
+            part_dir,
+            seed_start=int(payload.get("expected_seed_start", -1)),
+            num_seeds=int(payload.get("expected_num_seeds", -1)),
+        )
+        if payload.get("effective_launch_configuration") != expected_launch:
+            raise ValueError("2D part effective worker configuration is not the paper launch.")
     if payload.get("runtime_provenance") != current_runtime_provenance():
         raise ValueError("2D numerical runtime changed during the worker run.")
     if payload.get("source_provenance") != build_current_two_d_source_provenance():
@@ -616,6 +625,7 @@ def validate_complete_two_d_part_metadata(
     expected_seed_start: int,
     expected_num_seeds: int,
     expected_agents_per_seed: int,
+    require_paper_configuration: bool | None = None,
 ) -> dict[str, Any]:
     """Verify one partition was produced by the current corrected worker."""
 
@@ -635,21 +645,22 @@ def validate_complete_two_d_part_metadata(
     if mismatches:
         raise ValueError(f"2D part design does not match its cluster partition: {mismatches}")
     expected_seeds, expected_agent_ids = _validate_recorded_design(payload)
-    if payload.get("paper_configuration") != paper_two_d_configuration():
-        raise ValueError("2D part does not use the fixed paper model configuration.")
-    expected_launch = paper_two_d_effective_launch(
-        part_dir,
-        seed_start=expected_seed_start,
-        num_seeds=expected_num_seeds,
-    )
-    if payload.get("effective_launch_configuration") != expected_launch:
-        raise ValueError("2D part effective worker configuration does not match its partition.")
+    if paper_config_required(require_paper_configuration):
+        if payload.get("paper_configuration") != paper_two_d_configuration():
+            raise ValueError("2D part does not use the fixed paper model configuration.")
+        expected_launch = paper_two_d_effective_launch(
+            part_dir,
+            seed_start=expected_seed_start,
+            num_seeds=expected_num_seeds,
+        )
+        if payload.get("effective_launch_configuration") != expected_launch:
+            raise ValueError("2D part effective worker configuration does not match its partition.")
+        if payload.get("source_provenance") != build_current_two_d_source_provenance():
+            raise ValueError(
+                "2D part source provenance is stale relative to the corrected checkout."
+            )
     if payload.get("runtime_provenance") != current_runtime_provenance():
         raise ValueError("2D part runtime differs from the aggregation runtime.")
-    if payload.get("source_provenance") != build_current_two_d_source_provenance():
-        raise ValueError(
-            "2D part source provenance is stale relative to the corrected checkout."
-        )
     agent_csv = Path(part_dir) / experiment_config.AGENT_LEVEL_FILENAME
     expected_hashes = payload.get("artifact_sha256") or {}
     expected_sizes = payload.get("artifact_sizes_bytes") or {}
@@ -678,6 +689,7 @@ def begin_two_d_aggregation_metadata(
     expected_num_seeds: int,
     expected_agents_per_seed: int,
     parts_per_group: int,
+    require_paper_configuration: bool | None = None,
 ) -> Path:
     """Atomically invalidate any prior aggregate before validation or writes."""
 
@@ -685,7 +697,8 @@ def begin_two_d_aggregation_metadata(
         raise ValueError("The 2D completion record requires a nonnegative start and positive seed count.")
     if expected_agents_per_seed <= 0 or parts_per_group <= 0:
         raise ValueError("The 2D completion record requires positive agent and part counts.")
-    require_current_paper_two_d_defaults()
+    if paper_config_required(require_paper_configuration):
+        require_current_paper_two_d_defaults()
     expected_seeds = list(
         range(expected_seed_start, expected_seed_start + expected_num_seeds)
     )
@@ -802,12 +815,15 @@ def validate_complete_two_d_run_metadata(
             "2D result bundle is incomplete; rerun the corrected cluster aggregation."
         )
     expected_seeds, expected_agent_ids = _validate_recorded_design(payload)
-    if payload.get("paper_configuration") != paper_two_d_configuration():
-        raise ValueError("2D result metadata does not match the fixed paper model configuration.")
-    if payload.get("source_provenance") != build_current_two_d_source_provenance():
-        raise ValueError(
-            "2D result source provenance is stale relative to the current corrected checkout."
-        )
+    if paper_config_required(require_paper_configuration):
+        if payload.get("paper_configuration") != paper_two_d_configuration():
+            raise ValueError(
+                "2D result metadata does not match the fixed paper model configuration."
+            )
+        if payload.get("source_provenance") != build_current_two_d_source_provenance():
+            raise ValueError(
+                "2D result source provenance is stale relative to the current corrected checkout."
+            )
 
     required_names = tuple(payload.get("required_artifacts") or ())
     recorded_hashes = payload.get("artifact_sha256") or {}
@@ -845,7 +861,7 @@ def validate_complete_two_d_run_metadata(
     if payload.get("observed_agent_design") != observed_design:
         raise ValueError("2D completion metadata and agent-level observation design disagree.")
 
-    if require_paper_configuration:
+    if paper_config_required(require_paper_configuration):
         required = {
             "expected_seed_start": PAPER_TWO_D_SEED_START,
             "expected_num_seeds": PAPER_TWO_D_NUM_SEEDS,
@@ -879,6 +895,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run_parser.add_argument("--num-seeds", type=int, required=True)
     run_parser.add_argument("--expected-agents", type=int, default=25)
     run_parser.add_argument("--parts-per-group", type=int, required=True)
+    add_require_paper_config_argument(run_parser)
 
     part_parser = subparsers.add_parser(
         "run-paper-part",
@@ -900,6 +917,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_num_seeds=args.num_seeds,
             expected_agents_per_seed=args.expected_agents,
             parts_per_group=args.parts_per_group,
+            require_paper_configuration=args.require_paper_config,
         )
         print(f"[2d-provenance] Marked cluster aggregate incomplete: {path.resolve()}")
         return 0

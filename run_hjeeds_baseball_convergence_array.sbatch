@@ -68,6 +68,9 @@ else
   agent_index="${AGENT_INDEX:-${SLURM_ARRAY_TASK_ID:-0}}"
   python_args+=(--agent-index "${agent_index}" --use-prepared-roster)
 fi
+if [[ "${HJEEDS_REQUIRE_PAPER_CONFIG:-}" =~ ^(1|true|yes)$ ]]; then
+  python_args+=(--require-paper-config)
+fi
 
 echo "[baseball-convergence] Starting: ${python_bin} ${python_args[*]}" >&2
 "${python_bin}" "${python_args[@]}"

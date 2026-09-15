@@ -87,6 +87,7 @@ from HJEEDS.config import (
     SUMMARY_BY_BUCKET_CSV_HEADER,
     SUMMARY_OVERALL_CSV_HEADER,
     _parse_count_buckets,
+    add_require_paper_config_argument,
     parse_seed_argument,
 )
 from HJEEDS.models import StatcastConvergenceAgentResult
@@ -241,6 +242,7 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
             "The publication path treats separability as required."
         ),
     )
+    add_require_paper_config_argument(parser)
     return parser.parse_args(argv)
 
 

@@ -69,8 +69,8 @@ if ! [[ "${base_seed_start}" =~ ^[0-9]+$ ]]; then
   echo "Error: BASE_SEED_START must be a nonnegative integer." >&2
   exit 1
 fi
-if [[ "${expected_agents_per_seed}" != "25" ]]; then
-  echo "Error: EXPECTED_AGENTS_PER_SEED must be 25 for the canonical 2D paper workflow." >&2
+if [[ "${HJEEDS_REQUIRE_PAPER_CONFIG:-}" =~ ^(1|true|yes)$ && "${expected_agents_per_seed}" != "25" ]]; then
+  echo "Error: EXPECTED_AGENTS_PER_SEED must be 25 when HJEEDS_REQUIRE_PAPER_CONFIG is set." >&2
   exit 1
 fi
 if (( seeds_per_group % parts_per_group != 0 )); then
@@ -89,13 +89,19 @@ if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
   for (( group_index=0; group_index<group_count; group_index++ )); do
     group_dir="HJEEDS/results/2d_cluster_tests/cluster_${group_index}"
     group_seed_start=$(( base_seed_start + group_index * seeds_per_group ))
-    "${python_bin}" -m HJEEDS.aggregate_cluster_seeds \
-      --group-dir "${group_dir}" \
-      --parts-per-group "${parts_per_group}" \
-      --expected-seed-start "${group_seed_start}" \
-      --expected-num-seeds "${seeds_per_group}" \
-      --expected-agents-per-seed "${expected_agents_per_seed}" \
+    aggregate_args=(
+      -m HJEEDS.aggregate_cluster_seeds
+      --group-dir "${group_dir}"
+      --parts-per-group "${parts_per_group}"
+      --expected-seed-start "${group_seed_start}"
+      --expected-num-seeds "${seeds_per_group}"
+      --expected-agents-per-seed "${expected_agents_per_seed}"
       --cleanup
+    )
+    if [[ "${HJEEDS_REQUIRE_PAPER_CONFIG:-}" =~ ^(1|true|yes)$ ]]; then
+      aggregate_args+=(--require-paper-config)
+    fi
+    "${python_bin}" "${aggregate_args[@]}"
   done
   exit 0
 fi

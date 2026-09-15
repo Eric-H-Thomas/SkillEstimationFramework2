@@ -8,12 +8,18 @@ import csv
 import math
 import shutil
 import sys
+import warnings
 from pathlib import Path
 from typing import Iterable
 
 from HJEEDS.aggregation import aggregate_results_across_seeds, summarize_seed_results
 from HJEEDS.artifacts import plot_error_by_bucket, write_agent_level_csv, write_summary_csvs
-from HJEEDS.config import AGENT_LEVEL_CSV_HEADER, planned_output_paths
+from HJEEDS.config import (
+    AGENT_LEVEL_CSV_HEADER,
+    add_require_paper_config_argument,
+    paper_config_required,
+    planned_output_paths,
+)
 from HJEEDS.models import AgentResult, MethodEstimate, SeedResult
 from HJEEDS.two_d_completion import (
     begin_two_d_aggregation_metadata,
@@ -156,6 +162,7 @@ def _validate_seed_agent_coverage(
     expected_seed_start: int,
     expected_num_seeds: int,
     expected_agents_per_seed: int,
+    require_optimizer_selected_population_fit: bool | None = None,
 ) -> None:
     """Reject partial, duplicated, or out-of-design cluster result rows."""
 
@@ -254,11 +261,14 @@ def _validate_seed_agent_coverage(
             if len(invalid_population_fits) <= len(preview)
             else f" (+{len(invalid_population_fits) - len(preview)} more)"
         )
-        raise ValueError(
+        message = (
             "Missing a converged optimizer-selected population-fit diagnostic; "
             "refusing to aggregate 2D results: "
             f"{preview}{suffix}."
         )
+        if paper_config_required(require_optimizer_selected_population_fit):
+            raise ValueError(message)
+        warnings.warn(message, stacklevel=2)
     if missing_truth_metrics:
         preview = missing_truth_metrics[:10]
         suffix = (
@@ -292,9 +302,12 @@ def aggregate_group(
     expected_num_seeds: int,
     expected_agents_per_seed: int,
     include_raw_rationality_error: bool = False,
+    require_paper_configuration: bool | None = None,
 ) -> None:
     if parts_per_group <= 0:
         raise ValueError("parts_per_group must be positive.")
+
+    require_paper = paper_config_required(require_paper_configuration)
 
     # Invalidate any prior aggregate before inspecting or rewriting part
     # outputs. If validation, plotting, cleanup, or any later write fails, this
@@ -305,6 +318,7 @@ def aggregate_group(
         expected_num_seeds=expected_num_seeds,
         expected_agents_per_seed=expected_agents_per_seed,
         parts_per_group=parts_per_group,
+        require_paper_configuration=require_paper,
     )
     if expected_num_seeds % parts_per_group != 0:
         raise ValueError(
@@ -322,6 +336,7 @@ def aggregate_group(
             expected_seed_start=expected_seed_start + part_index * seeds_per_part,
             expected_num_seeds=seeds_per_part,
             expected_agents_per_seed=expected_agents_per_seed,
+            require_paper_configuration=require_paper,
         )
 
     all_agent_results: list[AgentResult] = []
@@ -352,6 +367,7 @@ def aggregate_group(
         expected_seed_start=expected_seed_start,
         expected_num_seeds=expected_num_seeds,
         expected_agents_per_seed=expected_agents_per_seed,
+        require_optimizer_selected_population_fit=require_paper,
     )
 
     seed_results: list[SeedResult] = []
@@ -437,6 +453,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "execution error and decision-skill percentage-point error."
         ),
     )
+    add_require_paper_config_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -450,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
         expected_num_seeds=args.expected_num_seeds,
         expected_agents_per_seed=args.expected_agents_per_seed,
         include_raw_rationality_error=args.include_raw_rationality_error,
+        require_paper_configuration=args.require_paper_config,
     )
     return 0
 

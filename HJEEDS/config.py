@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 from pathlib import Path
 from typing import Sequence
 
@@ -200,6 +201,43 @@ def parse_seed_argument(raw_value: str) -> int:
     if seed < 0:
         raise argparse.ArgumentTypeError(f"Seed must be nonnegative. Received: {seed}.")
     return seed
+
+
+PAPER_CONFIG_ENV_VAR = "HJEEDS_REQUIRE_PAPER_CONFIG"
+REQUIRE_PAPER_CONFIG_HELP = (
+    "Enable publication-only checks (frozen paper cohorts, canonical Statcast "
+    "artifact hashes, 2D paper defaults, optimizer-selected population fits). "
+    "Off by default so new experiments can run. Paper launchers pass this flag "
+    f"or set {PAPER_CONFIG_ENV_VAR}=1."
+)
+
+
+def paper_config_required(explicit: bool | None = None) -> bool:
+    """Return whether publication-only checks should run.
+
+    Explicit True always enables the checks. Otherwise honor
+    ``HJEEDS_REQUIRE_PAPER_CONFIG``. argparse ``store_true`` False is treated as
+    unspecified so paper launchers can enable the checks via the environment.
+    Defaults to off so new experiments are not blocked by frozen paper pins.
+    """
+
+    if explicit:
+        return True
+    return os.environ.get(PAPER_CONFIG_ENV_VAR, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def add_require_paper_config_argument(parser: argparse.ArgumentParser) -> None:
+    """Add the shared ``--require-paper-config`` flag."""
+
+    parser.add_argument(
+        "--require-paper-config",
+        action="store_true",
+        help=REQUIRE_PAPER_CONFIG_HELP,
+    )
 
 
 def planned_output_paths(output_dir: Path) -> dict[str, Path]:

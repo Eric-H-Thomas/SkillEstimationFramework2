@@ -20,6 +20,7 @@ agg_time="02:00:00"
 agg_mem="4G"
 dry_run="0"
 agg_only="0"
+require_paper_config="0"
 
 usage() {
   cat <<'USAGE'
@@ -30,7 +31,8 @@ Options:
   --group-count N         Number of group dirs (default: 1; canonical paper run).
   --seeds-per-group N     Seeds per group (default: 500).
   --base-seed-start N     First base seed for group 0 (default: 1000).
-  --expected-agents N     Exact agent count required per seed (must be 25).
+  --expected-agents N     Exact agent count required per seed (default: 25).
+  --require-paper-config  Enable publication-only 2D checks (25 agents/seed, paper defaults).
   --python-bin PATH       Explicit Python executable; bypasses Conda activation.
   --conda-env NAME        Conda environment when --python-bin is unset (default: skill-estimation).
   --agg-time HH:MM:SS     Walltime for aggregation job (default: 02:00:00).
@@ -87,6 +89,10 @@ while [[ $# -gt 0 ]]; do
       agg_only="1"
       shift
       ;;
+    --require-paper-config)
+      require_paper_config="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -115,8 +121,8 @@ if ! [[ "${base_seed_start}" =~ ^[0-9]+$ ]] || (( base_seed_start < 0 )); then
   echo "Error: --base-seed-start must be a nonnegative integer." >&2
   exit 1
 fi
-if [[ "${expected_agents_per_seed}" != "25" ]]; then
-  echo "Error: --expected-agents must be 25 for the canonical 2D paper workflow." >&2
+if [[ "${require_paper_config}" == "1" && "${expected_agents_per_seed}" != "25" ]]; then
+  echo "Error: --expected-agents must be 25 when --require-paper-config is set." >&2
   exit 1
 fi
 if (( seeds_per_group % parts_per_group != 0 )); then
@@ -152,6 +158,9 @@ array_size=$(( group_count * parts_per_group ))
 array_spec="0-$((array_size - 1))"
 
 export_env="ALL,HJEEDS_REPO_ROOT=${repo_root},PARTS_PER_GROUP=${parts_per_group},GROUP_COUNT=${group_count},SEEDS_PER_GROUP=${seeds_per_group},BASE_SEED_START=${base_seed_start},EXPECTED_AGENTS_PER_SEED=${expected_agents_per_seed},CONDA_ENV=${conda_env}"
+if [[ "${require_paper_config}" == "1" ]]; then
+  export_env="${export_env},HJEEDS_REQUIRE_PAPER_CONFIG=1"
+fi
 if [[ -n "${python_bin}" ]]; then
   export_env="${export_env},PYTHON_BIN=${python_bin}"
 fi
@@ -217,12 +226,18 @@ fi
 
 for (( group_index=0; group_index<group_count; group_index++ )); do
   group_seed_start=$(( base_seed_start + group_index * seeds_per_group ))
-  "${metadata_python[@]}" -m HJEEDS.two_d_completion begin-run \
-    --group-dir "HJEEDS/results/2d_cluster_tests/cluster_${group_index}" \
-    --seed-start "${group_seed_start}" \
-    --num-seeds "${seeds_per_group}" \
-    --expected-agents "${expected_agents_per_seed}" \
+  begin_run_args=(
+    -m HJEEDS.two_d_completion begin-run
+    --group-dir "HJEEDS/results/2d_cluster_tests/cluster_${group_index}"
+    --seed-start "${group_seed_start}"
+    --num-seeds "${seeds_per_group}"
+    --expected-agents "${expected_agents_per_seed}"
     --parts-per-group "${parts_per_group}"
+  )
+  if [[ "${require_paper_config}" == "1" ]]; then
+    begin_run_args+=(--require-paper-config)
+  fi
+  "${metadata_python[@]}" "${begin_run_args[@]}"
 done
 
 array_output="$("${array_cmd[@]}")"

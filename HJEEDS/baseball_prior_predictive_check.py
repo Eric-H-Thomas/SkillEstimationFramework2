@@ -159,7 +159,7 @@ def run_check(args: argparse.Namespace) -> dict[str, Any]:
     if args.sigma_center_feet <= 0.0:
         raise ValueError("sigma center must be positive.")
 
-    all_data = load_processed_statcast()
+    all_data = load_processed_statcast(validate_artifact=True)
     contexts, positions, eligible_count = select_contexts(
         all_data,
         season_year=args.season_year,
@@ -168,7 +168,12 @@ def run_check(args: argparse.Namespace) -> dict[str, Any]:
     )
     sigma_grid = build_execution_skill_grid(DEFAULT_DELTA)
     sigma = float(sigma_grid[int(np.argmin(np.abs(sigma_grid - args.sigma_center_feet)))])
-    runtime = build_baseball_runtime(np.random.default_rng(12345), (sigma,), delta=DEFAULT_DELTA)
+    runtime = build_baseball_runtime(
+        np.random.default_rng(12345),
+        (sigma,),
+        delta=DEFAULT_DELTA,
+        validate_artifact=True,
+    )
 
     expected_utility_surfaces: list[np.ndarray] = []
     context_records: list[dict[str, Any]] = []

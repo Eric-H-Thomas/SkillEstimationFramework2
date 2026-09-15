@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from HJEEDS import plot_main_paper_baseline as baseline_plot
+from HJEEDS.config import paper_config_required
 from scripts.runners import run_publication_bench as publication_bench
 
 
@@ -272,7 +274,26 @@ class BaselinePlotInputGuardTests(unittest.TestCase):
 
             parsed = baseline_plot.read_summary_rows(summary_path)
             with self.assertRaisesRegex(ValueError, "seed coverage is partial"):
-                baseline_plot.validate_summary_against_agent_results(parsed, agent_path)
+                baseline_plot.validate_summary_against_agent_results(
+                    parsed,
+                    agent_path,
+                    require_paper_cohort=True,
+                )
+
+    def test_partial_seed_run_is_allowed_without_paper_cohort(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            summary_path = root / "summary_by_bucket.csv"
+            agent_path = root / "agent_level_results.csv"
+            self._write_csv(summary_path, self.SUMMARY_COLUMNS, self._summary_rows())
+            self._write_csv(agent_path, self.AGENT_COLUMNS, self._agent_rows())
+
+            parsed = baseline_plot.read_summary_rows(summary_path)
+            baseline_plot.validate_summary_against_agent_results(
+                parsed,
+                agent_path,
+                expected_agents_per_bucket=1,
+            )
 
     def test_structurally_consistent_pre_fix_agent_rows_are_rejected(self) -> None:
         mutations = (
@@ -310,7 +331,23 @@ class BaselinePlotInputGuardTests(unittest.TestCase):
                         expected_first_seed=10,
                         expected_num_seeds=2,
                         expected_agents_per_bucket=1,
+                        require_optimizer_selected_population_fit=True,
                     )
+
+
+class PaperConfigFlagTests(unittest.TestCase):
+    def test_explicit_true_enables_checks(self) -> None:
+        with mock.patch.dict(os.environ, {"HJEEDS_REQUIRE_PAPER_CONFIG": ""}, clear=False):
+            os.environ.pop("HJEEDS_REQUIRE_PAPER_CONFIG", None)
+            self.assertTrue(paper_config_required(True))
+            self.assertFalse(paper_config_required())
+            self.assertFalse(paper_config_required(False))
+
+    def test_argparse_false_still_honors_environment(self) -> None:
+        with mock.patch.dict(os.environ, {"HJEEDS_REQUIRE_PAPER_CONFIG": "1"}):
+            self.assertTrue(paper_config_required(False))
+            self.assertTrue(paper_config_required())
+            self.assertTrue(paper_config_required(True))
 
 
 if __name__ == "__main__":

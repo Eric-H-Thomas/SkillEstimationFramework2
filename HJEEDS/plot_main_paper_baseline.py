@@ -24,6 +24,7 @@ from HJEEDS.artifacts import (
     METHOD_ORDER,
     method_label,
 )
+from HJEEDS.config import add_require_paper_config_argument, paper_config_required
 from HJEEDS.sensitivity_plot_common import (
     CHARCOAL,
     GRID_COLOR,
@@ -97,14 +98,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--expected-first-seed",
         type=int,
-        default=PAPER_FIRST_SEED,
-        help="First required seed in the linked agent-level paper run (default: 12345).",
+        default=None,
+        help=(
+            "First required seed in the linked agent-level run. Defaults to the "
+            "paper first seed only when --require-paper-config is set."
+        ),
     )
     parser.add_argument(
         "--expected-num-seeds",
         type=int,
-        default=PAPER_NUM_SEEDS,
-        help="Exact required seed count in the linked agent-level paper run (default: 500).",
+        default=None,
+        help=(
+            "Exact required seed count in the linked agent-level run. Defaults to "
+            "the paper seed count only when --require-paper-config is set."
+        ),
     )
     parser.add_argument(
         "--agent-level-csv",
@@ -116,6 +123,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--output-stem", type=Path, default=DEFAULT_OUTPUT_STEM)
     parser.add_argument("--dpi", type=int, default=450)
+    add_require_paper_config_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -255,22 +263,38 @@ def validate_summary_against_agent_results(
     rows: Sequence[dict[str, Any]],
     agent_level_csv: Path,
     *,
-    expected_first_seed: int = PAPER_FIRST_SEED,
-    expected_num_seeds: int = PAPER_NUM_SEEDS,
+    expected_first_seed: int | None = None,
+    expected_num_seeds: int | None = None,
     expected_agents_per_bucket: int = PAPER_AGENTS_PER_BUCKET,
+    require_paper_cohort: bool | None = None,
+    require_optimizer_selected_population_fit: bool | None = None,
 ) -> None:
     """Reject a stale summary by recomputing every plotted cell from agent rows."""
 
-    if expected_num_seeds <= 0 or expected_agents_per_bucket <= 0:
-        raise ValueError("Expected seed and per-bucket agent counts must be positive.")
-    expected_seeds = set(
-        range(expected_first_seed, expected_first_seed + expected_num_seeds)
-    )
+    if expected_agents_per_bucket <= 0:
+        raise ValueError("Expected per-bucket agent counts must be positive.")
+    strict_cohort = paper_config_required(require_paper_cohort)
+    if require_optimizer_selected_population_fit is None:
+        require_optimizer_selected_population_fit = strict_cohort
+    if strict_cohort:
+        if expected_first_seed is None:
+            expected_first_seed = PAPER_FIRST_SEED
+        if expected_num_seeds is None:
+            expected_num_seeds = PAPER_NUM_SEEDS
+    if expected_first_seed is not None and expected_num_seeds is not None:
+        if expected_num_seeds <= 0:
+            raise ValueError("Expected seed counts must be positive.")
+        expected_seeds = set(
+            range(expected_first_seed, expected_first_seed + expected_num_seeds)
+        )
+    else:
+        expected_seeds = None
     try:
         agent_validation = validate_agent_csv(
             agent_level_csv,
             expected_seeds,
             expected_environment="1d",
+            require_optimizer_selected_population_fit=require_optimizer_selected_population_fit,
         )
     except ValueError as error:
         if "seed mismatch" in str(error):
@@ -363,7 +387,7 @@ def validate_summary_against_agent_results(
     if not seen_agents:
         raise ValueError(f"No agent rows found in {agent_level_csv}.")
     observed_seeds = {seed for seed, _agent_id in seen_agents}
-    if observed_seeds != expected_seeds:
+    if expected_seeds is not None and observed_seeds != expected_seeds:
         raise ValueError(
             "Baseline agent-level seed coverage is partial or noncanonical: "
             f"expected {expected_first_seed}..{expected_first_seed + expected_num_seeds - 1}, "
@@ -371,7 +395,7 @@ def validate_summary_against_agent_results(
         )
     incorrect_cells = {
         (seed, bucket): agents_by_seed_bucket.get((seed, bucket), 0)
-        for seed in sorted(expected_seeds)
+        for seed in sorted(expected_seeds if expected_seeds is not None else observed_seeds)
         for bucket in CANONICAL_BUCKETS
         if agents_by_seed_bucket.get((seed, bucket), 0) != expected_agents_per_bucket
     }
@@ -646,6 +670,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         agent_level_csv,
         expected_first_seed=args.expected_first_seed,
         expected_num_seeds=args.expected_num_seeds,
+        require_paper_cohort=args.require_paper_config,
     )
     render(rows, args.output_stem, args.dpi)
     print(

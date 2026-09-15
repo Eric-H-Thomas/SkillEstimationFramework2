@@ -12,6 +12,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+export HJEEDS_REQUIRE_PAPER_CONFIG=1
+
 exec "${script_dir}/submit_hjeeds_baseball_convergence_array.sh" \
   --seed default \
   --season-year 2021 \

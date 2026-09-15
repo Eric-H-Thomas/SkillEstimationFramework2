@@ -85,7 +85,12 @@ from HJEEDS.baseball_roster import (
     resolve_baseball_roster,
     roster_selector_kwargs_from_args,
 )
-from HJEEDS.config import ExperimentConfig, parse_seed_argument
+from HJEEDS.config import (
+    ExperimentConfig,
+    add_require_paper_config_argument,
+    paper_config_required,
+    parse_seed_argument,
+)
 from HJEEDS.estimation import run_independent_jeeds_baseline
 from HJEEDS.models import HyperpriorConfig, MethodEstimate
 
@@ -208,9 +213,12 @@ def _validate_paper_roster_if_requested(
     max_agents: int | None,
     confidence: str,
     roster_selector: dict[str, Any],
+    require_paper_roster: bool | None = None,
 ) -> None:
     """Fail before inference if the canonical paper design resolves differently."""
 
+    if not paper_config_required(require_paper_roster):
+        return
     is_paper_design = (
         season_year == 2021
         and list(pitch_types) == ["FF"]
@@ -394,6 +402,7 @@ def parse_calibration_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         ),
     )
     add_common_roster_arguments(parser)
+    add_require_paper_config_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -631,6 +640,7 @@ def write_calibration_roster(
     confidence: str,
     sigma_grid: Sequence[float],
     log_lambda_grid: Sequence[float],
+    require_paper_roster: bool | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     _validate_paper_roster_if_requested(
@@ -642,6 +652,7 @@ def write_calibration_roster(
         max_agents=max_agents,
         confidence=confidence,
         roster_selector=roster_selector,
+        require_paper_roster=require_paper_roster,
     )
     path = roster_path_for(output_dir)
     payload = [
@@ -1190,6 +1201,7 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         max_agents=args.max_agents,
         confidence=args.confidence,
         roster_selector=roster_selector_kwargs_from_args(args),
+        require_paper_roster=getattr(args, "require_paper_config", False),
     )
     context = _make_calibration_context(
         args,
@@ -1209,6 +1221,7 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         confidence=args.confidence,
         sigma_grid=context.sigma_grid,
         log_lambda_grid=context.log_lambda_grid,
+        require_paper_roster=getattr(args, "require_paper_config", False),
     )
     _write_incomplete_completion(
         output_dir,
@@ -1277,6 +1290,7 @@ def prepare_roster(args: argparse.Namespace) -> Path:
         confidence=args.confidence,
         sigma_grid=sigma_grid,
         log_lambda_grid=log_lambda_grid,
+        require_paper_roster=getattr(args, "require_paper_config", False),
     )
     metadata = load_calibration_roster_metadata(output_dir)
     _write_incomplete_completion(
@@ -1395,6 +1409,7 @@ def aggregate_results(args: argparse.Namespace) -> dict[str, Any]:
         max_agents=metadata.get("max_agents"),
         confidence=str(metadata.get("confidence", args.confidence)),
         roster_selector=dict(metadata.get("roster_selector") or {}),
+        require_paper_roster=getattr(args, "require_paper_config", False),
     )
     provenance_roster = _roster_selection_from_specs(args, roster_specs)
     provenance_config = _build_calibration_config(args, provenance_roster, output_dir)
@@ -1500,7 +1515,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.validate_results:
-        completion = validate_calibration_completion(Path(args.output_dir))
+        completion = validate_calibration_completion(
+            Path(args.output_dir),
+            require_paper_calibration=paper_config_required(
+                getattr(args, "require_paper_config", False)
+            ),
+        )
         print(
             f"[baseball-calibrate] Validated completed calibration at "
             f"{Path(args.output_dir).resolve()} "

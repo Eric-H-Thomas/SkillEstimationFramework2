@@ -614,7 +614,29 @@ class BaseballCalibrationCompletionTests(unittest.TestCase):
                     "top_pitchers": None,
                     "bbip_extremes": None,
                 },
+                require_paper_roster=True,
             )
+
+    def test_canonical_design_allows_a_different_roster_without_paper_guard(self) -> None:
+        fake_roster = tuple(
+            StatcastAgentSpec(agent_id=index, pitcher_id=100_000 + index, pitch_type="FF")
+            for index in range(528)
+        )
+        _validate_paper_roster_if_requested(
+            fake_roster,
+            season_year=2021,
+            pitch_types=("FF",),
+            min_pitches_per_agent=100,
+            max_pitches_per_agent=None,
+            max_agents=None,
+            confidence="low",
+            roster_selector={
+                "all_eligible_agents": True,
+                "pitcher_ids": None,
+                "top_pitchers": None,
+                "bbip_extremes": None,
+            },
+        )
 
     def test_failed_output_commit_leaves_incomplete_sentinel(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

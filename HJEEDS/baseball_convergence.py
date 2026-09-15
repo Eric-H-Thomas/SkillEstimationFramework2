@@ -65,7 +65,7 @@ from .baseball_roster import (
     resolve_baseball_roster,
     roster_selector_kwargs_from_args,
 )
-from .config import _parse_count_buckets
+from .config import _parse_count_buckets, paper_config_required
 from .estimation import (
     build_discrete_hierarchical_prior,
     fit_population_hyperparameters_map,
@@ -672,6 +672,8 @@ def validate_convergence_metadata_against_config(
     metadata: dict[str, Any],
     config: BaseballConvergenceConfig,
     expected_provenance: dict[str, Any],
+    *,
+    require_paper_configuration: bool | None = None,
 ) -> None:
     required = {
         "season_year": config.season_year,
@@ -704,7 +706,7 @@ def validate_convergence_metadata_against_config(
         and metadata.get("max_reference_pitches") == 100
         and metadata.get("convergence_ns") == [5, 10, 25, 50, 100]
     )
-    if is_paper_bbip20:
+    if is_paper_bbip20 and paper_config_required(require_paper_configuration):
         actual_roster_hash = _spec_roster_fingerprint(config.agent_specs)
         if actual_roster_hash != PAPER_BBIP20_ROSTER_SHA256:
             raise ValueError(
@@ -1135,6 +1137,7 @@ def write_convergence_roster(
     roster_selector: dict[str, Any],
     run_provenance: dict[str, Any],
     all_data: pd.DataFrame | None = None,
+    require_paper_configuration: bool | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = convergence_roster_path_for(output_dir)
@@ -1219,7 +1222,7 @@ def write_convergence_roster(
             and max_reference_pitches == 100
             and list(convergence_ns) == [5, 10, 25, 50, 100]
         )
-        if is_paper_bbip20:
+        if is_paper_bbip20 and paper_config_required(require_paper_configuration):
             actual_roster_hash = _spec_roster_fingerprint(roster.agent_specs)
             if actual_roster_hash != PAPER_BBIP20_ROSTER_SHA256:
                 raise ValueError(
@@ -1649,6 +1652,7 @@ def prepare_convergence_roster(args) -> Path:
         roster_selector=roster_selector_kwargs_from_args(args),
         run_provenance=run_provenance,
         all_data=all_data,
+        require_paper_configuration=getattr(args, "require_paper_config", False),
     )
     # Preparing a new distributed run must invalidate any older complete bundle
     # immediately. Otherwise an identical frozen roster could leave stale paper
@@ -1678,7 +1682,12 @@ def run_convergence_agent_index(args, agent_index: int) -> Path:
     config = _config_with_agent_specs(build_baseball_convergence_config_from_args(args), roster)
     metadata = load_convergence_roster_metadata(output_dir)
     expected_provenance = build_convergence_run_provenance(config)
-    validate_convergence_metadata_against_config(metadata, config, expected_provenance)
+    validate_convergence_metadata_against_config(
+        metadata,
+        config,
+        expected_provenance,
+        require_paper_configuration=getattr(args, "require_paper_config", False),
+    )
     seed = config.seed_values[0]
     cache = run_single_agent_convergence_cache(config, seed, agent_spec)
     out_path = agent_cache_path_for(output_dir, agent_spec.agent_id)
@@ -1698,7 +1707,12 @@ def aggregate_convergence_results(args) -> tuple[list[StatcastConvergenceAgentRe
     config = _config_with_agent_specs(build_baseball_convergence_config_from_args(args), roster)
     metadata = load_convergence_roster_metadata(output_dir)
     expected_provenance = build_convergence_run_provenance(config)
-    validate_convergence_metadata_against_config(metadata, config, expected_provenance)
+    validate_convergence_metadata_against_config(
+        metadata,
+        config,
+        expected_provenance,
+        require_paper_configuration=getattr(args, "require_paper_config", False),
+    )
     begin_convergence_run_metadata(
         output_dir,
         args=args,

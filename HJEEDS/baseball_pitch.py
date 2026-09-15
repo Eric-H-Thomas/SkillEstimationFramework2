@@ -25,6 +25,7 @@ from scipy.signal import fftconvolve
 from scipy.stats import multivariate_normal
 
 from .baseball_provenance import PROCESSED_ARTIFACT_REFERENCE
+from .config import paper_config_required
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATCAST_DIR = REPO_ROOT / "Data" / "Baseball" / "StatcastData"
@@ -182,15 +183,32 @@ def _validate_processed_payload(payload: tuple, reference: dict) -> None:
 
 
 @lru_cache(maxsize=1)
-def _load_processed_pickle() -> tuple:
-    """Load the canonical processed artifact paired with the tracked ``final_OP`` model."""
+def _load_processed_pickle_raw() -> tuple:
+    """Unpickle the Statcast artifact without publication hash checks."""
 
     if not PROCESSED_PICKLE.is_file():
         raise FileNotFoundError(
             f"Processed Statcast pickle not found: {PROCESSED_PICKLE}. "
-            "Obtain the canonical paper artifact documented in README.md. A freshly "
-            "downloaded/refit dataset is not interchangeable with final_OP's training preprocessing."
+            "Place ProcessedData-From-GivenFiles.pkl under Data/Baseball/StatcastData/. "
+            "The paper workflow additionally requires the canonical hash-pinned artifact "
+            "documented in Data/Baseball/StatcastData/README.md."
         )
+    with PROCESSED_PICKLE.open("rb") as handle:
+        loaded = pickle.load(handle)
+    try:
+        payload = tuple(loaded[0])
+    except (IndexError, TypeError) as exc:
+        raise ValueError(f"Malformed processed Statcast pickle: {PROCESSED_PICKLE}") from exc
+    if len(payload) != 6:
+        raise ValueError(
+            f"Processed Statcast payload must contain six items; received {len(payload)}."
+        )
+    return payload
+
+
+def _validate_canonical_processed_artifact(payload: tuple) -> None:
+    """Reject pickle/model files that are not the frozen paper artifact."""
+
     reference = _load_processed_artifact_reference()
     expected_bytes = int(reference["pickle_bytes"])
     if PROCESSED_PICKLE.stat().st_size != expected_bytes:
@@ -206,20 +224,22 @@ def _load_processed_pickle() -> tuple:
         )
     if _sha256(MODEL_WEIGHTS) != reference["model_weights_sha256"]:
         raise ValueError("Tracked final_OP weights do not match the canonical artifact metadata.")
-    with PROCESSED_PICKLE.open("rb") as handle:
-        loaded = pickle.load(handle)
-    try:
-        payload = tuple(loaded[0])
-    except (IndexError, TypeError) as exc:
-        raise ValueError(f"Malformed processed Statcast pickle: {PROCESSED_PICKLE}") from exc
     _validate_processed_payload(payload, reference)
+
+
+def _load_processed_pickle(*, validate_artifact: bool | None = None) -> tuple:
+    """Load the processed Statcast pickle, optionally checking the paper hashes."""
+
+    payload = _load_processed_pickle_raw()
+    if paper_config_required(validate_artifact):
+        _validate_canonical_processed_artifact(payload)
     return payload
 
 
-def load_processed_statcast() -> pd.DataFrame:
+def load_processed_statcast(*, validate_artifact: bool | None = None) -> pd.DataFrame:
     """Load the merged Statcast dataframe from the processed pickle."""
 
-    return _load_processed_pickle()[0]
+    return _load_processed_pickle(validate_artifact=validate_artifact)[0]
 
 
 def filter_statcast_by_season(all_data: pd.DataFrame, season_year: int | None) -> pd.DataFrame:
@@ -243,7 +263,11 @@ def _infer_grid_delta(targets: np.ndarray) -> float:
     return float(np.median(positive))
 
 
-def build_strike_zone_grids(delta: float = DEFAULT_DELTA) -> tuple[StrikeZoneGrids, np.ndarray]:
+def build_strike_zone_grids(
+    delta: float = DEFAULT_DELTA,
+    *,
+    validate_artifact: bool | None = None,
+) -> tuple[StrikeZoneGrids, np.ndarray]:
     """Load strike-zone grids from the processed Statcast pickle; require matching ``delta``."""
 
     (
@@ -253,7 +277,7 @@ def build_strike_zone_grids(delta: float = DEFAULT_DELTA) -> tuple[StrikeZoneGri
         model_targets_plate_z,
         possible_targets_feet,
         possible_targets_for_model,
-    ) = _load_processed_pickle()
+    ) = _load_processed_pickle(validate_artifact=validate_artifact)
     possible_targets_feet = np.asarray(possible_targets_feet, dtype=float)
     possible_targets_for_model = np.asarray(possible_targets_for_model, dtype=float)
     targets_plate_x_feet = np.unique(possible_targets_feet[:, 0])
@@ -472,10 +496,11 @@ def build_baseball_runtime(
     execution_skills: Sequence[float],
     *,
     delta: float = DEFAULT_DELTA,
+    validate_artifact: bool | None = None,
 ) -> BaseballRuntime:
     """Load model/geometry and precompute execution-noise PDFs."""
 
-    grids, batter_indices = build_strike_zone_grids(delta)
+    grids, batter_indices = build_strike_zone_grids(delta, validate_artifact=validate_artifact)
     model = _load_model(batter_indices)
 
     pdfs_per_execution_skill: dict[str, np.ndarray] = {}

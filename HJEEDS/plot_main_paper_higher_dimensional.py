@@ -28,6 +28,7 @@ from HJEEDS.baseball_convergence import (
     validate_complete_convergence_run_metadata,
     validate_paper_bbip20_cohort,
 )
+from HJEEDS.config import add_require_paper_config_argument, paper_config_required
 from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
 from HJEEDS.baseball_hyperpriors import (
     DEFAULT_BASEBALL_LITERATURE_HYPERPRIORS_PATH,
@@ -168,17 +169,17 @@ def _optional_float(value: str | None) -> float | None:
 
 def load_two_d_series(
     summary_csv: Path,
+    *,
+    require_paper_configuration: bool | None = None,
 ) -> tuple[tuple[int, ...], dict[str, IntervalSeries], dict[str, IntervalSeries]]:
     """Load 2D execution/decision error series from ``summary_by_bucket.csv``."""
 
-    # Publication figures may only read an atomically completed canonical run.
-    # This verifies the 1000--1499 seed set, all 25 agents per seed, fixed paper
-    # configuration, corrected-source fingerprint, and every output hash before
-    # a single plotted value is loaded.
-    validate_complete_two_d_run_metadata(
-        summary_csv.parent,
-        require_paper_configuration=True,
-    )
+    if paper_config_required(require_paper_configuration):
+        # Publication figures may only read an atomically completed canonical run.
+        validate_complete_two_d_run_metadata(
+            summary_csv.parent,
+            require_paper_configuration=True,
+        )
 
     if not summary_csv.is_file():
         raise FileNotFoundError(f"Missing 2D summary CSV: {summary_csv}")
@@ -342,10 +343,14 @@ def _validate_baseball_result_provenance(results_dir: Path) -> None:
 
 def load_baseball_separability(
     results_dir: Path,
+    *,
+    require_paper_configuration: bool | None = None,
 ) -> tuple[tuple[int, ...], dict[str, tuple[float, ...]], dict[str, tuple[float, ...]]]:
     """Load AUC and mean-sigma-gap series from ``separability_by_N.csv``."""
 
-    _validate_baseball_result_provenance(results_dir)
+    require_paper = paper_config_required(require_paper_configuration)
+    if require_paper:
+        _validate_baseball_result_provenance(results_dir)
     path = results_dir / "separability_by_N.csv"
     if not path.is_file():
         raise FileNotFoundError(f"Missing baseball separability CSV: {path}")
@@ -363,7 +368,9 @@ def load_baseball_separability(
         if key in seen:
             raise ValueError(f"Duplicate baseball separability row for {key} in {path}")
         seen.add(key)
-        if int(float(row["num_bottom"])) != 10 or int(float(row["num_top"])) != 10:
+        if require_paper and (
+            int(float(row["num_bottom"])) != 10 or int(float(row["num_top"])) != 10
+        ):
             raise ValueError(
                 f"Incomplete paper walk/IP-proxy cohort for {key} in {path}: "
                 f"num_bottom={row.get('num_bottom')}, num_top={row.get('num_top')}"
@@ -387,7 +394,7 @@ def load_baseball_separability(
     )
     if not pitch_counts:
         raise ValueError(f"No sigma rows found in {path}")
-    if pitch_counts != PAPER_BASEBALL_CHECKPOINTS:
+    if require_paper and pitch_counts != PAPER_BASEBALL_CHECKPOINTS:
         raise ValueError(
             f"Paper baseball separability checkpoints are {pitch_counts}; "
             f"expected {PAPER_BASEBALL_CHECKPOINTS}."
@@ -413,10 +420,14 @@ def load_baseball_separability(
 
 def load_baseball_drift(
     results_dir: Path,
+    *,
+    require_paper_configuration: bool | None = None,
 ) -> tuple[tuple[int, ...], dict[str, tuple[float, ...]], dict[str, tuple[float, ...]]]:
     """Load execution/decision self-reference drift from ``summary_by_N.csv``."""
 
-    _validate_baseball_result_provenance(results_dir)
+    require_paper = paper_config_required(require_paper_configuration)
+    if require_paper:
+        _validate_baseball_result_provenance(results_dir)
     path = results_dir / "summary_by_N.csv"
     if not path.is_file():
         raise FileNotFoundError(f"Missing baseball drift summary CSV: {path}")
@@ -440,7 +451,7 @@ def load_baseball_drift(
         if key in seen:
             raise ValueError(f"Duplicate baseball drift row for {key} in {path}")
         seen.add(key)
-        if int(float(row["num_agents"])) != 20:
+        if require_paper and int(float(row["num_agents"])) != 20:
             raise ValueError(
                 f"Paper baseball drift row {key} has num_agents={row.get('num_agents')}; expected 20."
             )
@@ -457,7 +468,7 @@ def load_baseball_drift(
     )
     if not pitch_counts:
         raise ValueError(f"No drift rows found in {path}")
-    if pitch_counts != PAPER_BASEBALL_CHECKPOINTS:
+    if require_paper and pitch_counts != PAPER_BASEBALL_CHECKPOINTS:
         raise ValueError(
             f"Paper baseball drift checkpoints are {pitch_counts}; "
             f"expected {PAPER_BASEBALL_CHECKPOINTS}."
@@ -1032,6 +1043,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Which figure set to render (default: all).",
     )
     parser.add_argument("--dpi", type=int, default=300)
+    add_require_paper_config_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -1045,7 +1057,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     written: list[Path] = []
     if args.figures in {"all", "2d"}:
-        buckets, execution, decision = load_two_d_series(args.two_d_summary_csv)
+        buckets, execution, decision = load_two_d_series(
+            args.two_d_summary_csv,
+            require_paper_configuration=args.require_paper_config,
+        )
         written.extend(
             plot_two_d(
                 args.output_dir,
@@ -1062,10 +1077,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.figures in {"all", "baseball"}:
         pitch_counts, separability, sigma_gap = load_baseball_separability(
-            args.baseball_results_dir
+            args.baseball_results_dir,
+            require_paper_configuration=args.require_paper_config,
         )
         drift_counts, execution_drift, decision_drift = load_baseball_drift(
-            args.baseball_results_dir
+            args.baseball_results_dir,
+            require_paper_configuration=args.require_paper_config,
         )
         if pitch_counts != drift_counts:
             raise ValueError(

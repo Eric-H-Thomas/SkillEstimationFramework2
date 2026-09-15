@@ -185,9 +185,10 @@ def _require_finite(row: dict[str, str], column: str, path: Path, row_number: in
 
 def validate_agent_csv(
     path: Path,
-    expected_seeds: set[int],
+    expected_seeds: set[int] | None,
     *,
     expected_environment: str | None = None,
+    require_optimizer_selected_population_fit: bool = True,
 ) -> FileValidation:
     """Validate one scenario CSV and return its dimensions."""
 
@@ -252,7 +253,9 @@ def validate_agent_csv(
                     )
 
             notes = row.get("notes", "")
-            if "population_fit: converged=True; selected=optimizer;" not in notes:
+            if require_optimizer_selected_population_fit and (
+                "population_fit: converged=True; selected=optimizer;" not in notes
+            ):
                 raise ValueError(
                     f"{path}:{row_number}: missing a converged optimizer-selected "
                     "post-fix population-fit diagnostic in notes"
@@ -268,14 +271,14 @@ def validate_agent_csv(
             num_rows += 1
 
     actual_seeds = set(agents_by_seed)
-    if actual_seeds != expected_seeds:
+    if expected_seeds is not None and actual_seeds != expected_seeds:
         missing = sorted(expected_seeds - actual_seeds)
         unexpected = sorted(actual_seeds - expected_seeds)
         raise ValueError(f"{path}: seed mismatch; missing={missing}, unexpected={unexpected}")
     if not agents_by_seed:
         raise ValueError(f"{path}: no data rows")
 
-    reference_seed = min(expected_seeds)
+    reference_seed = min(expected_seeds) if expected_seeds is not None else min(actual_seeds)
     reference_agents = agents_by_seed[reference_seed]
     if reference_agents != set(range(len(reference_agents))):
         raise ValueError(f"{path}: agent IDs are not contiguous from zero for seed {reference_seed}")

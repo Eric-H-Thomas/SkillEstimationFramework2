@@ -159,7 +159,7 @@ if [[ -e "${group_dir}" ]]; then
   echo
 fi
 
-export_env="ALL,HJEEDS_REPO_ROOT=${repo_root},PARTS_PER_GROUP=${parts_per_group},GROUP_COUNT=1,SEEDS_PER_GROUP=${seeds_per_group},BASE_SEED_START=${base_seed_start}"
+export_env="ALL,HJEEDS_REPO_ROOT=${repo_root},PARTS_PER_GROUP=${parts_per_group},GROUP_COUNT=1,SEEDS_PER_GROUP=${seeds_per_group},BASE_SEED_START=${base_seed_start},HJEEDS_REQUIRE_PAPER_CONFIG=1"
 
 array_cmd=(
   sbatch
@@ -181,6 +181,7 @@ export PYTHONPATH="\$PWD\${PYTHONPATH:+:\$PYTHONPATH}"
 export MPLBACKEND=Agg
 python3 -m HJEEDS.plot_main_paper_higher_dimensional \\
   --figures 2d \\
+  --require-paper-config \\
   --two-d-summary-csv "${summary_csv}" \\
   --output-dir figures
 echo "Regenerated 2D figure from ${summary_csv}"

@@ -65,8 +65,29 @@ class TwoDProvenanceInventoryTests(unittest.TestCase):
                     expected_num_seeds=1,
                     expected_agents_per_seed=25,
                     effective_launch_configuration=drifted_launch,
+                    require_paper_configuration=True,
                 )
             self.assertFalse(part_dir.exists())
+
+    def test_drifted_effective_worker_argument_is_allowed_without_paper_guard(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            part_dir = Path(temp_dir) / "part_0"
+            argv = paper_two_d_experiment_argv(
+                part_dir,
+                seed_start=1000,
+                num_seeds=1,
+            )
+            delta_index = argv.index("--delta") + 1
+            argv[delta_index] = "10.0"
+            drifted_launch = resolve_two_d_effective_launch(argv)
+            begin_two_d_part_metadata(
+                part_dir,
+                expected_seed_start=1000,
+                expected_num_seeds=1,
+                expected_agents_per_seed=25,
+                effective_launch_configuration=drifted_launch,
+            )
+            self.assertTrue((part_dir / "two_d_part_metadata.json").is_file())
 
 
 def _ok_estimate(method_name: str) -> MethodEstimate:
@@ -205,12 +226,13 @@ class ClusterCoverageTests(unittest.TestCase):
             for agent_id in (0, 1)
         ]
 
-    def _validate(self, rows) -> None:
+    def _validate(self, rows, **kwargs) -> None:
         _validate_seed_agent_coverage(
             rows,
             expected_seed_start=1000,
             expected_num_seeds=2,
             expected_agents_per_seed=2,
+            **kwargs,
         )
 
     def test_complete_seed_agent_grid_is_accepted(self) -> None:
@@ -270,7 +292,25 @@ class ClusterCoverageTests(unittest.TestCase):
         )
         rows = [nonconverged, *self.complete_rows[1:]]
         with self.assertRaisesRegex(ValueError, "population-fit diagnostic"):
+            self._validate(rows, require_optimizer_selected_population_fit=True)
+
+    def test_nonconverged_population_fit_is_allowed_without_paper_guard(self) -> None:
+        nonconverged = AgentResult(
+            seed=1000,
+            agent_id=0,
+            count_bucket=5,
+            num_observations=5,
+            sigma_true=12.0,
+            log_lambda_true=0.0,
+            rationality_percent_true=50.0,
+            jeeds=_ok_estimate("jeeds"),
+            hierarchical=_ok_estimate("hierarchical"),
+            notes="population_fit: converged=False; selected=initial",
+        )
+        rows = [nonconverged, *self.complete_rows[1:]]
+        with mock.patch("HJEEDS.aggregate_cluster_seeds.warnings.warn") as warn:
             self._validate(rows)
+        warn.assert_called_once()
 
     def test_success_status_with_missing_metrics_is_rejected(self) -> None:
         incomplete_row = AgentResult(
@@ -418,7 +458,24 @@ class ClusterAggregationIntegrationTests(unittest.TestCase):
                 return_value=stale,
             ):
                 with self.assertRaisesRegex(ValueError, "source provenance is stale"):
-                    validate_complete_two_d_run_metadata(group_dir)
+                    validate_complete_two_d_run_metadata(
+                        group_dir,
+                        require_paper_configuration=True,
+                    )
+
+    def test_stale_computational_source_fingerprint_is_allowed_without_paper_guard(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir:
+            group_dir = self._aggregate_tiny_group(Path(temp_dir))
+            stale = build_current_two_d_source_provenance()
+            stale = {**stale, "fingerprint_sha256": "0" * 64}
+            with mock.patch(
+                "HJEEDS.two_d_completion.build_current_two_d_source_provenance",
+                return_value=stale,
+            ):
+                completion = validate_complete_two_d_run_metadata(group_dir)
+            self.assertEqual(completion["completion_status"], "complete")
 
     def test_noncanonical_seed_agent_bundle_is_rejected_by_paper_guard(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -446,7 +503,7 @@ class TwoDPaperPlotCompletionGuardTests(unittest.TestCase):
             summary = Path(temp_dir) / "summary_by_bucket.csv"
             summary.write_text("method,metric,count_bucket,num_agents,mean,ci_lower,ci_upper,notes\n")
             with self.assertRaisesRegex(FileNotFoundError, "completion metadata"):
-                load_two_d_series(summary)
+                load_two_d_series(summary, require_paper_configuration=True)
 
     def test_explicit_incomplete_record_is_rejected_before_plot_csv_is_read(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -461,7 +518,7 @@ class TwoDPaperPlotCompletionGuardTests(unittest.TestCase):
             summary = group_dir / "summary_by_bucket.csv"
             summary.write_text("not,a,valid,summary\n")
             with self.assertRaisesRegex(ValueError, "incomplete"):
-                load_two_d_series(summary)
+                load_two_d_series(summary, require_paper_configuration=True)
 
 
 class LocalPublicationBenchValidationTests(unittest.TestCase):
