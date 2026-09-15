@@ -100,10 +100,10 @@ Each condition also gets its own subfolder with ordinary H-JEEDS outputs.
 
 Use `HJEEDS.darts_agents_per_bucket_sensitivity` to study sensitivity to population size, expressed as the number of agents assigned to each observation-count bucket.
 
-The default sweep crosses five agents-per-bucket values with three representative hyperprior conditions:
+The sweep varies only population size, holding the hyperpriors at their default condition so this study isolates a single factor:
 
 ```text
-5 agents-per-bucket values x 3 representative conditions = 15 scenarios
+5 agents-per-bucket values x 1 default condition = 5 scenarios
 ```
 
 Default agents-per-bucket values:
@@ -113,12 +113,6 @@ Default agents-per-bucket values:
 - `5`
 - `10`
 - `25`
-
-Representative conditions:
-
-- `default`
-- `moderate_combined_misspecification`
-- `strong_combined_misspecification`
 
 Dry run:
 
@@ -137,17 +131,7 @@ python3 -m HJEEDS.darts_agents_per_bucket_sensitivity \
   --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity
 ```
 
-To explicitly cross every agents-per-bucket value with the full 60-condition robustness preset:
-
-```bash
-python3 -m HJEEDS.darts_agents_per_bucket_sensitivity \
-  --num-seeds 500 \
-  --seed 12345 \
-  --condition-preset full_60 \
-  --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity_full_60
-```
-
-That run has 300 scenarios with the default five agents-per-bucket values.
+Hyperprior misspecification is covered separately by `HJEEDS.darts_hierarchical_prior_sensitivity`, which holds the population size at its default.
 
 Primary root outputs:
 
@@ -163,10 +147,10 @@ Each agents-per-bucket folder also contains prior-sensitivity combined CSVs and 
 
 Use `HJEEDS.darts_population_shape_sensitivity` to test how sensitive H-JEEDS is when the true simulator population does not match the estimator's unimodal Gaussian population model.
 
-The default sweep crosses five agents-per-bucket values with three true population shapes:
+The default sweep holds population size at the default five agents per bucket so this study isolates a single factor:
 
 ```text
-5 agents-per-bucket values x 3 population shapes = 15 scenarios
+1 default agents-per-bucket value x 3 population shapes = 3 scenarios
 ```
 
 Population shapes:
@@ -427,23 +411,13 @@ conda run -n skill-estimation python -m HJEEDS.verify_baseball_likelihood
 
 Use the submit helper to launch one Slurm array task per scenario and one dependent aggregation task.
 
-Default 15-scenario run:
+Default 5-scenario run:
 
 ```bash
 ./submit_hjeeds_agents_per_bucket_sensitivity.sh \
   --num-seeds 500 \
   --seed 12345 \
   --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity
-```
-
-Full 300-scenario run:
-
-```bash
-./submit_hjeeds_agents_per_bucket_sensitivity.sh \
-  --num-seeds 500 \
-  --seed 12345 \
-  --condition-preset full_60 \
-  --output-dir HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity_full_60
 ```
 
 Useful submit-helper options:
@@ -493,7 +467,7 @@ python3 -m compileall -q HJEEDS
 python3 -m HJEEDS.darts_hierarchical_vs_jeeds --seed default --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_hierarchical_prior_sensitivity --seed default --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --dry-run
-python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --condition-preset full_60 --dry-run
+python3 -m HJEEDS.darts_agents_per_bucket_sensitivity --seed default --num-seeds 1 --dry-run
 python3 -m HJEEDS.darts_population_shape_sensitivity --seed default --num-seeds 1 --dry-run
 bash -n run_hjeeds_agents_per_bucket_sensitivity.sbatch
 bash -n submit_hjeeds_agents_per_bucket_sensitivity.sh

@@ -1,14 +1,15 @@
-# This file has been fully edited by a human researcher as of 05/23/26 at 2:28 PM MDT.
+# Paper correspondence: Supplement `app:anchor_availability`.
 """Run H-JEEDS high-data-anchor availability experiments.
 
-This runner tests whether H-JEEDS depends on the presence of high-data agents.
-Each scenario keeps a fixed group of one-sample agents, then varies how many
-25-sample anchor agents are added to the same population.
+This runner tests whether H-JEEDS depends on the presence of high-data agents
+without confounding anchor availability with total population size. Each
+scenario contains the same 50 agents: 25 fixed one-sample evaluation agents
+and 25 context agents, some of whom are assigned 25 observations.
 
 Default sweep:
 
-- low-data agents: 25 agents with 1 observation each
-- anchor agents: 0, 1, 2, 5, 10, 25 agents with 25 observations each
+- evaluation agents: 25 agents with 1 observation each
+- context agents: 25 total, of whom 0, 1, 2, 5, 10, or 25 are 25-sample anchors
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ from HJEEDS.artifacts import (
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_anchor_availability_sensitivity")
 DEFAULT_LOW_DATA_AGENT_COUNT = 25
+DEFAULT_CONTEXT_AGENT_COUNT = 25
 DEFAULT_LOW_DATA_OBSERVATIONS = 1
 DEFAULT_ANCHOR_OBSERVATIONS = 25
 DEFAULT_ANCHOR_AGENT_COUNTS = (0, 1, 2, 5, 10, 25)
@@ -51,6 +53,8 @@ SCENARIOS_FILENAME = "anchor_availability_sensitivity_scenarios.csv"
 COMBINED_AGENT_LEVEL_FILENAME = "anchor_availability_sensitivity_agent_level_results.csv"
 COMBINED_SUMMARY_BY_BUCKET_FILENAME = "anchor_availability_sensitivity_summary_by_bucket.csv"
 COMBINED_SUMMARY_OVERALL_FILENAME = "anchor_availability_sensitivity_summary_overall.csv"
+ALL_AGENTS_SUMMARY_BY_BUCKET_FILENAME = "anchor_availability_sensitivity_all_agents_summary_by_bucket.csv"
+ALL_AGENTS_SUMMARY_OVERALL_FILENAME = "anchor_availability_sensitivity_all_agents_summary_overall.csv"
 LOW_DATA_PLOT_TEMPLATE = "anchor_availability_low_data_{metric}.png"
 
 ANCHOR_AVAILABILITY_METADATA_HEADER = [
@@ -58,6 +62,8 @@ ANCHOR_AVAILABILITY_METADATA_HEADER = [
     "anchor_availability_label",
     "low_data_agent_count",
     "low_data_observations",
+    "context_agent_count",
+    "context_low_data_agent_count",
     "anchor_agent_count",
     "anchor_observations",
     "scenario_num_agents",
@@ -89,7 +95,13 @@ class AnchorAvailabilitySpec:
     def total_agents(self) -> int:
         """Return the number of demonstrators in this condition."""
 
-        return self.low_data_agent_count + self.anchor_agent_count
+        return self.low_data_agent_count + DEFAULT_CONTEXT_AGENT_COUNT
+
+    @property
+    def context_low_data_agent_count(self) -> int:
+        """Return context agents that remain in the one-observation condition."""
+
+        return DEFAULT_CONTEXT_AGENT_COUNT - self.anchor_agent_count
 
 
 @dataclass(frozen=True)
@@ -128,7 +140,8 @@ def build_anchor_availability_specs() -> tuple[AnchorAvailabilitySpec, ...]:
                 anchor_agent_count=anchor_agent_count,
                 anchor_observations=DEFAULT_ANCHOR_OBSERVATIONS,
                 description=(
-                    f"{DEFAULT_LOW_DATA_AGENT_COUNT} one-sample agents plus "
+                    f"{DEFAULT_LOW_DATA_AGENT_COUNT} fixed one-sample evaluation agents plus "
+                    f"{DEFAULT_CONTEXT_AGENT_COUNT - anchor_agent_count} one-sample context agents and "
                     f"{anchor_agent_count} {anchor_agent_label} with "
                     f"{DEFAULT_ANCHOR_OBSERVATIONS} observations each"
                 ),
@@ -203,8 +216,12 @@ def observation_count_design(anchor_availability: AnchorAvailabilitySpec) -> tup
     # With agents_per_bucket=1, each repeated count creates one agent, and the
     # summary code later merges repeated values by grouping on numeric count_bucket
     low_data_counts = (anchor_availability.low_data_observations,) * anchor_availability.low_data_agent_count
+    context_low_data_counts = (
+        (anchor_availability.low_data_observations,)
+        * anchor_availability.context_low_data_agent_count
+    )
     anchor_counts = (anchor_availability.anchor_observations,) * anchor_availability.anchor_agent_count
-    return low_data_counts + anchor_counts
+    return low_data_counts + context_low_data_counts + anchor_counts
 
 
 def scenario_index_from_environment() -> int | None:
@@ -279,6 +296,8 @@ def anchor_availability_metadata_row(
         "anchor_availability_label": anchor_availability.label,
         "low_data_agent_count": anchor_availability.low_data_agent_count,
         "low_data_observations": anchor_availability.low_data_observations,
+        "context_agent_count": DEFAULT_CONTEXT_AGENT_COUNT,
+        "context_low_data_agent_count": anchor_availability.context_low_data_agent_count,
         "anchor_agent_count": anchor_availability.anchor_agent_count,
         "anchor_observations": anchor_availability.anchor_observations,
         "scenario_num_agents": config.num_agents,
@@ -516,6 +535,102 @@ def plot_low_data_comparisons(
         )
 
 
+def summarize_fixed_evaluation_cohort(
+    all_agent_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Summarize only the fixed first-25 one-observation evaluation agents.
+
+    Context agents that remain at one observation are deliberately excluded;
+    otherwise the evaluated cohort would change as anchors are added.
+    """
+
+    prefix_by_scenario: dict[str, dict[str, Any]] = {}
+    seed_values: dict[tuple[str, str, str, int], list[float]] = {}
+    seed_counts: dict[tuple[str, str, str, int], int] = {}
+
+    for row in all_agent_rows:
+        scenario_slug = str(row["scenario_slug"])
+        prefix_by_scenario.setdefault(
+            scenario_slug,
+            {column: row.get(column, "") for column in ANCHOR_AVAILABILITY_METADATA_HEADER + SCENARIO_METADATA_HEADER},
+        )
+        agent_id = int(row["agent_id"])
+        evaluation_count = int(row["low_data_agent_count"])
+        if agent_id >= evaluation_count:
+            continue
+        if int(row["num_observations"]) != int(row["low_data_observations"]):
+            raise ValueError(
+                f"Evaluation agent {agent_id} in {scenario_slug} does not have the expected "
+                f"{row['low_data_observations']} observations."
+            )
+
+        sigma_true = float(row["sigma_true"])
+        log_lambda_true = float(row["log_lambda_true"])
+        rationality_true = float(row["rationality_percent_true"])
+        seed = int(row["seed"])
+        for method in ("jeeds", "hierarchical"):
+            if row.get(f"{method}_status") != "ok":
+                raise ValueError(
+                    f"{scenario_slug} seed={seed} agent={agent_id}: {method}_status="
+                    f"{row.get(f'{method}_status')!r}"
+                )
+            metric_values = {
+                "abs_sigma_error": abs(float(row[f"{method}_posterior_mean_sigma"]) - sigma_true),
+                "abs_log_lambda_error": abs(
+                    float(row[f"{method}_posterior_mean_log_lambda"]) - log_lambda_true
+                ),
+                "abs_rationality_percent_error": abs(
+                    float(row[f"{method}_rationality_percent"]) - rationality_true
+                ),
+            }
+            for metric, value in metric_values.items():
+                key = (scenario_slug, method, metric, seed)
+                seed_values.setdefault(key, []).append(value)
+                seed_counts[key] = seed_counts.get(key, 0) + 1
+
+    grouped_seed_means: dict[tuple[str, str, str], list[float]] = {}
+    grouped_agent_counts: dict[tuple[str, str, str], int] = {}
+    for (scenario_slug, method, metric, _seed), values in seed_values.items():
+        group_key = (scenario_slug, method, metric)
+        grouped_seed_means.setdefault(group_key, []).append(float(np.mean(values)))
+        grouped_agent_counts[group_key] = grouped_agent_counts.get(group_key, 0) + len(values)
+
+    prefix_header = ANCHOR_AVAILABILITY_METADATA_HEADER + SCENARIO_METADATA_HEADER
+    bucket_rows: list[dict[str, Any]] = []
+    overall_rows: list[dict[str, Any]] = []
+    for (scenario_slug, method, metric), means in sorted(grouped_seed_means.items()):
+        mean = float(np.mean(means))
+        if len(means) == 1:
+            ci_lower = ci_upper = mean
+        else:
+            half_width = 1.96 * float(np.std(means, ddof=1)) / float(np.sqrt(len(means)))
+            ci_lower = max(0.0, mean - half_width)
+            ci_upper = mean + half_width
+        prefix = {column: prefix_by_scenario[scenario_slug].get(column, "") for column in prefix_header}
+        common = {
+            **prefix,
+            "method": method,
+            "metric": metric,
+            "num_agents": grouped_agent_counts[(scenario_slug, method, metric)],
+            "mean": mean,
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+            "notes": (
+                "Across-seed mean and normal-approximation 95% CI for the fixed "
+                "first-25 one-observation evaluation cohort; context agents excluded."
+            ),
+        }
+        bucket_rows.append(
+            {
+                **common,
+                "count_bucket": int(prefix["low_data_observations"]),
+            }
+        )
+        overall_rows.append(common)
+
+    return bucket_rows, overall_rows
+
+
 def aggregate_existing_results(
     scenarios: Sequence[AnchorAvailabilityScenario],
     output_dir: Path,
@@ -561,18 +676,29 @@ def aggregate_existing_results(
         all_agent_rows,
     )
     _write_dict_rows(
-        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
+        output_dir / ALL_AGENTS_SUMMARY_BY_BUCKET_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
         all_bucket_rows,
     )
     _write_dict_rows(
-        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
+        output_dir / ALL_AGENTS_SUMMARY_OVERALL_FILENAME,
         combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
         all_overall_rows,
     )
+    evaluation_bucket_rows, evaluation_overall_rows = summarize_fixed_evaluation_cohort(all_agent_rows)
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_BY_BUCKET_FILENAME,
+        combined_prefix_header + base_experiment.SUMMARY_BY_BUCKET_CSV_HEADER,
+        evaluation_bucket_rows,
+    )
+    _write_dict_rows(
+        output_dir / COMBINED_SUMMARY_OVERALL_FILENAME,
+        combined_prefix_header + base_experiment.SUMMARY_OVERALL_CSV_HEADER,
+        evaluation_overall_rows,
+    )
     plot_low_data_comparisons(
         output_dir,
-        all_bucket_rows,
+        evaluation_bucket_rows,
         include_raw_rationality_error=include_raw_rationality_error,
     )
 

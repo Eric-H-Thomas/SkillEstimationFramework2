@@ -1,5 +1,8 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
-"""Create a multi-panel agents-per-bucket sensitivity figure."""
+"""Create the agents-per-bucket figure used in the supplement.
+
+Paper correspondence: Supplement, "Agents Per Observation-Count Bucket"
+(`app:agents_per_bucket`), Figure `fig:agents_per_bucket_sensitivity_panels`.
+"""
 
 from __future__ import annotations
 
@@ -13,26 +16,25 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from HJEEDS.plot_agents_per_bucket_robustness import (
+from HJEEDS.agents_per_bucket_plot_data import (
     AGENTS_BASE_COLORS,
-    CHARCOAL,
     DEFAULT_AGENT_LEVEL_CSV,
     DEFAULT_RESULTS_DIR,
-    GRID_COLOR,
-    NEGATIVE_TEXT_COLOR,
-    TEXT_COLOR,
     ImprovementRow,
-    _compact_x_limits,
-    _format_axis_tick,
-    _group_centers,
-    _grouped_y_positions,
-    _missing_bar_label,
     bar_color,
     compute_improvement_rows,
 )
 from HJEEDS.sensitivity_plot_common import (
+    GRID_COLOR,
+    NEGATIVE_TEXT_COLOR,
+    TEXT_COLOR,
+    compact_x_limits as _compact_x_limits,
     configure_matplotlib as _configure_matplotlib,
+    format_axis_tick as _format_axis_tick,
+    group_centers as _shared_group_centers,
+    grouped_y_positions as _shared_grouped_y_positions,
     mirrored_bar_arrays as _mirrored_bar_arrays,
+    missing_bar_label_latex as _missing_bar_label,
     save_figure_bundle as _save_figure_bundle,
     tick_step as _tick_step,
 )
@@ -40,6 +42,29 @@ from HJEEDS.sensitivity_plot_common import (
 
 DEFAULT_OUTPUT_STEM = DEFAULT_RESULTS_DIR / "agents_per_bucket_sensitivity_panels"
 DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
+
+
+def _grouped_y_positions(
+    rows: Sequence[ImprovementRow],
+    group_gap: float,
+) -> tuple[np.ndarray, list[float]]:
+    """Return y positions grouped by the number of agents per bucket."""
+
+    keys = [row.condition.agents_per_bucket for row in rows]
+    return _shared_grouped_y_positions(keys, group_gap)
+
+
+def _group_centers(
+    rows: Sequence[ImprovementRow],
+    y_positions: Sequence[float],
+) -> list[tuple[int, float]]:
+    """Return each agents-per-bucket group's vertical center."""
+
+    keys = [row.condition.agents_per_bucket for row in rows]
+    return [
+        (int(group), center)
+        for group, center in _shared_group_centers(keys, y_positions, sort=True)
+    ]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

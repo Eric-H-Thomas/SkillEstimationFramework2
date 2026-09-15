@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 07/16/26 at 12:32 PM MDT.
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_hyperpriors`.
 """Baseball pitch surfaces and strike-zone grids for HJEEDS.
 
 Wraps the classic baseball reward path (RNN outcomes + ``getUtility`` +
@@ -11,27 +11,31 @@ Plate grids come from the processed Statcast pickle (built by
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 import pickle
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
-import torch
-import torch.nn as nn
-from scipy.signal import convolve2d
+from scipy.signal import fftconvolve
+from scipy.stats import multivariate_normal
+
+from .baseball_provenance import PROCESSED_ARTIFACT_REFERENCE
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATCAST_DIR = REPO_ROOT / "Data" / "Baseball" / "StatcastData"
 PROCESSED_PICKLE = STATCAST_DIR / "ProcessedData-From-GivenFiles.pkl"
 MODEL_WEIGHTS = REPO_ROOT / "Environments" / "Baseball" / "final_OP"
-
 # Matches SpacesBaseball / estimators.py baseball-multi defaults.
 DEFAULT_DELTA = 0.0417
 DEFAULT_EXECUTION_SKILL_MIN = 0.17
 DEFAULT_EXECUTION_SKILL_MAX = 2.81
 DEFAULT_EXECUTION_RHO = 0.0
+DEFAULT_RNN_INFERENCE_BATCH_SIZE = 4096
 _DELTA_ABS_TOL = 1e-6
 
 
@@ -63,7 +67,7 @@ class BaseballRuntime:
     """Loaded model, geometry, and execution-noise PDFs."""
 
     grids: StrikeZoneGrids
-    model: nn.Module
+    model: Any
     pdfs_per_execution_skill: dict[str, np.ndarray]
     all_covs: dict[str, np.ndarray]
 
@@ -122,17 +126,94 @@ def build_log_lambda_grid(
     return np.log(raw)
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _load_processed_artifact_reference() -> dict:
+    if not PROCESSED_ARTIFACT_REFERENCE.is_file():
+        raise FileNotFoundError(
+            f"Missing canonical baseball artifact metadata: {PROCESSED_ARTIFACT_REFERENCE}"
+        )
+    with PROCESSED_ARTIFACT_REFERENCE.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _validate_processed_payload(payload: tuple, reference: dict) -> None:
+    if len(payload) != 6:
+        raise ValueError(f"Processed Statcast payload must contain six items; received {len(payload)}.")
+    all_data, batter_indices = payload[:2]
+    expected_shape = tuple(int(value) for value in reference["dataframe_shape"])
+    if tuple(all_data.shape) != expected_shape:
+        raise ValueError(
+            f"Processed Statcast dataframe shape {all_data.shape} does not match {expected_shape}."
+        )
+    expected_years = tuple(int(value) for value in reference["season_years"])
+    actual_years = tuple(sorted(int(value) for value in all_data["game_year"].dropna().unique()))
+    if actual_years != expected_years:
+        raise ValueError(f"Processed Statcast years {actual_years} do not match {expected_years}.")
+    required_columns = tuple(reference["required_columns"])
+    missing_columns = [column for column in required_columns if column not in all_data.columns]
+    if missing_columns:
+        raise ValueError(f"Processed Statcast data is missing columns: {missing_columns}.")
+    if tuple(batter_indices.shape) != tuple(reference["batter_mapping_shape"]):
+        raise ValueError(
+            f"Batter-index mapping shape {batter_indices.shape} does not match "
+            f"{tuple(reference['batter_mapping_shape'])}."
+        )
+    expected_indices = np.arange(int(reference["batter_embedding_count"]), dtype=int)
+    actual_indices = np.sort(batter_indices["batter_index"].to_numpy(dtype=int))
+    if not np.array_equal(actual_indices, expected_indices):
+        raise ValueError("Batter indices are not the complete range required by final_OP.")
+    expected_grid_shape = tuple(int(value) for value in reference["target_grid_shape"])
+    target_axes_shape = (len(payload[2]), len(payload[3]))
+    if target_axes_shape != expected_grid_shape:
+        raise ValueError(
+            f"Target grid shape {target_axes_shape} does not match {expected_grid_shape}."
+        )
+    if tuple(np.asarray(payload[4]).shape) != (math.prod(expected_grid_shape), 2):
+        raise ValueError("Physical target pairs do not match the canonical target grid.")
+    if tuple(np.asarray(payload[5]).shape) != (math.prod(expected_grid_shape), 2):
+        raise ValueError("Model target pairs do not match the canonical target grid.")
+
+
+@lru_cache(maxsize=1)
 def _load_processed_pickle() -> tuple:
-    """Load the six-item GivenFiles bundle written by ``SpacesBaseball.getAllData``."""
+    """Load the canonical processed artifact paired with the tracked ``final_OP`` model."""
 
     if not PROCESSED_PICKLE.is_file():
         raise FileNotFoundError(
             f"Processed Statcast pickle not found: {PROCESSED_PICKLE}. "
-            "Build it via SpacesBaseball.getAllData (dataTake2.manageData + target grids)."
+            "Obtain the canonical paper artifact documented in README.md. A freshly "
+            "downloaded/refit dataset is not interchangeable with final_OP's training preprocessing."
         )
+    reference = _load_processed_artifact_reference()
+    expected_bytes = int(reference["pickle_bytes"])
+    if PROCESSED_PICKLE.stat().st_size != expected_bytes:
+        raise ValueError(
+            f"Processed Statcast pickle has {PROCESSED_PICKLE.stat().st_size} bytes; "
+            f"expected {expected_bytes}."
+        )
+    actual_hash = _sha256(PROCESSED_PICKLE)
+    if actual_hash != reference["pickle_sha256"]:
+        raise ValueError(
+            f"Processed Statcast pickle hash {actual_hash} does not match the canonical paper "
+            f"artifact {reference['pickle_sha256']}."
+        )
+    if _sha256(MODEL_WEIGHTS) != reference["model_weights_sha256"]:
+        raise ValueError("Tracked final_OP weights do not match the canonical artifact metadata.")
     with PROCESSED_PICKLE.open("rb") as handle:
         loaded = pickle.load(handle)
-    return tuple(loaded[0])
+    try:
+        payload = tuple(loaded[0])
+    except (IndexError, TypeError) as exc:
+        raise ValueError(f"Malformed processed Statcast pickle: {PROCESSED_PICKLE}") from exc
+    _validate_processed_payload(payload, reference)
+    return payload
 
 
 def load_processed_statcast() -> pd.DataFrame:
@@ -187,8 +268,7 @@ def build_strike_zone_grids(delta: float = DEFAULT_DELTA) -> tuple[StrikeZoneGri
     if not math.isclose(float(delta), inferred_x, rel_tol=0.0, abs_tol=_DELTA_ABS_TOL):
         raise ValueError(
             f"delta={delta} does not match pickle grid spacing {inferred_x}. "
-            "Rebuild ProcessedData-From-GivenFiles.pkl at the desired resolution, "
-            "or pass the matching delta."
+            "The canonical publication artifact fixes this resolution; pass its matching delta."
         )
 
     grids = StrikeZoneGrids(
@@ -203,7 +283,8 @@ def build_strike_zone_grids(delta: float = DEFAULT_DELTA) -> tuple[StrikeZoneGri
     return grids, np.asarray(batter_indices)
 
 
-def _load_model(batter_indices: np.ndarray) -> nn.Module:
+def _load_model(batter_indices: np.ndarray):
+    import torch
     from Environments.Baseball import modelTake2
 
     # Embedding size uses ``.shape[0]`` (num batters), matching SpacesBaseball.
@@ -215,10 +296,70 @@ def _load_model(batter_indices: np.ndarray) -> nn.Module:
     return model
 
 
+def _predict_single_pitch_contexts(
+    model,
+    batch_x: np.ndarray,
+    batch_y: np.ndarray,
+    *,
+    inference_batch_size: int | None,
+):
+    """Evaluate independent one-pitch contexts, optionally in vectorized batches.
+
+    ``modelTake2.prediction_func`` loops over every candidate target even though
+    this publication path presents each candidate as an independent sequence of
+    length one. A single batched forward pass has the same zero hidden state and
+    target for every row while avoiding tens of thousands of Python-level model
+    calls per observed pitch. Passing ``None`` retains the legacy implementation
+    for equivalence testing.
+    """
+
+    import torch
+    from Environments.Baseball import modelTake2
+
+    inputs = np.asarray(batch_x)
+    targets = np.asarray(batch_y)
+    if inputs.ndim != 3 or inputs.shape[1] != 1:
+        raise ValueError(
+            "Batched baseball inference requires inputs shaped "
+            f"(num_contexts, 1, num_features); received {inputs.shape}."
+        )
+    if targets.shape != inputs.shape[:2]:
+        raise ValueError(
+            f"Target shape {targets.shape} does not match input prefixes {inputs.shape[:2]}."
+        )
+
+    input_tensor = torch.as_tensor(inputs, dtype=torch.float)
+    target_tensor = torch.as_tensor(targets, dtype=torch.long)
+    if inference_batch_size is None:
+        return modelTake2.prediction_func(model, input_tensor, target_tensor)
+    if inference_batch_size < 1:
+        raise ValueError("inference_batch_size must be positive or None for legacy inference.")
+
+    device = next(model.parameters()).device
+    flat_inputs = input_tensor[:, 0, :]
+    flat_targets = target_tensor[:, 0]
+    outputs = []
+    with torch.no_grad():
+        for start in range(0, len(flat_inputs), inference_batch_size):
+            stop = min(start + inference_batch_size, len(flat_inputs))
+            x_chunk = flat_inputs[start:stop].to(device)
+            y_chunk = flat_targets[start:stop].to(device)
+            hidden = torch.zeros(
+                (len(x_chunk), int(model.hidden_size)),
+                dtype=x_chunk.dtype,
+                device=device,
+            )
+            logits, _hidden = model(x_chunk, hidden, y_chunk)
+            outputs.append(logits)
+    return torch.cat(outputs, dim=0)
+
+
 def _utility_grid_from_row(
     pitch_row: pd.Series,
     grids: StrikeZoneGrids,
-    model: nn.Module,
+    model,
+    *,
+    inference_batch_size: int | None = DEFAULT_RNN_INFERENCE_BATCH_SIZE,
 ) -> tuple[np.ndarray, float, float]:
     """Return (utility board Zs, min utility, observed utility for the actual pitch).
 
@@ -227,6 +368,7 @@ def _utility_grid_from_row(
     """
 
     from Environments.Baseball import modelTake2, utilsBaseball
+    import torch.nn as nn
 
     possible_targets_len = len(grids.possible_targets_for_model)
     all_temp_data = pd.concat([pitch_row.to_frame().T] * possible_targets_len, ignore_index=True)
@@ -240,10 +382,11 @@ def _utility_grid_from_row(
     batch_x = batch_x.reshape((len(batch_x), 1, len(modelTake2.features)))
     batch_y = batch_y.reshape((len(batch_y), 1))
 
-    ypred = modelTake2.prediction_func(
+    ypred = _predict_single_pitch_contexts(
         model,
-        torch.tensor(batch_x, dtype=torch.float),
-        torch.tensor(batch_y, dtype=torch.long),
+        batch_x,
+        batch_y,
+        inference_batch_size=inference_batch_size,
     )
     probabilities = nn.functional.softmax(ypred, dim=1).detach().cpu().numpy()
     for outcome_index in range(9):
@@ -260,10 +403,68 @@ def _utility_grid_from_row(
 
 
 def _execution_covariance(skill: float):
-    from Environments.Baseball import baseball_multi as domain
-
     skill = float(skill)
-    return domain.getCovMatrix([skill, skill], DEFAULT_EXECUTION_RHO)
+    variance = skill**2
+    covariance = DEFAULT_EXECUTION_RHO * variance
+    return np.asarray([[variance, covariance], [covariance, variance]], dtype=float)
+
+
+def build_execution_displacement_distribution(
+    covariance: np.ndarray,
+    resolution: float,
+    x_offsets: np.ndarray,
+    z_offsets: np.ndarray,
+) -> np.ndarray:
+    """Discretize zero-centered Gaussian mass over all valid pairwise offsets."""
+
+    x_offsets = np.asarray(x_offsets, dtype=float)
+    z_offsets = np.asarray(z_offsets, dtype=float)
+    if x_offsets.ndim != 1 or z_offsets.ndim != 1:
+        raise ValueError("Displacement axes must be one-dimensional.")
+    if resolution <= 0.0:
+        raise ValueError("resolution must be positive.")
+    x_grid, z_grid = np.meshgrid(x_offsets, z_offsets, indexing="ij")
+    points = np.column_stack((x_grid.ravel(), z_grid.ravel()))
+    density = multivariate_normal(mean=(0.0, 0.0), cov=np.asarray(covariance, dtype=float)).pdf(
+        points
+    )
+    mass = np.asarray(density, dtype=float).reshape((len(x_offsets), len(z_offsets)))
+    mass *= float(resolution) ** 2
+    if np.any(~np.isfinite(mass)) or np.any(mass < 0.0):
+        raise ValueError("Execution displacement kernel contains invalid probability mass.")
+    total_mass = float(np.sum(mass))
+    if total_mass > 1.0 + 1e-6:
+        raise ValueError(f"Execution displacement mass sums to {total_mass:.9f}, above one.")
+    return mass
+
+
+def expected_utility_with_outside_floor(
+    utility_grid: np.ndarray,
+    displacement_mass: np.ndarray,
+    min_utility: float,
+) -> np.ndarray:
+    """Convolve valid transitions while assigning all other mass ``min_utility``."""
+
+    utility_grid = np.asarray(utility_grid, dtype=float)
+    displacement_mass = np.asarray(displacement_mass, dtype=float)
+    expected_kernel_shape = (
+        2 * utility_grid.shape[0] - 1,
+        2 * utility_grid.shape[1] - 1,
+    )
+    if displacement_mass.shape != expected_kernel_shape:
+        raise ValueError(
+            f"Execution kernel shape {displacement_mass.shape} does not match "
+            f"{expected_kernel_shape}."
+        )
+    return np.asarray(
+        min_utility
+        + fftconvolve(
+            utility_grid - min_utility,
+            displacement_mass,
+            mode="same",
+        ),
+        dtype=float,
+    )
 
 
 def build_baseball_runtime(
@@ -273,8 +474,6 @@ def build_baseball_runtime(
     delta: float = DEFAULT_DELTA,
 ) -> BaseballRuntime:
     """Load model/geometry and precompute execution-noise PDFs."""
-
-    from Environments.Baseball import baseball_multi as domain
 
     grids, batter_indices = build_strike_zone_grids(delta)
     model = _load_model(batter_indices)
@@ -286,12 +485,21 @@ def build_baseball_runtime(
         key = baseball_execution_skill_key(skill)
         cov = _execution_covariance(skill)
         all_covs[key] = cov
-        pdfs_per_execution_skill[key] = domain.getNormalDistribution(
-            rng,
+        x_offsets = np.arange(
+            -(len(grids.targets_plate_x_feet) - 1),
+            len(grids.targets_plate_x_feet),
+            dtype=float,
+        ) * grids.delta
+        z_offsets = np.arange(
+            -(len(grids.targets_plate_z_feet) - 1),
+            len(grids.targets_plate_z_feet),
+            dtype=float,
+        ) * grids.delta
+        pdfs_per_execution_skill[key] = build_execution_displacement_distribution(
             cov,
             grids.delta,
-            grids.targets_plate_x_feet,
-            grids.targets_plate_z_feet,
+            x_offsets,
+            z_offsets,
         )
 
     return BaseballRuntime(
@@ -307,6 +515,8 @@ def build_pitch_observation(
     runtime: BaseballRuntime,
     execution_skills: Sequence[float],
     executed_action: tuple[float, float] | None = None,
+    *,
+    inference_batch_size: int | None = DEFAULT_RNN_INFERENCE_BATCH_SIZE,
 ) -> PitchObservation:
     """Build one pitch observation with EV surfaces for all execution-skill keys."""
 
@@ -314,18 +524,15 @@ def build_pitch_observation(
         pitch_row,
         runtime.grids,
         runtime.model,
+        inference_batch_size=inference_batch_size,
     )
     evs_per_execution_skill: dict[str, np.ndarray] = {}
     for skill in execution_skills:
         key = baseball_execution_skill_key(float(skill))
-        evs_per_execution_skill[key] = np.asarray(
-            convolve2d(
-                zs,
-                runtime.pdfs_per_execution_skill[key],
-                mode="same",
-                fillvalue=min_utility,
-            ),
-            dtype=float,
+        evs_per_execution_skill[key] = expected_utility_with_outside_floor(
+            zs,
+            runtime.pdfs_per_execution_skill[key],
+            min_utility,
         )
 
     if executed_action is None:
@@ -343,11 +550,18 @@ def build_pitch_observations_for_rows(
     agent_rows: pd.DataFrame,
     runtime: BaseballRuntime,
     execution_skills: Sequence[float],
+    *,
+    inference_batch_size: int | None = DEFAULT_RNN_INFERENCE_BATCH_SIZE,
 ) -> list[PitchObservation]:
     """Build pitch observations for every row in a Statcast agent slice."""
 
     return [
-        build_pitch_observation(row, runtime, execution_skills)
+        build_pitch_observation(
+            row,
+            runtime,
+            execution_skills,
+            inference_batch_size=inference_batch_size,
+        )
         for _, row in agent_rows.iterrows()
     ]
 
@@ -369,9 +583,18 @@ def get_agent_pitch_rows(
 ) -> pd.DataFrame:
     """Return newest-first pitches for one (pitcher, pitch type) agent."""
 
-    agent_data = _agent_pitch_subset(all_data, pitcher_id, pitch_type).sort_values(
-        by=["game_date"],
-        ascending=False,
+    subset = _agent_pitch_subset(all_data, pitcher_id, pitch_type)
+    ordering_columns = [
+        column
+        for column in ("game_date", "game_pk", "at_bat_number", "pitch_number")
+        if column in subset.columns
+    ]
+    if "game_date" not in ordering_columns:
+        raise ValueError("Processed Statcast data is missing game_date.")
+    agent_data = subset.sort_values(
+        by=ordering_columns,
+        ascending=[False] * len(ordering_columns),
+        kind="mergesort",
     )
     if max_rows is not None and len(agent_data) > max_rows:
         agent_data = agent_data.iloc[:max_rows, :]
@@ -428,9 +651,9 @@ def list_eligible_pitcher_counts(
     rows: list[tuple[int, str, int]] = []
     for pitch_type in pitch_types:
         counts = all_data[all_data["pitch_type"] == pitch_type].groupby("pitcher").size()
-        for pitcher_id, pitch_count in counts[counts >= min_pitches].sort_values(ascending=False).items():
+        for pitcher_id, pitch_count in counts[counts >= min_pitches].items():
             rows.append((int(pitcher_id), str(pitch_type), int(pitch_count)))
-    rows.sort(key=lambda item: item[2], reverse=True)
+    rows.sort(key=lambda item: (-item[2], item[1], item[0]))
     return rows if limit is None else rows[:limit]
 
 
@@ -473,7 +696,7 @@ def select_top_pitchers_by_pitch_count(
         raise ValueError(f"count must be positive. Received {count}.")
 
     totals = all_data[all_data["pitch_type"].isin(tuple(pitch_types))].groupby("pitcher").size()
-    eligible = totals[totals >= min_pitches].sort_values(ascending=False)
+    eligible = totals[totals >= min_pitches]
     if eligible.empty:
         raise ValueError(
             f"No pitchers have at least {min_pitches} pitches for pitch types {tuple(pitch_types)}."
@@ -483,7 +706,11 @@ def select_top_pitchers_by_pitch_count(
             f"Requested {count} pitchers but only {len(eligible)} meet min_pitches={min_pitches} "
             f"for pitch types {tuple(pitch_types)}."
         )
-    return tuple(int(pitcher_id) for pitcher_id in eligible.head(count).index)
+    ordered = sorted(
+        ((int(pitcher_id), int(pitch_count)) for pitcher_id, pitch_count in eligible.items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    return tuple(pitcher_id for pitcher_id, _pitch_count in ordered[:count])
 
 
 def resolve_agent_roster(
@@ -512,12 +739,11 @@ def sample_noisy_action(
     intended_action: tuple[float, float],
     execution_skill: float,
 ) -> tuple[float, float]:
-    from Environments.Baseball import baseball_multi as domain
-
-    noisy = domain.sample_noisy_action(
-        rng,
-        [0.0, 0.0],
-        _execution_covariance(execution_skill),
-        [float(intended_action[0]), float(intended_action[1])],
+    noise = rng.multivariate_normal(
+        mean=np.zeros(2, dtype=float),
+        cov=_execution_covariance(execution_skill),
     )
-    return float(noisy[0]), float(noisy[1])
+    return (
+        float(intended_action[0]) + float(noise[0]),
+        float(intended_action[1]) + float(noise[1]),
+    )

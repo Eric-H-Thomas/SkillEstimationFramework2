@@ -1,4 +1,4 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
+# Paper correspondence: Supplement `app:outlier_sensitivity`.
 """Run the H-JEEDS outlier-contamination sensitivity experiment.
 
 Each seed contains the default 25 agents, with five agents in each observation-
@@ -377,10 +377,21 @@ def aggregate_existing_results(scenarios: Sequence[OutlierScenario], output_dir:
 def render_publication_plots(output_dir: Path) -> None:
     """Render the all-agent and subgroup figures from combined results."""
 
-    from HJEEDS.plot_outlier_sensitivity import compute_rows, render
+    from HJEEDS.plot_outlier_sensitivity import (
+        DEFAULT_COUNT_BUCKETS,
+        compute_rows,
+        compute_rows_by_count_bucket,
+        render,
+    )
 
     agent_csv = output_dir / COMBINED_AGENT_LEVEL_FILENAME
-    render(compute_rows(agent_csv), output_dir, dpi=450, hide_negative_bars=True)
+    render(
+        compute_rows(agent_csv),
+        compute_rows_by_count_bucket(agent_csv, DEFAULT_COUNT_BUCKETS),
+        output_dir,
+        dpi=450,
+        hide_negative_bars=True,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

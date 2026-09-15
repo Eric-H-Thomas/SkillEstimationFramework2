@@ -25,7 +25,8 @@ Experiment options:
   --convergence-ns LIST          Comma-separated N values (default: 5,10,25,50,100).
   --max-reference-pitches N      Cap reference pitches per agent (default: 100).
   --min-pitches-per-agent N      Override auto min-pitch threshold.
-  --hyperprior-preset PRESET     darts|low-confidence|baseball-2021-ff|calibrated.
+  --hyperprior-preset PRESET     baseball-literature-informed (paper), darts,
+                                 low-confidence, baseball-2021-ff, or calibrated.
   --hyperprior-config PATH       JSON hyperprior file (required for calibrated preset).
   --output-dir PATH              Output directory.
   --python-bin PATH              Python executable (default: module load miniforge3 + conda activate skill-estimation).

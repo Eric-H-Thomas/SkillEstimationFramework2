@@ -1,3 +1,4 @@
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_hyperpriors`.
 import torch
 import torch.nn as nn 
 
@@ -72,14 +73,9 @@ def getCovMatrix(stdDevs,rho):
 	return covMatrix
 
 def draw_noise_sample(rng,mean,covMatrix):
-	
-	# Need to use rng.bit_generator._seed_seq.entropy instead of just rng to ensure same noises produced each time for given params 
-	if type(rng.bit_generator._seed_seq.entropy) == np.ndarray:
-		seed = rng.bit_generator._seed_seq.entropy[0]
-	else:
-		seed = rng.bit_generator._seed_seq.entropy
-
-	N = multivariate_normal(mean=mean,cov=covMatrix,seed=seed)
+	# A live Generator preserves reproducibility while advancing between draws. Re-seeding
+	# from ``SeedSequence.entropy`` here would repeat one noise vector on every pitch.
+	N = multivariate_normal(mean=mean,cov=covMatrix,seed=rng)
 	
 	return N
 

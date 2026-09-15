@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 07/23/2026 at 9:59 AM MT.
+# Paper correspondence: Main/Supplement `app:compound_stress`.
 """Run compact H-JEEDS compound-stress sensitivity experiments.
 
 This runner combines a small number of misspecification settings so the paper
@@ -6,13 +6,14 @@ can show H-JEEDS under simultaneous stress without a full factorial ablation.
 The default sweep is:
 
 - compound stress setting: default, moderate compound stress, strong compound stress
-- agents per bucket: 1, 2, 5, 10, 25
+- agents per bucket: 5 (fixed)
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import sys
 from dataclasses import dataclass, replace
@@ -53,7 +54,7 @@ from HJEEDS.population_shapes import (
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_compound_stress_sensitivity")
-DEFAULT_AGENTS_PER_BUCKET_VALUES = (1, 2, 5, 10, 25)
+DEFAULT_AGENTS_PER_BUCKET_VALUES = (base_experiment.DEFAULT_AGENTS_PER_BUCKET,)
 DEFAULT_COUNT_BUCKETS = base_experiment.DEFAULT_COUNT_BUCKETS
 
 DEFAULT_HYPERPRIOR_CONDITION_SLUG = "default"
@@ -71,6 +72,7 @@ COMPOUND_STRESS_METADATA_HEADER = [
     "compound_stress_label",
     "compound_stress_description",
     "hyperprior_condition_slug",
+    "correlation_hyperprior_center",
     "true_correlation",
     "population_shape_slug",
     "population_shape_label",
@@ -105,6 +107,7 @@ class CompoundStressSpec:
     population_shape_slug: str
     decision_model_slug: str
     true_correlation: float
+    correlation_hyperprior_center: float
     description: str
 
 
@@ -116,6 +119,7 @@ COMPOUND_STRESS_SPECS = (
         population_shape_slug=DEFAULT_POPULATION_SHAPE_SLUG,
         decision_model_slug=SOFTMAX_DECISION_MODEL_SLUG,
         true_correlation=-0.5,
+        correlation_hyperprior_center=-0.5,
         description="Matched default H-JEEDS simulator and estimator assumptions",
     ),
     CompoundStressSpec(
@@ -125,9 +129,10 @@ COMPOUND_STRESS_SPECS = (
         population_shape_slug=UNIFORM_POPULATION_SHAPE_SLUG,
         decision_model_slug=FLIP_DECISION_MODEL_SLUG,
         true_correlation=0.0,
+        correlation_hyperprior_center=-0.5,
         description=(
             "Moderate combined hyperprior misspecification with a uniform population, "
-            "flip behavior, and zero true skill correlation"
+            "flip behavior, zero true skill correlation, and a correlation prior centered at -0.5"
         ),
     ),
     CompoundStressSpec(
@@ -137,14 +142,18 @@ COMPOUND_STRESS_SPECS = (
         population_shape_slug=BIMODAL_POPULATION_SHAPE_SLUG,
         decision_model_slug=DECEPTIVE_DECISION_MODEL_SLUG,
         true_correlation=0.9,
-        description="Strong combined stress with wrong-sign correlation and non-softmax deceptive behavior",
+        correlation_hyperprior_center=-0.9,
+        description=(
+            "Strong combined stress with true correlation +0.9, a wrong-sign correlation "
+            "prior centered at -0.9, and non-softmax deceptive behavior"
+        ),
     ),
 )
 
 
 @dataclass(frozen=True)
 class CompoundStressScenario:
-    """One concrete compound-stress x agents-per-bucket scenario."""
+    """One compound-stress scenario at the default population size."""
 
     scenario_index: int
     config: base_experiment.ExperimentConfig
@@ -244,6 +253,7 @@ def compound_stress_metadata_row(compound_stress: CompoundStressSpec) -> dict[st
         "compound_stress_label": compound_stress.label,
         "compound_stress_description": compound_stress.description,
         "hyperprior_condition_slug": compound_stress.hyperprior_condition_slug,
+        "correlation_hyperprior_center": compound_stress.correlation_hyperprior_center,
         "true_correlation": compound_stress.true_correlation,
         **population_metadata,
         **decision_metadata,
@@ -368,6 +378,15 @@ def build_config_for_scenario(
         config.hyperpriors,
         hyperprior_condition,
     )
+    # The representative conditions were defined relative to the baseline
+    # truth r=-0.5. Once the compound test changes the true correlation, those
+    # same centers would become matched or same-sign. Override only the
+    # correlation block so moderate stress stays misspecified and strong stress
+    # has the wrong sign described by the experiment.
+    hyperpriors = replace(
+        hyperpriors,
+        m_r=math.atanh(compound_stress.correlation_hyperprior_center),
+    )
     true_population = replace(
         config.true_population,
         population_shape_slug=compound_stress.population_shape_slug,
@@ -380,7 +399,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[CompoundStressScenario, ...]:
-    """Build the compound-stress x agents-per-bucket scenarios."""
+    """Build one default-population-size scenario per compound-stress setting."""
 
     scenarios: list[CompoundStressScenario] = []
     for compound_stress in COMPOUND_STRESS_SPECS:
@@ -672,7 +691,7 @@ def print_dry_run_summary(
     stress_labels = [spec.label for spec in COMPOUND_STRESS_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
 
-    print("=== DRY RUN: Compound Stress x Agents Per Bucket Sensitivity ===")
+    print("=== DRY RUN: Compound Stress Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
     print(f"Compound stress settings: {', '.join(stress_labels)}")

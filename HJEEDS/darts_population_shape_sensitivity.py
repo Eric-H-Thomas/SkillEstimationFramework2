@@ -1,5 +1,5 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
-"""Run H-JEEDS agents-per-bucket ablations across true population shapes.
+# Paper correspondence: Main/Supplement `app:population_shape`.
+"""Run isolated H-JEEDS sensitivity tests across true population shapes.
 
 This script varies the simulator's true population shape while keeping the
 H-JEEDS estimator's Gaussian population model and default hyperpriors fixed.
@@ -43,7 +43,7 @@ from HJEEDS.population_shapes import (
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_population_shape_sensitivity")
-DEFAULT_AGENTS_PER_BUCKET_VALUES = (1, 2, 5, 10, 25)
+DEFAULT_AGENTS_PER_BUCKET_VALUES = (base_experiment.DEFAULT_AGENTS_PER_BUCKET,)
 DEFAULT_COUNT_BUCKETS = base_experiment.DEFAULT_COUNT_BUCKETS
 
 SCENARIOS_FILENAME = "population_shape_sensitivity_scenarios.csv"
@@ -75,7 +75,7 @@ SCENARIO_METADATA_HEADER = [
 
 @dataclass(frozen=True)
 class PopulationShapeScenario:
-    """One concrete population-shape x agents-per-bucket scenario."""
+    """One population-shape scenario at the default population size."""
 
     scenario_index: int
     config: base_experiment.ExperimentConfig
@@ -192,7 +192,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int],
 ) -> tuple[PopulationShapeScenario, ...]:
-    """Return the flat scenario list used by local runs and Slurm arrays."""
+    """Build one default-population-size scenario per population shape."""
 
     scenarios: list[PopulationShapeScenario] = []
     for population_shape in POPULATION_SHAPE_SPECS:
@@ -568,7 +568,7 @@ def print_dry_run_summary(
     shape_slugs = [shape.slug for shape in POPULATION_SHAPE_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
 
-    print("=== DRY RUN: Population Shape x Agents Per Bucket Sensitivity ===")
+    print("=== DRY RUN: Isolated Population Shape Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
     print(f"Population shapes: {', '.join(shape_slugs)}")

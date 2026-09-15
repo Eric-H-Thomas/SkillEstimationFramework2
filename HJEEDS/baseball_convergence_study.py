@@ -1,4 +1,4 @@
-# This file has been fully reviewed by a human researcher as of 07/18/26 at 10:34 AM MDT.
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_sigma_gap`.
 """CLI entry point for Statcast baseball convergence (Phase 2 / paper BBIP).
 
 Public CLI over ``baseball_convergence``: argparse, CSV/plot writers, and
@@ -10,7 +10,8 @@ Paper BBIP: ``submit_hjeeds_baseball_convergence_paper_bbip.sh`` →
 ``submit_hjeeds_baseball_convergence_array.sh`` → this module with
 ``--bbip-extremes 10``, ``--season-year 2021``, ``--pitch-types FF``,
 ``min_pitches_per_agent=100``, ``convergence_ns=5,10,25,50,100``,
-``max_reference_pitches=100``, ``--hyperprior-preset baseball-2021-ff``.
+``max_reference_pitches=100``,
+``--hyperprior-preset baseball-literature-informed``.
 
 Drift is self-reference (JEEDS→JEEDS@N_max, H-JEEDS→H-JEEDS@N_max), not
 ground truth. Statcast estimates are deterministic in seed. When roster
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -51,14 +53,26 @@ from HJEEDS.baseball_convergence import (
     DEFAULT_PITCHER_IDS,
     aggregate_convergence_across_seeds,
     aggregate_convergence_results,
+    begin_convergence_run_metadata,
     build_baseball_convergence_config_from_args,
+    build_convergence_run_provenance,
     build_drift_summary_tables,
+    finalize_convergence_run_metadata,
+    load_convergence_roster,
+    load_convergence_roster_metadata,
     planned_convergence_output_paths,
     prepare_convergence_roster,
     print_baseball_convergence_dry_run_summary,
     required_min_pitches_for_convergence,
+    restamp_convergence_run_incomplete,
     run_convergence_agent_index,
     run_single_baseball_convergence_seed,
+    validate_complete_convergence_run_metadata,
+)
+from HJEEDS.baseball_provenance import (
+    build_baseball_run_provenance,
+    require_matching_fingerprint,
+    roster_fingerprint,
 )
 from HJEEDS.baseball_pitch import DEFAULT_DELTA, DEFAULT_EXECUTION_SKILL_MAX, DEFAULT_EXECUTION_SKILL_MIN
 from HJEEDS.baseball_plot_style import BASEBALL_METHOD_STYLES
@@ -176,7 +190,7 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         action="store_true",
         help=(
             "Regenerate summary CSVs and drift plots from an existing agent-level CSV. "
-            "Also regenerates BBIP separability when bbip_selection is present."
+            "Also regenerates walk/IP-proxy separability when bbip_selection is present."
         ),
     )
     parser.add_argument(
@@ -210,6 +224,22 @@ def parse_convergence_args(argv: Sequence[str] | None = None) -> argparse.Namesp
         "--use-prepared-roster",
         action="store_true",
         help="Load convergence_roster.json from --output-dir instead of re-resolving roster selectors.",
+    )
+    parser.add_argument(
+        "--allow-partial-caches",
+        action="store_true",
+        help=(
+            "NON-PAPER ONLY: aggregate when prepared-roster agent caches are missing. "
+            "The publication path fails on an incomplete cohort."
+        ),
+    )
+    parser.add_argument(
+        "--allow-separability-failure",
+        action="store_true",
+        help=(
+            "NON-PAPER ONLY: keep convergence outputs if walk/IP-proxy separability fails. "
+            "The publication path treats separability as required."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -272,7 +302,7 @@ def write_convergence_summary_csvs(
 
 
 def _roster_has_bbip_selection(output_dir: Path) -> bool:
-    """True when prepare-roster wrote a BB/IP extremes manifest under output_dir."""
+    """True when prepare-roster wrote a walk/IP-proxy extremes manifest."""
 
     import json
 
@@ -286,12 +316,17 @@ def _roster_has_bbip_selection(output_dir: Path) -> bool:
     return bool(payload.get("bbip_selection"))
 
 
-def maybe_write_separability_outputs(output_dir: Path) -> dict[str, Any] | None:
-    """Run BBIP separability after drift plots when ``bbip_selection`` is present.
+def maybe_write_separability_outputs(
+    output_dir: Path,
+    *,
+    allow_failure: bool = False,
+) -> dict[str, Any] | None:
+    """Run proxy-group separability when ``bbip_selection`` is present.
 
-    Non-BBIP rosters (top-pitchers / pitcher-ids / all-eligible) skip silently so
-    aggregate jobs stay unchanged. Failures are logged and swallowed so a plotting
-    error cannot undo an otherwise successful aggregate (CSVs / drift plots).
+    Other rosters (top-pitchers / pitcher-ids / all-eligible) skip silently so
+    aggregate jobs stay unchanged. Walk/IP-proxy failures are fatal by default
+    because the separability result is a paper endpoint; ``allow_failure`` is
+    non-paper only.
     """
 
     if not _roster_has_bbip_selection(output_dir):
@@ -302,15 +337,21 @@ def maybe_write_separability_outputs(output_dir: Path) -> dict[str, Any] | None:
     try:
         summary = run_separability_analysis(output_dir)
     except Exception as exc:
+        if not allow_failure:
+            raise RuntimeError(
+                f"Required walk/IP-proxy separability failed under "
+                f"{output_dir.resolve()}: {exc}"
+            ) from exc
         print(
-            f"[baseball-convergence] WARNING: BBIP separability failed under "
+            f"[baseball-convergence] NON-PAPER WARNING: walk/IP-proxy separability failed under "
             f"{output_dir.resolve()}: {exc}",
             flush=True,
         )
         return None
 
     print(
-        f"[baseball-convergence] Wrote BBIP separability artifacts under {output_dir.resolve()}",
+        f"[baseball-convergence] Wrote walk/IP-proxy separability artifacts under "
+        f"{output_dir.resolve()}",
         flush=True,
     )
     return summary
@@ -321,15 +362,112 @@ def write_convergence_outputs(
     agent_results: Sequence[StatcastConvergenceAgentResult],
     summary_by_n_rows: Sequence[dict[str, Any]],
     summary_overall_rows: Sequence[dict[str, Any]],
+    *,
+    allow_separability_failure: bool = False,
 ) -> dict[str, Path]:
-    """Write agent CSV, summary CSVs, drift plots, and BBIP separability when applicable."""
+    """Write agent/summary CSVs, drift plots, and proxy separability artifacts."""
 
+    roster_metadata_path = output_dir / CONVERGENCE_ROSTER_METADATA_FILENAME
+    if roster_metadata_path.is_file():
+        frozen_metadata = load_convergence_roster_metadata(output_dir)
+        frozen_roster = load_convergence_roster(output_dir)
+        validate_convergence_agent_results(
+            agent_results,
+            expected_agent_ids={spec.agent_id for spec in frozen_roster},
+            expected_checkpoints={
+                int(value) for value in frozen_metadata.get("convergence_ns", ())
+            },
+        )
+    else:
+        validate_convergence_agent_results(agent_results)
     paths = planned_convergence_output_paths(output_dir)
     write_convergence_agent_level_csv(paths["agent_level_csv"], agent_results)
     write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
     write_drift_plots(output_dir, summary_by_n_rows)
-    maybe_write_separability_outputs(output_dir)
+    maybe_write_separability_outputs(
+        output_dir,
+        allow_failure=allow_separability_failure,
+    )
+    finalize_convergence_run_metadata(output_dir)
+    print(
+        f"[baseball-convergence] Regenerated dual-reference summaries and plots under "
+        f"{output_dir.resolve()}",
+        flush=True,
+    )
     return paths
+
+
+def validate_convergence_agent_results(
+    agent_results: Sequence[StatcastConvergenceAgentResult],
+    *,
+    expected_agent_ids: set[int] | None = None,
+    expected_checkpoints: set[int] | None = None,
+) -> None:
+    """Fail before publication output if any agent/checkpoint estimate is incomplete."""
+
+    if not agent_results:
+        raise ValueError("No baseball convergence agent results were produced.")
+    seen: set[tuple[int, int, int]] = set()
+    checkpoints_by_seed_agent: dict[tuple[int, int], set[int]] = defaultdict(set)
+    agents_by_seed: dict[int, set[int]] = defaultdict(set)
+    for result in agent_results:
+        identity = (int(result.seed), int(result.agent_id), int(result.convergence_n))
+        if identity in seen:
+            raise ValueError(f"Duplicate baseball convergence result {identity}.")
+        seen.add(identity)
+        checkpoints_by_seed_agent[(result.seed, result.agent_id)].add(result.convergence_n)
+        agents_by_seed[result.seed].add(result.agent_id)
+
+        for label, estimate in (
+            ("reference", result.reference),
+            ("JEEDS", result.jeeds),
+            ("H-JEEDS", result.hierarchical),
+        ):
+            if estimate.status != "ok":
+                raise ValueError(f"{label} status is {estimate.status!r} for result {identity}.")
+            for field_name, value in (
+                ("posterior_mean_sigma", estimate.posterior_mean_sigma),
+                ("posterior_mean_log_lambda", estimate.posterior_mean_log_lambda),
+            ):
+                if value is None or not math.isfinite(float(value)):
+                    raise ValueError(f"{label} {field_name} is invalid for result {identity}: {value}.")
+                if field_name == "posterior_mean_sigma" and float(value) <= 0.0:
+                    raise ValueError(
+                        f"{label} posterior_mean_sigma must be positive for result "
+                        f"{identity}: {value}."
+                    )
+
+        for field_name, value in (
+            ("jeeds_sigma_drift", result.abs_sigma_drift_vs_full_jeeds),
+            ("jeeds_log_lambda_drift", result.abs_log_lambda_drift_vs_full_jeeds),
+            ("hierarchical_sigma_drift", result.abs_sigma_drift_vs_full_hierarchical),
+            ("hierarchical_log_lambda_drift", result.abs_log_lambda_drift_vs_full_hierarchical),
+        ):
+            if value is None or not math.isfinite(float(value)) or float(value) < 0.0:
+                raise ValueError(f"{field_name} is invalid for result {identity}: {value}.")
+
+    if expected_checkpoints is None:
+        expected_checkpoints = set().union(*checkpoints_by_seed_agent.values())
+    if not expected_checkpoints:
+        raise ValueError("Expected baseball convergence checkpoints cannot be empty.")
+    for seed_agent, checkpoints in checkpoints_by_seed_agent.items():
+        if checkpoints != expected_checkpoints:
+            raise ValueError(
+                f"Seed/agent {seed_agent} has checkpoints {sorted(checkpoints)}; "
+                f"expected {sorted(expected_checkpoints)}."
+            )
+    expected_agents = (
+        set(expected_agent_ids)
+        if expected_agent_ids is not None
+        else set().union(*agents_by_seed.values())
+    )
+    if not expected_agents:
+        raise ValueError("Expected baseball convergence agent roster cannot be empty.")
+    for seed, agents in agents_by_seed.items():
+        if agents != expected_agents:
+            raise ValueError(
+                f"Seed {seed} has agents {sorted(agents)}; expected {sorted(expected_agents)}."
+            )
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -509,6 +647,11 @@ def plot_drift_by_n(
                 else:
                     x_values = [float(row["count_bucket"]) for row in method_rows]
                 y_values = [row["mean"] for row in method_rows]
+                if any(not math.isfinite(float(value)) or float(value) < 0.0 for value in y_values):
+                    raise ValueError(
+                        f"Drift plot values must be finite and nonnegative for "
+                        f"{method}/{metric_name}: {y_values}."
+                    )
 
                 (line,) = axis.plot(
                     x_values,
@@ -574,7 +717,11 @@ def write_drift_plots(output_dir: Path, summary_by_n_rows: Sequence[dict[str, An
     )
 
 
-def regenerate_plot_from_existing_results(output_dir: Path) -> None:
+def regenerate_plot_from_existing_results(
+    output_dir: Path,
+    *,
+    allow_separability_failure: bool = False,
+) -> None:
     """Recompute dual self-reference drifts from agent CSV, then rewrite summaries/plots."""
 
     paths = planned_convergence_output_paths(output_dir)
@@ -589,6 +736,8 @@ def regenerate_plot_from_existing_results(output_dir: Path) -> None:
     if not agent_rows:
         raise ValueError(f"No rows in {agent_path}")
 
+    validate_plot_only_agent_rows(output_dir, agent_rows)
+    restamp_convergence_run_incomplete(output_dir)
     updated_rows = recompute_self_reference_drifts_in_agent_rows(agent_rows)
     with agent_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CONVERGENCE_AGENT_LEVEL_HEADER)
@@ -598,12 +747,127 @@ def regenerate_plot_from_existing_results(output_dir: Path) -> None:
     summary_by_n_rows, summary_overall_rows = summarize_drift_rows_from_agent_csv_rows(updated_rows)
     write_convergence_summary_csvs(output_dir, summary_by_n_rows, summary_overall_rows)
     write_drift_plots(output_dir, summary_by_n_rows)
-    maybe_write_separability_outputs(output_dir)
-    print(
-        f"[baseball-convergence] Regenerated dual-reference summaries and plots under "
-        f"{output_dir.resolve()}",
-        flush=True,
+    maybe_write_separability_outputs(
+        output_dir,
+        allow_failure=allow_separability_failure,
     )
+    finalize_convergence_run_metadata(output_dir)
+
+
+def validate_plot_only_agent_rows(
+    output_dir: Path,
+    agent_rows: Sequence[dict[str, Any]],
+) -> None:
+    """Require the frozen deterministic roster×checkpoint product before plotting."""
+
+    metadata = load_convergence_roster_metadata(output_dir)
+    roster = load_convergence_roster(output_dir)
+    expected_ns = tuple(int(value) for value in metadata.get("convergence_ns", ()))
+    if not expected_ns:
+        raise ValueError("Frozen convergence metadata has no checkpoints.")
+    if int(metadata.get("num_agents", -1)) != len(roster):
+        raise ValueError("Frozen convergence roster size does not match its metadata.")
+
+    frozen_provenance = metadata.get("run_provenance")
+    if not isinstance(frozen_provenance, dict):
+        raise ValueError("Frozen convergence metadata lacks run_provenance.")
+    expected_provenance = build_baseball_run_provenance(
+        season_year=metadata.get("season_year"),
+        pitch_types=metadata.get("pitch_types") or (),
+        sigma_grid=frozen_provenance.get("sigma_grid") or (),
+        log_lambda_grid=frozen_provenance.get("log_lambda_grid") or (),
+        configuration=frozen_provenance.get("configuration") or {},
+    )
+    require_matching_fingerprint(
+        frozen_provenance,
+        expected_provenance,
+        label="plot-only convergence metadata",
+    )
+    frozen_configuration = frozen_provenance.get("configuration") or {}
+    for key, expected_value in (
+        ("convergence_ns", list(expected_ns)),
+        ("max_reference_pitches", metadata.get("max_reference_pitches")),
+        ("min_pitches_per_agent", metadata.get("min_pitches_per_agent")),
+        ("num_agents", len(roster)),
+    ):
+        if frozen_configuration.get(key) != expected_value:
+            raise ValueError(
+                f"Frozen convergence provenance {key}={frozen_configuration.get(key)!r}; "
+                f"metadata expects {expected_value!r}."
+            )
+    expected_roster_hash = roster_fingerprint(
+        [(spec.agent_id, spec.pitcher_id, spec.pitch_type) for spec in roster]
+    )
+    if (frozen_provenance.get("configuration") or {}).get(
+        "roster_fingerprint"
+    ) != expected_roster_hash:
+        raise ValueError("Frozen convergence provenance does not match convergence_roster.json.")
+
+    seeds = {int(row["seed"]) for row in agent_rows}
+    if len(seeds) != 1:
+        raise ValueError(
+            f"Paper baseball plotting requires one deterministic seed; found {sorted(seeds)}."
+        )
+    seed = next(iter(seeds))
+    expected_identity = {
+        (seed, spec.agent_id, checkpoint)
+        for spec in roster
+        for checkpoint in expected_ns
+    }
+    spec_by_agent = {spec.agent_id: spec for spec in roster}
+    available_counts = {
+        (int(row["pitcher_id"]), str(row["pitch_type"])): int(row["num_available_pitches"])
+        for row in metadata.get("agent_pitch_counts", [])
+    }
+    if len(available_counts) != len(roster):
+        raise ValueError("Frozen convergence metadata has incomplete agent pitch counts.")
+    actual_identity: set[tuple[int, int, int]] = set()
+    for row in agent_rows:
+        identity = (int(row["seed"]), int(row["agent_id"]), int(row["convergence_n"]))
+        if identity in actual_identity:
+            raise ValueError(f"Duplicate convergence agent CSV row {identity}.")
+        actual_identity.add(identity)
+        spec = spec_by_agent.get(identity[1])
+        if spec is None or (int(row["pitcher_id"]), str(row["pitch_type"])) != (
+            spec.pitcher_id,
+            spec.pitch_type,
+        ):
+            raise ValueError(f"Convergence agent CSV identity mismatch for {identity}.")
+        available = available_counts[(spec.pitcher_id, spec.pitch_type)]
+        expected_observations = min(identity[2], available)
+        max_reference = metadata.get("max_reference_pitches")
+        expected_reference = (
+            available if max_reference is None else min(available, int(max_reference))
+        )
+        if int(row.get("num_observations", -1)) != expected_observations:
+            raise ValueError(f"Incorrect num_observations for {identity}.")
+        if int(row.get("num_reference_observations", -1)) != expected_reference:
+            raise ValueError(f"Incorrect num_reference_observations for {identity}.")
+        for status_field in ("reference_status", "jeeds_status", "hierarchical_status"):
+            if str(row.get(status_field, "")).strip().lower() != "ok":
+                raise ValueError(f"Non-successful {status_field} for {identity}.")
+        for value_field in (
+            "reference_posterior_mean_sigma",
+            "reference_posterior_mean_log_lambda",
+            "jeeds_posterior_mean_sigma",
+            "jeeds_posterior_mean_log_lambda",
+            "hierarchical_posterior_mean_sigma",
+            "hierarchical_posterior_mean_log_lambda",
+        ):
+            value = _float_or_none(row.get(value_field))
+            if value is None or not math.isfinite(value):
+                raise ValueError(f"Invalid {value_field} for {identity}: {row.get(value_field)!r}.")
+            if value_field.endswith("posterior_mean_sigma") and value <= 0.0:
+                raise ValueError(
+                    f"Nonpositive {value_field} for {identity}: {row.get(value_field)!r}."
+                )
+    missing = expected_identity - actual_identity
+    extra = actual_identity - expected_identity
+    if missing or extra:
+        raise ValueError(
+            "Convergence agent CSV is not the frozen roster×checkpoint product: "
+            f"missing={sorted(missing)}, extra={sorted(extra)}."
+        )
 
 
 def _load_pitcher_name_lookup(output_dir: Path) -> dict[int, str]:
@@ -631,6 +895,7 @@ def plot_agent_intermediate_estimates(output_dir: Path) -> list[Path]:
     import matplotlib.pyplot as plt
     import pandas as pd
 
+    validate_complete_convergence_run_metadata(output_dir)
     paths = planned_convergence_output_paths(output_dir)
     agent_csv = paths["agent_level_csv"]
     if not agent_csv.is_file():
@@ -798,7 +1063,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.plot_only:
-        regenerate_plot_from_existing_results(config.base.output_dir)
+        regenerate_plot_from_existing_results(
+            config.base.output_dir,
+            allow_separability_failure=args.allow_separability_failure,
+        )
         return 0
 
     if args.aggregate_results:
@@ -808,6 +1076,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             all_agent_results,
             summary_by_n_rows,
             summary_overall_rows,
+            allow_separability_failure=args.allow_separability_failure,
         )
         print(f"[baseball-convergence] Wrote aggregated results to {config.base.output_dir.resolve()}", flush=True)
         return 0
@@ -816,6 +1085,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_convergence_agent_index(args, args.agent_index)
         return 0
 
+    begin_convergence_run_metadata(
+        config.base.output_dir,
+        args=args,
+        config=config,
+        run_provenance=build_convergence_run_provenance(config),
+    )
     seed_results = []
     for seed_index, seed in enumerate(config.seed_values, start=1):
         print(
@@ -831,6 +1106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         all_agent_results,
         summary_by_n_rows,
         summary_overall_rows,
+        allow_separability_failure=args.allow_separability_failure,
     )
     print(f"[baseball-convergence] Wrote results to {config.base.output_dir.resolve()}", flush=True)
     return 0

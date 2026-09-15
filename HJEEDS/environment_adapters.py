@@ -1,4 +1,4 @@
-# This file has been fully verified by a human researcher as of 6/12/26 at 3:14 PM MDT.
+# Paper correspondence: Main `subsec:one_d_darts`, `subsec:two_d_darts`, and `subsec:baseball`.
 """Environment-specific domain adapters for HJEEDS likelihood and simulation."""
 
 from __future__ import annotations
@@ -41,22 +41,27 @@ class EnvironmentDomain(ABC):
 
 
 class OneDDartsEnvironment(EnvironmentDomain):
-    """1D darts environment adapter."""
+    """Adapter for the paper's non-wrapped 1D darts environment."""
 
     def compute_expected_value_curve(self, reward_surface, sigma, delta):
-        from Environments.Darts.RandomDarts import darts
+        # The paper's 1D environment assigns reward zero outside [-10, 10].
+        # Route every H-JEEDS caller through that implementation rather than the
+        # legacy circular-board helper in Environments/Darts/RandomDarts/darts.py.
+        from . import darts_environment
 
-        return darts.compute_expected_value_curve(reward_surface, sigma, delta)
+        return darts_environment.compute_expected_value_curve(reward_surface, sigma, delta)
 
     def sample_noisy_action(self, rng, reward_surface, sigma, intended_action):
-        from Environments.Darts.RandomDarts import darts
+        # ``reward_surface`` is accepted to satisfy the common environment
+        # interface, but non-wrapped Gaussian execution does not depend on it.
+        from . import darts_environment
 
-        return darts.sample_noisy_action(rng, reward_surface, sigma, intended_action)
+        return darts_environment.sample_noisy_action(rng, sigma, intended_action)
 
     def compute_action_difference(self, action_1, action_2, reward_surface=None):
-        from Environments.Darts.RandomDarts import darts
-
-        return darts.calculate_wrapped_action_difference(action_1, action_2)
+        # The continuous action space is a line, not a circle. Return a
+        # nonnegative distance as required by the deceptive decision model.
+        return abs(float(action_1) - float(action_2))
 
 
 class TwoDDartsEnvironment(EnvironmentDomain):
@@ -76,10 +81,17 @@ class TwoDDartsEnvironment(EnvironmentDomain):
         return np.asarray(on_board_evs, dtype=float), actions
 
     def sample_noisy_action(self, rng, reward_surface, sigma, intended_action):
-        from Environments.Darts.RandomDarts import two_d_darts
-
-        result = two_d_darts.sample_noisy_action(rng, reward_surface, sigma, intended_action)
-        return tuple(result)
+        # Draw from the supplied generator so each observation receives an
+        # independent perturbation. ``two_d_darts.sample_noisy_action`` reseeds a
+        # frozen ``multivariate_normal`` from the generator's root entropy on every
+        # call, which returns one identical displacement for every throw in a run.
+        # ``reward_surface`` is accepted to satisfy the common interface; isotropic
+        # Gaussian execution does not depend on it.
+        noise = rng.normal(0.0, float(sigma), size=2)
+        return (
+            float(intended_action[0] + noise[0]),
+            float(intended_action[1] + noise[1]),
+        )
 
     def compute_action_difference(self, action_1, action_2, reward_surface=None):
         from Environments.Darts.RandomDarts import two_d_darts

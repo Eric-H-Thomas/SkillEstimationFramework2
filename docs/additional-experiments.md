@@ -10,6 +10,6 @@ The repository includes scripts that study how the JEEDS estimator reacts to sub
 The repository also includes H-JEEDS ablation scripts for the hierarchical 1D darts estimator.
 
 - The standalone hyperprior robustness study runs a 60-condition grid covering average skill, population spread, correlation, and combined misspecification.
-- The agents-per-bucket ablation defaults to 15 scenarios: five agents-per-bucket values crossed with three representative robustness conditions.
+- The agents-per-bucket ablation defaults to 5 scenarios: five agents-per-bucket values under the default hyperprior condition, so the study varies only population size.
 - The high-data-anchor availability ablation keeps 25 one-sample agents fixed and varies the number of 25-sample anchor agents.
 - See [H-JEEDS Experiments](hjeeds.md) for commands, Slurm submission, outputs, and verification checks.

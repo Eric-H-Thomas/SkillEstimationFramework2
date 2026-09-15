@@ -1,10 +1,8 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
-"""Create mirrored improvement plots for the population-shape study.
+"""Create the population-shape figures used in the paper and supplement.
 
-The figure plots percent improvement of H-JEEDS over JEEDS at a fixed
-agents-per-bucket value. Execution-skill improvement is mirrored to the left
-of zero; decision-making improvement, using rationality-percentage error, is
-mirrored to the right.
+Paper correspondence: main paper "Non-Gaussian Population Shape Sensitivity"
+(`fig:population_shape_lowest_bucket`) and Supplement "Non-Gaussian
+Population Shape Sensitivity" (`fig:population_shape_sensitivity_panels`).
 """
 
 from __future__ import annotations
@@ -138,42 +136,6 @@ def compute_improvement_rows(
     with agent_level_csv.open("r", newline="") as handle:
         for row in csv.DictReader(handle):
             if int(row["agents_per_bucket"]) != agents_per_bucket or int(row["count_bucket"]) != count_bucket:
-                continue
-            if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
-                continue
-
-            shape_slug = str(row["population_shape_slug"])
-            if shape_slug not in SHAPE_ORDER:
-                continue
-
-            observation = _seed_observation_from_agent_row(row, shape_slug)
-            if observation is not None:
-                observations.append(observation)
-
-    summaries = _summarize_seed_improvements(observations)
-    rows: list[ShapeRow] = []
-    for shape_slug in SHAPE_ORDER:
-        summary = summaries.get(shape_slug)
-        if summary is None:
-            continue
-        rows.append(
-            ShapeRow(
-                shape_slug=shape_slug,
-                shape_label=SHAPE_LABELS[shape_slug],
-                **_summary_fields(summary),
-            )
-        )
-
-    return rows
-
-
-def compute_overall_improvement_rows(*, agent_level_csv: Path, agents_per_bucket: int) -> list[ShapeRow]:
-    """Compute percent improvements after averaging over all observation-count buckets."""
-
-    observations = []
-    with agent_level_csv.open("r", newline="") as handle:
-        for row in csv.DictReader(handle):
-            if int(row["agents_per_bucket"]) != agents_per_bucket:
                 continue
             if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
                 continue
@@ -574,7 +536,7 @@ def render_all(
     dpi: int,
     hide_negative_bars: bool,
 ) -> None:
-    """Render all population-shape plots requested for the paper."""
+    """Render the all-bucket panel used in the supplement."""
 
     rows_by_bucket = {
         count_bucket: compute_improvement_rows(
@@ -585,17 +547,6 @@ def render_all(
         for count_bucket in count_buckets
     }
 
-    for count_bucket in count_buckets:
-        output_stem = output_dir / f"bucket_{count_bucket:03d}_population_shape_improvement_bars"
-        plot_single_bucket(
-            rows=rows_by_bucket[count_bucket],
-            count_bucket=count_bucket,
-            agents_per_bucket=agents_per_bucket,
-            output_stem=output_stem,
-            dpi=dpi,
-            hide_negative_bars=hide_negative_bars,
-        )
-
     panel_stem = output_dir / "population_shape_sensitivity_panels"
     plot_panel_figure(
         rows_by_bucket=rows_by_bucket,
@@ -604,20 +555,6 @@ def render_all(
         dpi=dpi,
         hide_negative_bars=hide_negative_bars,
     )
-
-    overall_rows = compute_overall_improvement_rows(
-        agent_level_csv=agent_level_csv,
-        agents_per_bucket=agents_per_bucket,
-    )
-    plot_single_bucket(
-        rows=overall_rows,
-        count_bucket="all",
-        agents_per_bucket=agents_per_bucket,
-        output_stem=output_dir / "population_shape_all_agents_improvement_bars",
-        dpi=dpi,
-        hide_negative_bars=hide_negative_bars,
-    )
-
 
 def main(argv: Sequence[str] | None = None) -> None:
     """CLI entry point."""

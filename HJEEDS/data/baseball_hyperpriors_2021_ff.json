@@ -12,5 +12,10 @@
   "log_tau_rho_mean": -0.40209892957767435,
   "log_tau_rho_sd": 1.0,
   "m_r": 0.5977719733606661,
-  "s_r": 1.25
+  "s_r": 1.25,
+  "_provenance": {
+    "execution_kernel_version": "legacy-truncated-target-grid-v1",
+    "status": "stale-after-full-displacement-kernel-correction",
+    "action_required": "Re-run the complete all-eligible 2021 FF calibration and replace these centers before the paper MLB run."
+  }
 }

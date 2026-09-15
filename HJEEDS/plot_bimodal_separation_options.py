@@ -21,14 +21,22 @@ from HJEEDS.config import (
     DEFAULT_SIGMA_MIN,
     DEFAULT_TRUE_POPULATION,
 )
-from HJEEDS.plot_population_shape_distributions import _configure_axis, _gaussian_density
-from HJEEDS.sensitivity_plot_common import TEXT_COLOR, configure_matplotlib, save_figure_bundle
+from HJEEDS.plot_population_shape_distributions import _gaussian_density
+from HJEEDS.plot_population_shape_robustness import SHAPE_ORDER
+from HJEEDS.sensitivity_plot_common import (
+    GRID_COLOR,
+    NUMERIC_3_COLORS,
+    TEXT_COLOR,
+    blend,
+    configure_matplotlib,
+    save_figure_bundle,
+)
 
 
 DEFAULT_OUTPUT_STEM = Path(
     "HJEEDS/results/hjeeds_paper_500_seeds/population_shape/bimodal_separation_options"
 )
-BIMODAL_COLOR_SLUG = "bimodal"
+BIMODAL_COLOR = NUMERIC_3_COLORS[SHAPE_ORDER.index("bimodal")]
 SEPARATION_OPTIONS = (
     ("Previous", 0.45),
     ("Subtle", 0.55),
@@ -68,6 +76,63 @@ def bimodal_density(
     )
 
 
+def _draw_density_surface(
+    axis,
+    x_mesh: np.ndarray,
+    y_mesh: np.ndarray,
+    density: np.ndarray,
+) -> None:
+    """Draw one three-dimensional population-density surface."""
+
+    from matplotlib import colors
+
+    relative_density = density / float(np.max(density))
+    color_map = colors.LinearSegmentedColormap.from_list(
+        "bimodal_density",
+        [
+            blend(BIMODAL_COLOR, "#FFFFFF", 0.94),
+            blend(BIMODAL_COLOR, "#FFFFFF", 0.68),
+            BIMODAL_COLOR,
+            blend(BIMODAL_COLOR, TEXT_COLOR, 0.2),
+            blend(BIMODAL_COLOR, TEXT_COLOR, 0.42),
+        ],
+    )
+    face_colors = color_map(colors.PowerNorm(gamma=0.56, vmin=0.0, vmax=1.0)(relative_density))
+    mesh_color = colors.to_rgba(blend(BIMODAL_COLOR, TEXT_COLOR, 0.62), alpha=0.44)
+    axis.plot_surface(
+        x_mesh,
+        y_mesh,
+        relative_density,
+        rstride=3,
+        cstride=3,
+        facecolors=face_colors,
+        edgecolor=mesh_color,
+        linewidth=0.32,
+        antialiased=True,
+        shade=False,
+    )
+
+    axis.set_xlim(math.log(DEFAULT_SIGMA_MIN), math.log(DEFAULT_SIGMA_MAX))
+    axis.set_ylim(math.log(DEFAULT_LAMBDA_MIN), math.log(DEFAULT_LAMBDA_MAX))
+    axis.set_zlim(0.0, 1.05)
+    sigma_ticks = (0.5, 1.5, 3.0, 4.5)
+    lambda_ticks = (0.001, 0.1, 1.0, 10.0, 100.0)
+    axis.set_xticks(np.log(sigma_ticks), [f"{value:g}" for value in sigma_ticks])
+    axis.set_yticks(np.log(lambda_ticks), [f"{value:g}" for value in lambda_ticks])
+    axis.set_zticks((0.0, 0.5, 1.0), ("0", "0.5", "1"))
+    axis.set_xlabel(r"Execution noise, $\sigma$", color=TEXT_COLOR, labelpad=5.0)
+    axis.set_ylabel(r"Decision skill, $\lambda$", color=TEXT_COLOR, labelpad=7.0)
+    axis.set_zlabel("Relative density", color=TEXT_COLOR, labelpad=4.0)
+    axis.set_box_aspect((1.4, 1.08, 0.68))
+    for axis_name in ("x", "y", "z"):
+        axis.tick_params(axis=axis_name, colors=TEXT_COLOR, labelsize=6.4, pad=0.5)
+    for coordinate_axis in (axis.xaxis, axis.yaxis, axis.zaxis):
+        coordinate_axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        coordinate_axis.pane.set_edgecolor("#B8B3BF")
+        coordinate_axis._axinfo["grid"]["color"] = colors.to_rgba(GRID_COLOR, 0.68)
+        coordinate_axis._axinfo["grid"]["linewidth"] = 0.45
+
+
 def component_separation_sd(between_variance_fraction: float) -> float:
     """Return component-center separation in within-component SD units."""
 
@@ -95,9 +160,8 @@ def render(output_stem: Path, dpi: int) -> None:
 
     figure, axes = plt.subplots(2, 2, figsize=(11.4, 8.5), subplot_kw={"projection": "3d"})
     for axis, (label, fraction) in zip(axes.ravel(), SEPARATION_OPTIONS):
-        _configure_axis(
+        _draw_density_surface(
             axis,
-            BIMODAL_COLOR_SLUG,
             x_mesh,
             y_mesh,
             bimodal_density(fraction, x_mesh, y_mesh),

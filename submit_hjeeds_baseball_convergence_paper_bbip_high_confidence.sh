@@ -3,6 +3,10 @@
 # but FF21 calibrated centers with STRONG confidence widths (darts prior-sensitivity
 # "strong" = default SDs x 1/3) instead of baseball low-confidence widths.
 # Zero-arg: git pull, then ./submit_hjeeds_baseball_convergence_paper_bbip_high_confidence.sh
+#
+# The bundled high-confidence JSON predates the full-displacement-kernel correction, so
+# `--hyperprior-preset calibrated` now fails closed on its provenance. Recalibrate against
+# the corrected kernel before using this ablation.
 
 set -euo pipefail
 

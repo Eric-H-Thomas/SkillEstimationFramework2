@@ -1,11 +1,11 @@
-# This file has been fully reviewed by a human researcher as of 07/18/26 at 11:01 AM MDT.
-"""BB/IP top/bottom separability of JEEDS vs H-JEEDS estimates by observation count.
+# Paper correspondence: Supplement `app:baseball_sigma_gap`.
+"""Walk/IP-proxy group separability of JEEDS vs H-JEEDS by observation count.
 
 Post-hoc analysis on convergence outputs (does **not** re-estimate). Reads
 ``convergence_agent_level_results.csv`` + ``convergence_roster_metadata.json``,
-re-labels BB/IP tiers within the frozen roster, then reports AUC / mean-gap of
+re-labels processed-data walk/IP-proxy tiers within the frozen roster, then reports AUC / mean-gap of
 posterior-mean ``sigma`` (primary) and ``log_lambda`` (secondary) vs top vs
-bottom BB/IP groups at each checkpoint ``N``.
+bottom proxy groups at each checkpoint ``N``.
 
 Paper BBIP: ``--aggregate-results`` / ``--plot-only`` auto-run this when
 ``convergence_roster_metadata.json`` contains ``bbip_selection`` (same output
@@ -169,7 +169,7 @@ def compute_separability_rows(
         ("hierarchical", "hierarchical_posterior_mean_sigma", "hierarchical_posterior_mean_log_lambda"),
     )
     skill_notes = (
-        ("sigma", "Higher sigma = worse execution; expect top-BB/IP (walkers) higher."),
+        ("sigma", "Higher sigma = worse execution; expect the high walk/IP-proxy group higher."),
         ("log_lambda", "Secondary axis; not the primary original-JEEDS separator."),
     )
 
@@ -205,7 +205,7 @@ def compute_separability_rows(
                 if not bottom_scores or not top_scores:
                     continue
                 scores = bottom_scores + top_scores
-                # Positive class = top BB/IP (high walk rate). For sigma, higher score => top.
+                # Positive class = high walk/IP proxy. For sigma, higher score => high group.
                 labels = [0] * len(bottom_scores) + [1] * len(top_scores)
                 auc = mann_whitney_auc(scores, labels)
                 mean_bottom = float(np.mean(bottom_scores))
@@ -225,6 +225,87 @@ def compute_separability_rows(
                     }
                 )
     return output_rows
+
+
+def validate_paper_separability_inputs_and_rows(
+    agent_rows: Sequence[dict[str, Any]],
+    tiers: dict[int, dict[str, Any]],
+    separability_rows: Sequence[dict[str, Any]],
+) -> None:
+    """Require the complete walk/IP-proxy cohort and every paper checkpoint/metric."""
+
+    expected_by_tier = {
+        tier: {pitcher_id for pitcher_id, info in tiers.items() if info["tier"] == tier}
+        for tier in ("bottom", "top")
+    }
+    if not expected_by_tier["bottom"] or not expected_by_tier["top"]:
+        raise ValueError("Walk/IP-proxy separability requires nonempty top and bottom tiers.")
+
+    relevant_rows = [row for row in agent_rows if int(row["pitcher_id"]) in tiers]
+    checkpoints = sorted({int(row["convergence_n"]) for row in relevant_rows})
+    if not checkpoints:
+        raise ValueError("No walk/IP-proxy agent rows were available for separability.")
+
+    seen: set[tuple[int, int]] = set()
+    pitchers_by_checkpoint: dict[int, set[int]] = {checkpoint: set() for checkpoint in checkpoints}
+    for row in relevant_rows:
+        checkpoint = int(row["convergence_n"])
+        pitcher_id = int(row["pitcher_id"])
+        identity = (checkpoint, pitcher_id)
+        if identity in seen:
+            raise ValueError(
+                f"Duplicate walk/IP-proxy result for pitcher={pitcher_id}, "
+                f"convergence_n={checkpoint}. "
+                "The paper MLB analysis requires one deterministic run per pitcher."
+            )
+        seen.add(identity)
+        pitchers_by_checkpoint[checkpoint].add(pitcher_id)
+        for status_field in ("jeeds_status", "hierarchical_status"):
+            if str(row.get(status_field, "")).strip().lower() != "ok":
+                raise ValueError(
+                    f"Non-successful {status_field} for pitcher={pitcher_id}, "
+                    f"convergence_n={checkpoint}: {row.get(status_field)!r}."
+                )
+
+    expected_pitchers = expected_by_tier["bottom"] | expected_by_tier["top"]
+    for checkpoint, actual_pitchers in pitchers_by_checkpoint.items():
+        if actual_pitchers != expected_pitchers:
+            raise ValueError(
+                f"Walk/IP-proxy checkpoint {checkpoint} has pitchers {sorted(actual_pitchers)}; "
+                f"expected {sorted(expected_pitchers)}."
+            )
+
+    by_key: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for row in separability_rows:
+        key = (str(row["method"]), str(row["metric"]), int(row["convergence_n"]))
+        if key in by_key:
+            raise ValueError(f"Duplicate separability summary row for {key}.")
+        by_key[key] = row
+    for checkpoint in checkpoints:
+        for method in ("jeeds", "hierarchical"):
+            for metric in ("sigma", "log_lambda"):
+                key = (method, metric, checkpoint)
+                if key not in by_key:
+                    raise ValueError(f"Missing separability summary row for {key}.")
+                row = by_key[key]
+                if int(row["num_bottom"]) != len(expected_by_tier["bottom"]):
+                    raise ValueError(f"Incomplete bottom walk/IP-proxy cohort for {key}.")
+                if int(row["num_top"]) != len(expected_by_tier["top"]):
+                    raise ValueError(f"Incomplete top walk/IP-proxy cohort for {key}.")
+                numeric = np.asarray(
+                    [
+                        row["mean_bottom"],
+                        row["mean_top"],
+                        row["mean_gap_top_minus_bottom"],
+                        row["auc"],
+                    ],
+                    dtype=float,
+                )
+                if np.any(~np.isfinite(numeric)):
+                    raise ValueError(f"Non-finite separability values for {key}.")
+                auc = float(row["auc"])
+                if not 0.0 <= auc <= 1.0:
+                    raise ValueError(f"Separability AUC must be in [0, 1] for {key}; got {auc}.")
 
 
 def first_n_meeting_auc(
@@ -264,7 +345,7 @@ def plot_separability_by_n(
 
     figure, axes = plt.subplots(1, 2, figsize=SEPARABILITY_FIGURE_SIZE, sharex=True)
     panels = (
-        ("auc", "Separability (AUC)", "AUC (top vs bottom BB/IP)"),
+        ("auc", "Separability (AUC)", "AUC (high vs low walk/IP proxy)"),
         (
             "mean_gap_top_minus_bottom",
             r"Mean $\hat{\sigma}$ gap (top $-$ bottom)",
@@ -311,7 +392,7 @@ def plot_separability_by_n(
             axis.axhline(DEFAULT_AUC_THRESHOLD, color="0.35", linestyle=":", linewidth=1.0)
             axis.set_ylim(0.0, 1.05)
             axis.annotate(
-                "chance",
+                "random classifier",
                 xy=(1.0, 0.5),
                 xycoords=("axes fraction", "data"),
                 xytext=(4, 0),
@@ -360,7 +441,7 @@ def plot_separability_by_n(
             bbox_to_anchor=(0.5, 1.02),
         )
 
-    figure.suptitle("Execution skill estimates vs BB/IP groups", fontsize=11, y=1.08)
+    figure.suptitle("Execution skill estimates vs walk/IP-proxy groups", fontsize=11, y=1.08)
     figure.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -434,6 +515,7 @@ def run_separability_analysis(
 
     agent_rows = load_agent_level_rows(agent_path)
     separability_rows = compute_separability_rows(agent_rows, tiers)
+    validate_paper_separability_inputs_and_rows(agent_rows, tiers, separability_rows)
     write_separability_csv(output_dir / SEPARABILITY_CSV, separability_rows)
     write_separability_plots(output_dir, separability_rows)
     summary = build_summary(separability_rows, auc_threshold=auc_threshold)
@@ -449,7 +531,8 @@ def run_separability_analysis(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Measure how quickly JEEDS vs H-JEEDS separate BB/IP top/bottom pitchers "
+            "Measure how quickly JEEDS vs H-JEEDS separate high/low processed-data "
+            "walk/IP-proxy pitchers "
             "as a function of observation count N (post-hoc on convergence outputs)."
         )
     )

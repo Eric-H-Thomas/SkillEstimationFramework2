@@ -1,3 +1,4 @@
+# Paper correspondence: Main `subsec:two_d_darts`; Supplement `app:two_d_hyperpriors`.
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection
@@ -7,45 +8,90 @@ import numpy as np
 import math
 import code
 
-from scipy.stats import multivariate_normal
 from scipy.signal import fftconvolve
+
+
+# Geometry is reused for every skill-grid cell, but the 2D experiment can be
+# called at more than one resolution in the same process (for example, by a
+# test or a future resolution sweep).  Keying these caches by resolution avoids
+# silently reusing coordinates created by the first call.
+_SCORE_GEOMETRY_CACHE = {}
+_NOISE_GEOMETRY_CACHE = {}
 
 def get_domain_name():
     return "2d"
 
 def draw_noise_sample(rng,X):
+    """Return an isotropic Gaussian backed by the caller's live RNG stream.
 
-    # X is squared already (x**2 = variance)
+    ``X`` is already a variance (``sigma**2``).  Passing the Generator itself
+    preserves deterministic replay for a fixed seed while allowing successive
+    ``rvs`` calls to advance to independent draws.
+    """
 
-    # Need to use rng.bit_generator._seed_seq.entropy instead of just rng to ensure same noises produced each time for given params 
-    if type(rng.bit_generator._seed_seq.entropy) == np.ndarray:
-        seed = rng.bit_generator._seed_seq.entropy[0]
-    else:
-        seed = rng.bit_generator._seed_seq.entropy
+    return _IsotropicNormal2D(rng, variance=X)
 
-    # print(seed)
-    N = multivariate_normal(mean=[0.0,0.0],cov=X,seed=seed)
 
-    return N
+class _IsotropicNormal2D:
+    """Minimal isotropic 2D normal with the legacy ``pdf``/``rvs`` API."""
+
+    def __init__(self, rng, *, variance):
+        variance = float(variance)
+        if not math.isfinite(variance) or variance <= 0.0:
+            raise ValueError(f"variance must be finite and positive, received {variance}.")
+        self._rng = rng
+        self._variance = variance
+        self._standard_deviation = math.sqrt(variance)
+
+    def pdf(self, points):
+        points = np.asarray(points, dtype=float)
+        squared_radius = np.sum(np.square(points), axis=-1)
+        return np.exp(-squared_radius / (2.0 * self._variance)) / (
+            2.0 * math.pi * self._variance
+        )
+
+    def rvs(self):
+        return self._rng.normal(
+            loc=0.0,
+            scale=self._standard_deviation,
+            size=2,
+        )
+
+
+def _geometry_for_resolution(cache, *, lower, upper, resolution):
+    """Return square-grid coordinates and side length for one resolution."""
+
+    resolution = float(resolution)
+    if not math.isfinite(resolution) or resolution <= 0.0:
+        raise ValueError(f"resolution must be finite and positive, received {resolution}.")
+
+    cache_key = resolution
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    axis = np.arange(lower, upper, resolution)
+    xx, yy = np.meshgrid(axis, axis, indexing="ij")
+    coordinates = np.column_stack((xx.ravel(), yy.ravel()))
+    cached = (coordinates, len(axis))
+    cache[cache_key] = cached
+    return cached
+
+
+def _clear_geometry_caches():
+    """Clear private geometry caches (used by focused regression tests)."""
+
+    _SCORE_GEOMETRY_CACHE.clear()
+    _NOISE_GEOMETRY_CACHE.clear()
 
 
 def get_scores(slices,resolution):
-
-    if 'XYS' not in globals():
-        global XYS, sizeXYS
-
-        XS = np.arange(-170.0,171.0,resolution)
-        YS = np.arange(-170.0,171.0,resolution)
-
-        XXS,YYS = np.meshgrid(XS,YS,indexing="ij")
-        tempXYS = np.vstack([XXS.ravel(),YYS.ravel()])
-
-        XYS = np.dstack(tempXYS)[0]
-
-        sizeXYS = int(np.sqrt(len(XYS)))
-
-        # print("Setting global XYS")
-
+    XYS, _ = _geometry_for_resolution(
+        _SCORE_GEOMETRY_CACHE,
+        lower=-170.0,
+        upper=171.0,
+        resolution=resolution,
+    )
 
     S = npscore(slices,XYS[:,0],XYS[:,1])
 
@@ -74,25 +120,15 @@ def get_scoresPREV(slices,resolution):
     return X,Y,S
 
 def get_symmetric_normal_distribution(rng,XS,resolution):
-
-    if 'XYD' not in globals():
-        global XYD, sizeXYD
-
-        # From -340 to 341 in order to consider targets outside of the darts board as well
-        # If doing only -170 to 171, we will miss the probabilities of the targets being outside of the board
-        # (for really bad agents, if just normalizing all the time)
-        XD = np.arange(-340.0,341.0,resolution)
-        YD = np.arange(-340.0,341.0,resolution)
-
-        XXD,YYD = np.meshgrid(XD,YD,indexing="ij")
-        tempXYD = np.vstack([XXD.ravel(),YYD.ravel()])
-
-        XYD = np.dstack(tempXYD)[0]
-
-        sizeXYD = int(np.sqrt(len(XYD)))
-
-
-        # print("Setting global XYD")
+    # From -340 to 341 in order to consider targets outside of the darts board as well
+    # If doing only -170 to 171, we will miss the probabilities of the targets being outside of the board
+    # (for really bad agents, if just normalizing all the time)
+    XYD, _ = _geometry_for_resolution(
+        _NOISE_GEOMETRY_CACHE,
+        lower=-340.0,
+        upper=341.0,
+        resolution=resolution,
+    )
 
 
     N = draw_noise_sample(rng,XS**2)
@@ -287,7 +323,15 @@ def compute_expected_value_curve(rng,slices,X,resolution,returnZn=False):
     # Convolve to produce the EV and aiming spot
     # Output array will have the shape of the first input (Zs)
     # Zn = -340 to 341 | Zs = -170 to 171 | ("zoom in")
-    EVs = fftconvolve(np.array(Zs).reshape((sizeXYS,sizeXYS)),np.array(Zn).reshape((sizeXYD,sizeXYD)),mode="same")
+    score_side = math.isqrt(len(Zs))
+    noise_side = math.isqrt(len(Zn))
+    if score_side * score_side != len(Zs) or noise_side * noise_side != len(Zn):
+        raise ValueError("2D score and noise grids must both be square.")
+    EVs = fftconvolve(
+        np.asarray(Zs).reshape((score_side, score_side)),
+        np.asarray(Zn).reshape((noise_side, noise_side)),
+        mode="same",
+    )
     EVs = EVs.flatten()
 
     # print(f"Time fftconvolve: {perf_counter()-tt}\n")
@@ -861,7 +905,12 @@ def drawBoardWithEVsForDiffXskillsAndResolutions():
                 cmap = plt.get_cmap("viridis")
                 
                 norm = plt.Normalize(min(EV),max(EV))
-                plt.scatter(XYS[:,0],XYS[:,1], c = cmap(norm(EV)))
+                plot_coordinates, _ = get_scores(state, res)
+                plt.scatter(
+                    plot_coordinates[:, 0],
+                    plot_coordinates[:, 1],
+                    c=cmap(norm(EV)),
+                )
                 
                 
                 sm = ScalarMappable(norm = norm, cmap = cmap)
@@ -954,5 +1003,3 @@ if __name__ == "__main__":
 
 
     code.interact("...", local=dict(globals(), **locals()))
-
-

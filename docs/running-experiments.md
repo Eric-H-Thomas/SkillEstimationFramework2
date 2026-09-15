@@ -27,7 +27,7 @@ python3 -m HJEEDS.darts_anchor_availability_sensitivity --seed default --num-see
 ./submit_hjeeds_anchor_availability_sensitivity.sh --num-seeds 500 --seed 12345
 ```
 
-The current hyperprior robustness study defaults to 60 conditions. Downstream ablations default to the three representative robustness conditions unless `--condition-preset full_60` is supplied.
+The current hyperprior robustness study defaults to 60 conditions. Every other ablation varies only its own focal factor and holds the hyperpriors at the default condition, so the paper suite isolates one factor at a time.
 
 ## `runExpDynamic.py`
 Runs darts-style experiments where agent execution skill changes over time. Defaults are tuned for cluster runs (500 iterations, 100 observations, particle filters enabled).

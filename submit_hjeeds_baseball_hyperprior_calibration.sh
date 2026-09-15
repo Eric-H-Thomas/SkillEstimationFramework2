@@ -46,6 +46,7 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="${script_dir}"
 # shellcheck source=hjeeds_baseball_slurm_common.sh
 source "${script_dir}/hjeeds_baseball_slurm_common.sh"
 
@@ -201,6 +202,7 @@ if [[ ! -x "${resolved_python}" ]]; then
   echo "Error: Could not resolve a Python interpreter. Pass --python-bin." >&2
   exit 1
 fi
+hjeeds_baseball_preflight "${resolved_python}"
 
 prepare_args=(
   -m HJEEDS.baseball_calibrate_hyperpriors
@@ -222,16 +224,25 @@ fi
 if [[ -n "${max_agents}" ]]; then
   prepare_args+=(--max-agents "${max_agents}")
 fi
+if [[ -n "${max_pitches_per_agent}" ]]; then
+  prepare_args+=(--max-pitches-per-agent "${max_pitches_per_agent}")
+fi
+prepare_args+=(--confidence "${confidence}")
 
 echo "Preparing calibration roster locally..."
 echo "  ${resolved_python} ${prepare_args[*]}"
 (
-  cd "${script_dir}"
-  export PYTHONPATH="${script_dir}${PYTHONPATH:+:$PYTHONPATH}"
+  cd "${repo_root}"
+  export PYTHONPATH="${repo_root}${PYTHONPATH:+:$PYTHONPATH}"
   "${resolved_python}" "${prepare_args[@]}"
 )
 
-roster_file="${script_dir}/${output_dir}/calibration_roster.json"
+if [[ "${output_dir}" = /* ]]; then
+  resolved_output_dir="${output_dir}"
+else
+  resolved_output_dir="${repo_root}/${output_dir}"
+fi
+roster_file="${resolved_output_dir}/calibration_roster.json"
 agent_count="$(hjeeds_baseball_roster_agent_count "${resolved_python}" "${roster_file}")"
 
 if ! [[ "${agent_count}" =~ ^[0-9]+$ ]] || [[ "${agent_count}" -lt 1 ]]; then
@@ -243,7 +254,7 @@ common_sbatch_args=(
   --job-name="${job_name}"
   --qos="${qos}"
   --cpus-per-task="${cpus_per_task}"
-  --chdir="${script_dir}"
+  --chdir="${repo_root}"
 )
 if [[ -n "${partition}" ]]; then
   common_sbatch_args+=(--partition="${partition}")
@@ -256,6 +267,8 @@ if [[ -n "${slurm_output}" ]]; then
 fi
 
 experiment_env=(
+  "HJEEDS_REPO_ROOT=${repo_root}"
+  "HJEEDS_SLURM_DIR=${script_dir}"
   "BASE_SEED=${base_seed}"
   "OUTPUT_DIR=${output_dir}"
   "PITCH_TYPES=${pitch_types}"

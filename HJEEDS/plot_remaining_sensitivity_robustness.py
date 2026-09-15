@@ -1,12 +1,17 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
-"""Create mirrored improvement plots for remaining H-JEEDS sensitivity studies."""
+"""Create sensitivity figures used in the paper and supplement.
+
+Paper correspondence: main-paper "Decision-Model Misspecification" and
+"Compound Stress Test"; Supplement "Decision-Model Misspecification,"
+"True Population Correlation Sensitivity," "Grid Resolution Sensitivity,"
+and "Compound Stress Test."
+"""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 
@@ -41,7 +46,6 @@ from HJEEDS.sensitivity_plot_common import (
 BASE_RESULTS_DIR = Path("HJEEDS/results/hjeeds_paper_500_seeds")
 LOWEST_COUNT_BUCKET = 5
 DEFAULT_COUNT_BUCKETS = (5, 10, 25, 100, 1000)
-AGENTS_PER_BUCKET_ORDER = (1, 2, 5, 10, 25)
 
 
 @dataclass(frozen=True)
@@ -57,7 +61,6 @@ class PlotConfig:
     factor_order: tuple[str, ...]
     factor_labels: dict[str, str]
     factor_colors: dict[str, str]
-    crossed_with_agents_per_bucket: bool
 
 
 @dataclass(frozen=True)
@@ -99,7 +102,6 @@ PLOT_CONFIGS = (
             "rational": CATEGORICAL_COLORS[1],
             "deceptive": CATEGORICAL_COLORS[2],
         },
-        crossed_with_agents_per_bucket=True,
     ),
     PlotConfig(
         experiment_slug="true_correlation",
@@ -123,7 +125,6 @@ PLOT_CONFIGS = (
             "r_pos_0_5": NUMERIC_5_COLORS[3],
             "r_pos_0_9": NUMERIC_5_COLORS[4],
         },
-        crossed_with_agents_per_bucket=True,
     ),
     PlotConfig(
         experiment_slug="grid_resolution",
@@ -143,7 +144,6 @@ PLOT_CONFIGS = (
             "grid_021x021": NUMERIC_3_COLORS[1],
             "grid_041x041": NUMERIC_3_COLORS[2],
         },
-        crossed_with_agents_per_bucket=False,
     ),
     PlotConfig(
         experiment_slug="compound_stress",
@@ -163,7 +163,6 @@ PLOT_CONFIGS = (
             "moderate_compound_stress": CATEGORICAL_COLORS[0],
             "strong_compound_stress": CATEGORICAL_COLORS[1],
         },
-        crossed_with_agents_per_bucket=True,
     ),
 )
 
@@ -178,28 +177,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Comma-separated subset of experiments to render.",
     )
     parser.add_argument(
+        "--results-root",
+        type=Path,
+        default=BASE_RESULTS_DIR,
+        help=(
+            "Root containing decision_model, true_correlation, grid_resolution, "
+            "and compound_stress result directories."
+        ),
+    )
+    parser.add_argument(
         "--count-bucket",
         type=int,
         default=LOWEST_COUNT_BUCKET,
         help="Observation-count bucket to plot.",
     )
     parser.add_argument(
-        "--agents-per-bucket",
-        type=int,
-        choices=AGENTS_PER_BUCKET_ORDER,
-        help="For crossed studies, plot only this agents-per-bucket condition.",
-    )
-    parser.add_argument(
-        "--average-all-buckets",
-        action="store_true",
-        help="Average over every observation-count bucket instead of selecting one bucket.",
-    )
-    parser.add_argument(
         "--group-by-count-bucket",
         action="store_true",
         help=(
             "Group rows by experiment condition and use observation-count buckets "
-            "as subgroups. Crossed studies require --agents-per-bucket."
+            "as subgroups for the supplementary figures."
         ),
     )
     parser.add_argument(
@@ -243,6 +240,19 @@ def _parse_count_buckets(raw_value: str) -> tuple[int, ...]:
     return buckets
 
 
+def configs_for_results_root(results_root: Path) -> tuple[PlotConfig, ...]:
+    """Rebase every publication input and default output onto one result root."""
+
+    return tuple(
+        replace(
+            config,
+            agent_level_csv=results_root / config.agent_level_csv.relative_to(BASE_RESULTS_DIR),
+            output_stem=results_root / config.output_stem.relative_to(BASE_RESULTS_DIR),
+        )
+        for config in PLOT_CONFIGS
+    )
+
+
 def _grouped_y_positions(rows: Sequence[ImprovementRow], group_gap: float) -> tuple[np.ndarray, list[float]]:
     """Return y positions with extra space between condition groups."""
 
@@ -264,8 +274,7 @@ def _group_centers(rows: Sequence[ImprovementRow], y_positions: Sequence[float])
 
 def compute_improvement_rows(
     config: PlotConfig,
-    count_bucket: int | None,
-    agents_per_bucket: int | None = None,
+    count_bucket: int,
 ) -> list[ImprovementRow]:
     """Compute seed-level percent improvements for one experiment."""
 
@@ -274,7 +283,7 @@ def compute_improvement_rows(
 
     with config.agent_level_csv.open("r", newline="") as handle:
         for row in csv.DictReader(handle):
-            if count_bucket is not None and int(row["count_bucket"]) != count_bucket:
+            if int(row["count_bucket"]) != count_bucket:
                 continue
             if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
                 continue
@@ -283,15 +292,7 @@ def compute_improvement_rows(
             if factor_slug not in config.factor_order:
                 continue
 
-            if config.crossed_with_agents_per_bucket:
-                row_agents_per_bucket = int(row["agents_per_bucket"])
-                subgroup_label = str(row_agents_per_bucket)
-                if row_agents_per_bucket not in AGENTS_PER_BUCKET_ORDER:
-                    continue
-                if agents_per_bucket is not None and row_agents_per_bucket != agents_per_bucket:
-                    continue
-            else:
-                subgroup_label = ""
+            subgroup_label = ""
 
             key = (factor_slug, subgroup_label)
             observation = _seed_observation_from_agent_row(row, key)
@@ -304,15 +305,7 @@ def compute_improvement_rows(
     summaries = _summarize_seed_improvements(observations)
     rows: list[ImprovementRow] = []
     for factor_slug in config.factor_order:
-        if config.crossed_with_agents_per_bucket:
-            subgroup_order = (
-                (str(agents_per_bucket),)
-                if agents_per_bucket is not None
-                else tuple(str(value) for value in AGENTS_PER_BUCKET_ORDER)
-            )
-        else:
-            subgroup_order = ("",)
-        for subgroup_label in subgroup_order:
+        for subgroup_label in ("",):
             summary_key = (factor_slug, subgroup_label)
             summary = summaries.get(summary_key)
             if summary is None:
@@ -336,7 +329,6 @@ def compute_improvement_rows(
 def compute_improvement_rows_by_count_bucket(
     config: PlotConfig,
     count_buckets: Sequence[int],
-    agents_per_bucket: int | None,
 ) -> list[ImprovementRow]:
     """Compute rows grouped by factor and then observation-count bucket."""
 
@@ -355,11 +347,6 @@ def compute_improvement_rows_by_count_bucket(
             factor_slug = str(row[config.factor_slug_column])
             if factor_slug not in config.factor_order:
                 continue
-
-            if config.crossed_with_agents_per_bucket:
-                row_agents_per_bucket = int(row["agents_per_bucket"])
-                if agents_per_bucket is None or row_agents_per_bucket != agents_per_bucket:
-                    continue
 
             subgroup_label = str(count_bucket)
             key = (factor_slug, subgroup_label)
@@ -780,35 +767,25 @@ def main(argv: Sequence[str] | None = None) -> None:
     """CLI entry point."""
 
     args = parse_args(argv)
+    available_configs = configs_for_results_root(args.results_root)
     requested = {piece.strip() for piece in args.experiments.split(",") if piece.strip()}
-    configs = [config for config in PLOT_CONFIGS if config.experiment_slug in requested]
-    unknown = requested - {config.experiment_slug for config in PLOT_CONFIGS}
+    configs = [config for config in available_configs if config.experiment_slug in requested]
+    unknown = requested - {config.experiment_slug for config in available_configs}
     if unknown:
         raise ValueError(f"Unknown experiment slug(s): {', '.join(sorted(unknown))}")
 
-    if args.group_by_count_bucket and args.average_all_buckets:
-        raise ValueError("--group-by-count-bucket cannot be combined with --average-all-buckets.")
     if args.group_by_count_bucket and args.single_column:
         raise ValueError("--single-column is intended for one main-paper bucket, not grouped panels.")
     if args.group_by_count_bucket:
         count_buckets = _parse_count_buckets(args.count_buckets)
         for config in configs:
-            if config.crossed_with_agents_per_bucket and args.agents_per_bucket is None:
-                raise ValueError(
-                    f"{config.experiment_slug} requires --agents-per-bucket when "
-                    "--group-by-count-bucket is used."
-                )
             rows = compute_improvement_rows_by_count_bucket(
                 config,
                 count_buckets,
-                args.agents_per_bucket,
             )
             base_name = config.output_stem.name.removesuffix("_lowest_bucket_improvement_bars")
-            qualifiers = ["by_count_bucket"]
-            if args.agents_per_bucket is not None:
-                qualifiers.append(f"agents_per_bucket_{args.agents_per_bucket:03d}")
             output_stem = config.output_stem.with_name(
-                "_".join((base_name, *qualifiers, "improvement_bars"))
+                f"{base_name}_by_count_bucket_improvement_bars"
             )
             plot_rows(
                 config=config,
@@ -818,7 +795,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 hide_negative_bars=not args.show_negative_bars,
                 group_by_agents_per_bucket=True,
                 output_stem=output_stem,
-                agents_per_bucket=args.agents_per_bucket,
+                agents_per_bucket=None,
                 title_override=f"{config.title} by observation count",
                 subgroup_header="Observations\nper agent",
                 subgroup_is_count_bucket=True,
@@ -829,42 +806,20 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
         return
 
-    count_bucket = None if args.average_all_buckets else args.count_bucket
-    count_bucket_label: int | str = "all" if count_bucket is None else count_bucket
-
     for config in configs:
-        agents_per_bucket = args.agents_per_bucket if config.crossed_with_agents_per_bucket else None
-        rows = compute_improvement_rows(
-            config,
-            count_bucket,
-            agents_per_bucket,
-        )
-        group_by_agents_per_bucket = (
-            config.crossed_with_agents_per_bucket
-            and agents_per_bucket is None
-        )
+        rows = compute_improvement_rows(config, args.count_bucket)
         output_stem = config.output_stem
-        if count_bucket is None:
-            base_name = output_stem.name.removesuffix("_lowest_bucket_improvement_bars")
-            qualifiers = []
-            if agents_per_bucket is not None:
-                qualifiers.append(f"agents_per_bucket_{agents_per_bucket:03d}")
-            qualifiers.append("all_agents")
-            output_stem = output_stem.with_name("_".join((base_name, *qualifiers, "improvement_bars")))
-        elif agents_per_bucket is not None:
-            base_name = output_stem.name.removesuffix("_improvement_bars")
-            output_stem = output_stem.with_name(f"{base_name}_agents_per_bucket_{agents_per_bucket:03d}_improvement_bars")
         if args.output_dir is not None:
             output_stem = args.output_dir / output_stem.name
         plot_rows(
             config=config,
             rows=rows,
-            count_bucket=count_bucket_label,
+            count_bucket=args.count_bucket,
             dpi=args.dpi,
             hide_negative_bars=not args.show_negative_bars,
-            group_by_agents_per_bucket=group_by_agents_per_bucket,
+            group_by_agents_per_bucket=False,
             output_stem=output_stem,
-            agents_per_bucket=agents_per_bucket,
+            agents_per_bucket=None,
             single_column=args.single_column,
         )
         print(f"Wrote {config.experiment_slug} plot to {output_stem.with_suffix('.png')}", flush=True)

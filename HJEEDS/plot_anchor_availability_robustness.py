@@ -1,4 +1,4 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
+# Paper correspondence: Supplement Figure `fig:anchor_availability_low_data`.
 """Create a mirrored improvement plot for the high-data-anchor study.
 
 The figure plots percent improvement of H-JEEDS over JEEDS for the low-data
@@ -42,6 +42,7 @@ DEFAULT_RESULTS_DIR = Path("HJEEDS/results/hjeeds_paper_500_seeds/anchor_availab
 DEFAULT_AGENT_LEVEL_CSV = DEFAULT_RESULTS_DIR / "anchor_availability_sensitivity_agent_level_results.csv"
 DEFAULT_OUTPUT_STEM = DEFAULT_RESULTS_DIR / "anchor_availability_low_data_improvement_bars"
 DEFAULT_LOW_DATA_OBSERVATIONS = 1
+DEFAULT_EVALUATION_AGENT_COUNT = 25
 
 ANCHOR_COUNTS = (0, 1, 2, 5, 10, 25)
 ANCHOR_COLORS = {
@@ -129,6 +130,8 @@ def compute_improvement_rows(
     with agent_level_csv.open("r", newline="") as handle:
         for row in csv.DictReader(handle):
             if int(row["count_bucket"]) != low_data_observations:
+                continue
+            if int(row["agent_id"]) >= DEFAULT_EVALUATION_AGENT_COUNT:
                 continue
             if row.get("jeeds_status") != "ok" or row.get("hierarchical_status") != "ok":
                 continue

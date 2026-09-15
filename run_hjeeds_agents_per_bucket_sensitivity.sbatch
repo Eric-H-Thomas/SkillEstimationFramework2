@@ -2,7 +2,7 @@
 # This file was written or edited by AI and still requires human review. Delete this comment when done.
 #SBATCH --job-name=hjeeds-agents-bucket
 #SBATCH --qos=normal
-#SBATCH --time=23:00:00
+#SBATCH --time=24:00:00
 #SBATCH --mem=16G
 #SBATCH --output=slurm-%x-%A_%a.out
 
@@ -31,7 +31,6 @@ python_args=(
   --seed "${BASE_SEED:-default}"
   --count-buckets "${COUNT_BUCKETS:-5,10,25,100,1000}"
   --agents-per-bucket-values "${AGENTS_PER_BUCKET_VALUES:-1,2,5,10,25}"
-  --condition-preset "${CONDITION_PRESET:-representative}"
   --output-dir "${OUTPUT_DIR:-HJEEDS/results/hierarchical_darts_agents_per_bucket_sensitivity}"
   --delta "${DELTA:-0.1}"
   --num-sigma-grid "${NUM_SIGMA_GRID:-21}"

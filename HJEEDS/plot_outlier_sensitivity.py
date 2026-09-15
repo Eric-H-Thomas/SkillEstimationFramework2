@@ -1,5 +1,9 @@
-# This file was AI-generated and still requires human review. Remove this comment when done.
-"""Plot H-JEEDS improvement under explicit outlier contamination."""
+"""Plot the outlier-contamination figures used in the supplement.
+
+Paper correspondence: Supplement, "Outlier Contamination Sensitivity"
+(`fig:outlier_sensitivity_by_count_bucket` and
+`fig:outlier_sensitivity_subgroups`).
+"""
 
 from __future__ import annotations
 
@@ -338,7 +342,7 @@ def render(
     dpi: int,
     hide_negative_bars: bool,
 ) -> None:
-    """Render aggregate, low-data, subgroup, and bucket-specific figures."""
+    """Render the subgroup and observation-bucket figures in the supplement."""
 
     configure_matplotlib()
     import matplotlib.pyplot as plt
@@ -360,22 +364,6 @@ def render(
         rows_by_count_bucket,
     )
 
-    left, right = 0.20, 0.985
-    figure, axis = plt.subplots(figsize=(7.2, 3.15))
-    _draw_axis(axis, rows_by_subset["all"], x_limits, hide_negative_bars)
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error", color=CHARCOAL, labelpad=7.0)
-    figure.suptitle(
-        "Outlier contamination sensitivity (all agents)",
-        x=(left + right) / 2.0,
-        y=0.94,
-        fontsize=11.5,
-        fontweight="bold",
-        color=TEXT_COLOR,
-    )
-    figure.subplots_adjust(left=left, right=right, top=0.77, bottom=0.2)
-    save_figure_bundle(figure, output_dir / "outlier_sensitivity_all_agents", dpi)
-    plt.close(figure)
-
     count_buckets = tuple(rows_by_count_bucket)
     bucket_rows = [
         row
@@ -383,29 +371,6 @@ def render(
         for row in rows_by_count_bucket[count_bucket]
     ]
     bucket_x_limits = compact_x_limits(bucket_rows, hide_negative_bars, negative_placeholder=10.0)
-    lowest_count_bucket = count_buckets[0]
-
-    left, right = 0.20, 0.985
-    figure, axis = plt.subplots(figsize=(7.2, 3.15))
-    _draw_axis(
-        axis,
-        rows_by_count_bucket[lowest_count_bucket],
-        bucket_x_limits,
-        hide_negative_bars,
-    )
-    axis.set_xlabel("Percent improvement over JEEDS in absolute error", color=CHARCOAL, labelpad=7.0)
-    figure.suptitle(
-        f"Outlier contamination sensitivity ({lowest_count_bucket} observations/agent)",
-        x=(left + right) / 2.0,
-        y=0.94,
-        fontsize=11.5,
-        fontweight="bold",
-        color=TEXT_COLOR,
-    )
-    figure.subplots_adjust(left=left, right=right, top=0.77, bottom=0.2)
-    save_figure_bundle(figure, output_dir / "outlier_sensitivity_lowest_bucket", dpi)
-    plt.close(figure)
-
     left, right = 0.09, 0.99
     figure, axes = plt.subplots(1, 3, figsize=(12.6, 3.75))
     for axis, subset_slug in zip(axes, SUBSET_ORDER):

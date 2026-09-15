@@ -1,6 +1,7 @@
 #!/bin/bash
+# Paper correspondence: Main `subsec:baseball`; shared publication launcher support.
 # Shared helpers for baseball HJEEDS submit_*.sh / run_*.sbatch scripts.
-# Source from the repo root:  source "${script_dir}/hjeeds_baseball_slurm_common.sh"
+# Source from the repository root: source "${script_dir}/hjeeds_baseball_slurm_common.sh"
 #
 # Resource defaults (baseball-tuned, not the generic 16G/24h repo rule):
 #   Per-agent convergence array: ~4h observed on BBIP-20 → default 08:00:00, 8G
@@ -64,8 +65,32 @@ hjeeds_baseball_resolve_cluster_python() {
   printf "%s" "${resolved}"
 }
 
+# Fail before a costly submission/worker starts if the selected environment
+# lacks the publication code's MLB runtime dependencies.
+hjeeds_baseball_preflight() {
+  local resolved_python="$1"
+  PYTHONPATH="${repo_root:-${HJEEDS_REPO_ROOT:-$PWD}}${PYTHONPATH:+:$PYTHONPATH}" \
+  "${resolved_python}" - <<'PY'
+import importlib
+
+required = (
+    "numpy",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "sklearn",
+    "torch",
+    "pybaseball",
+    "HJEEDS",
+)
+loaded = {name: importlib.import_module(name) for name in required}
+versions = {name: getattr(module, "__version__", "local") for name, module in loaded.items()}
+print(f"[baseball-preflight] imports OK: {versions}")
+PY
+}
+
 hjeeds_baseball_setup_matplotlib_env() {
-  export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+  export PYTHONPATH="${HJEEDS_REPO_ROOT:-$PWD}${PYTHONPATH:+:$PYTHONPATH}"
   export MPLBACKEND=Agg
   if [[ -n "${SLURM_TMPDIR:-}" ]]; then
     export MPLCONFIGDIR="${MPLCONFIGDIR:-${SLURM_TMPDIR}/matplotlib}"
@@ -112,11 +137,11 @@ PY
 }
 
 # Count agents in a roster JSON list.
-# Args: $1 = python, $2 = roster path. Uses caller's script_dir for PYTHONPATH.
+# Args: $1 = python, $2 = roster path. Uses caller's repo_root for PYTHONPATH.
 hjeeds_baseball_roster_agent_count() {
   local python_bin="$1"
   local roster_file="$2"
-  PYTHONPATH="${script_dir}${PYTHONPATH:+:$PYTHONPATH}" \
+  PYTHONPATH="${repo_root}${PYTHONPATH:+:$PYTHONPATH}" \
   "${python_bin}" - "${roster_file}" <<'PY'
 import json
 import sys

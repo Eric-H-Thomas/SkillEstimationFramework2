@@ -1,5 +1,5 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
-"""BB/IP-based pitcher selection for baseball HJEEDS rosters.
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_sigma_gap`.
+"""Processed-data walk/IP-proxy selection for baseball HJEEDS rosters.
 
 Paper run ``submit_hjeeds_baseball_convergence_paper_bbip.sh`` selects
 ``--bbip-extremes 10`` (top 10 + bottom 10) among FF-eligible 2021 pitchers
@@ -7,17 +7,24 @@ with ``min_pitches_per_agent=100``. Login-node submit scripts write
 ``bbip_innings_cache.json`` via ``--write-cache``; compute nodes read that
 cache (or ``BBIP_CACHE_PATH``) without network access.
 
-BB/IP here is Statcast walk events in the loaded season slice divided by
-season innings pitched from Baseball Reference / FanGraphs / bundled JSON.
-Pitchers with zero Statcast walks or unmatched names are dropped from the
-ranking table (not assigned BB/IP = 0).
+The paper's ranking statistic is a processed-data walks-per-inning proxy:
+Statcast ``walk`` events in every retained row for the requested ``game_year``
+divided by official season innings pitched from the tracked bundled JSON when
+available. The canonical 2021 processed slice spans spring training through the
+postseason, so this statistic is not presented as official regular-season
+BB/IP. Live Baseball Reference / FanGraphs data are fallback sources for
+unbundled seasons.
+Pitchers with zero Statcast walks remain eligible at proxy value 0; pitchers whose
+names cannot be matched to positive season innings are excluded.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import unicodedata
 from pathlib import Path
 from typing import Sequence
@@ -33,19 +40,43 @@ def _ascii_fold(text: str) -> str:
     return "".join(character for character in normalized if not unicodedata.combining(character))
 
 
-def canonical_player_name(name: str) -> str:
-    """Map Statcast 'Last, First' and BRef 'First Last' to one lookup key."""
+_LITERAL_HEX_RUN = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
+_NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv"}
 
-    name = _ascii_fold(str(name).strip().lower())
-    if "," in name:
-        last, first = (piece.strip() for piece in name.split(",", maxsplit=1))
-        return f"{last} {first}"
-    parts = name.split()
-    if len(parts) >= 2:
-        last = parts[-1]
-        first = " ".join(parts[:-1])
-        return f"{last} {first}"
-    return name
+
+def _decode_literal_utf8_escapes(text: str) -> str:
+    """Repair cache keys that accidentally stored UTF-8 bytes as literal ``\\xNN`` text."""
+
+    def decode_match(match: re.Match[str]) -> str:
+        raw = bytes(int(piece, 16) for piece in re.findall(r"\\x([0-9a-fA-F]{2})", match.group()))
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return match.group()
+
+    return _LITERAL_HEX_RUN.sub(decode_match, str(text))
+
+
+def _without_suffixes(parts: Sequence[str]) -> list[str]:
+    return [piece for piece in parts if piece not in _NAME_SUFFIXES]
+
+
+def _name_match_key(name: str) -> str:
+    """Return an order-insensitive, accent/punctuation-normalized player-name key."""
+
+    repaired = _ascii_fold(_decode_literal_utf8_escapes(str(name))).strip().lower()
+    # Initials appear as both "JB" and "J.B."; apostrophes likewise vary by source.
+    repaired = repaired.replace(".", "").replace("'", "")
+    tokens = _without_suffixes(re.findall(r"[a-z0-9]+", repaired))
+    if not tokens:
+        raise ValueError(f"Player name has no usable tokens: {name!r}.")
+    return " ".join(sorted(tokens))
+
+
+def canonical_player_name(name: str) -> str:
+    """Map Statcast/BRef name order, particles, accents, and initials to one key."""
+
+    return _name_match_key(name)
 
 
 def parse_innings_pitched(raw_value: object) -> float:
@@ -71,8 +102,16 @@ def bbip_cache_path_for(output_dir: Path) -> Path:
     return Path(output_dir) / BBIP_INNINGS_CACHE_FILENAME
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def resolve_bbip_cache_path(*, output_dir: Path | None = None) -> Path | None:
-    """Return a BB/IP innings cache path from env or the experiment output directory."""
+    """Return a walk/IP-proxy innings cache path from env or the output directory."""
 
     env_path = os.environ.get("BBIP_CACHE_PATH")
     if env_path:
@@ -92,10 +131,21 @@ def load_bbip_innings_cache(path: Path) -> tuple[int, dict[str, float], str]:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     season_year = int(payload["season_year"])
-    innings_by_name = {
-        str(name): float(innings)
-        for name, innings in payload["innings_by_name"].items()
-    }
+    innings_by_name: dict[str, float] = {}
+    source_name_by_key: dict[str, str] = {}
+    for raw_name, raw_innings in payload["innings_by_name"].items():
+        # Token sorting repairs historical rotations such as "santos enyel de los"
+        # and literal UTF-8 escapes without guessing where a surname particle begins.
+        name = _name_match_key(str(raw_name))
+        innings = float(raw_innings)
+        previous_source = source_name_by_key.get(name)
+        if previous_source is not None and previous_source != str(raw_name):
+            raise ValueError(
+                f"Player-name normalization collision for {name!r}: "
+                f"{previous_source!r} and {raw_name!r}."
+            )
+        source_name_by_key[name] = str(raw_name)
+        innings_by_name[name] = innings
     source = str(payload.get("source", f"cache:{path.name}"))
     return season_year, innings_by_name, source
 
@@ -140,25 +190,29 @@ def _load_bundled_innings_pitched(season_year: int) -> tuple[dict[str, float], s
         raise ValueError(
             f"Bundled innings cache season_year={cached_season_year} does not match {season_year}."
         )
-    return innings_by_name, source
+    return innings_by_name, f"bundled:{path.name} (original source: {source})"
 
 
 def fetch_innings_pitched_by_name(season_year: int) -> tuple[dict[str, float], str]:
-    """Fetch season IP by normalized player name: BRef, then FanGraphs, then bundled data."""
+    """Load season IP, preferring the immutable bundled artifact when available."""
 
     errors: list[str] = []
+    bundled_path = bundled_innings_path_for(season_year)
+    if bundled_path.is_file():
+        try:
+            return _load_bundled_innings_pitched(season_year)
+        except Exception as exc:
+            # A tracked but malformed artifact is a correctness failure, not a
+            # reason to silently change the roster using live data.
+            raise RuntimeError(f"Invalid bundled innings cache {bundled_path}: {exc}") from exc
     for fetcher in (_fetch_innings_from_bref, _fetch_innings_from_fangraphs):
         try:
             return fetcher(season_year)
         except Exception as exc:
             errors.append(f"{fetcher.__name__}: {exc}")
-    try:
-        return _load_bundled_innings_pitched(season_year)
-    except Exception as exc:
-        errors.append(f"bundled: {exc}")
     raise RuntimeError(
         "Could not load innings pitched for season_year="
-        f"{season_year}. Tried Baseball Reference, FanGraphs, and bundled data.\n"
+        f"{season_year}. No bundled artifact exists and live sources failed.\n"
         + "\n".join(errors)
     )
 
@@ -172,6 +226,14 @@ def write_bbip_innings_cache(output_dir: Path, *, season_year: int) -> Path:
     payload = {
         "season_year": season_year,
         "source": source,
+        "source_artifact": (
+            {
+                "filename": bundled_innings_path_for(season_year).name,
+                "sha256": file_sha256(bundled_innings_path_for(season_year)),
+            }
+            if bundled_innings_path_for(season_year).is_file()
+            else None
+        ),
         "innings_by_name": innings_by_name,
     }
     with path.open("w", encoding="utf-8") as handle:
@@ -191,7 +253,7 @@ def _innings_pitched_by_name(
         cached_season_year, innings_by_name, _source = load_bbip_innings_cache(cache_path)
         if cached_season_year != season_year:
             raise ValueError(
-                f"BB/IP cache season_year={cached_season_year} does not match requested "
+                f"Walk/IP-proxy cache season_year={cached_season_year} does not match requested "
                 f"season_year={season_year} ({cache_path})."
             )
         return innings_by_name
@@ -201,7 +263,7 @@ def _innings_pitched_by_name(
         return innings_by_name
     except Exception as exc:
         raise FileNotFoundError(
-            "BB/IP innings cache not found and live innings fetch failed. "
+            "Walk/IP-proxy innings cache not found and live innings fetch failed. "
             "On a network-enabled host, run:\n"
             f"  python -m HJEEDS.baseball_bbip --write-cache --season-year {season_year} "
             f"--output-dir <experiment_output_dir>\n"
@@ -228,11 +290,17 @@ def compute_bbip_by_pitcher(
     season_year: int,
     output_dir: Path | None = None,
 ) -> pd.DataFrame:
-    """Return pitcher-level BB/IP for one season using Statcast walks and season IP."""
+    """Return the processed-data walk-event/IP proxy used to rank pitchers."""
 
-    walk_counts = _walk_count_by_pitcher(all_data)
+    if "game_year" not in all_data.columns:
+        raise ValueError("Statcast data is missing game_year; cannot compute the walk/IP proxy.")
+    season_data = all_data.loc[all_data["game_year"] == int(season_year)]
+    if season_data.empty:
+        raise ValueError(f"No Statcast rows found for season_year={season_year}.")
+
+    walk_counts = _walk_count_by_pitcher(season_data)
     innings_by_name = _innings_pitched_by_name(season_year, output_dir=output_dir)
-    name_map = _pitcher_name_map(all_data)
+    name_map = _pitcher_name_map(season_data)
 
     rows: list[dict[str, object]] = []
     for pitcher_id, player_name in name_map.items():
@@ -241,9 +309,6 @@ def compute_bbip_by_pitcher(
         if innings is None or innings <= 0:
             continue
         walks = int(walk_counts.get(pitcher_id, 0))
-        # Exclude zero-walk pitchers rather than ranking them at BB/IP = 0.
-        if walks == 0:
-            continue
         rows.append(
             {
                 "pitcher_id": pitcher_id,
@@ -256,9 +321,9 @@ def compute_bbip_by_pitcher(
 
     if not rows:
         raise ValueError(
-            f"Could not compute BB/IP for any pitchers in season_year={season_year}."
+            f"Could not compute the walk/IP proxy for any pitchers in season_year={season_year}."
         )
-    return pd.DataFrame(rows).sort_values("bbip")
+    return pd.DataFrame(rows).sort_values(["bbip", "pitcher_id"], kind="mergesort")
 
 
 def _filter_bbip_table(
@@ -276,7 +341,7 @@ def _require_extremes_capacity(table: pd.DataFrame, extremes_count: int, *, labe
         raise ValueError(f"extremes_count must be positive. Received {extremes_count}.")
     if len(table) < extremes_count * 2:
         raise ValueError(
-            f"Need at least {extremes_count * 2} {label} with BB/IP data. "
+            f"Need at least {extremes_count * 2} {label} with walk/IP-proxy data. "
             f"Received {len(table)}."
         )
 
@@ -287,7 +352,7 @@ def _extreme_pitcher_id_lists(
     *,
     label: str = "pitchers",
 ) -> tuple[list[int], list[int]]:
-    """Return (lowest-BB/IP ids, highest-BB/IP ids) from a BB/IP table.
+    """Return (lowest-proxy IDs, highest-proxy IDs) from a walk/IP-proxy table.
 
     Always sorts by ``bbip`` with a stable algorithm: callers may pass an
     already-sorted compute table (selection) or a tier-ordered manifest table
@@ -296,7 +361,7 @@ def _extreme_pitcher_id_lists(
     on that sorted frame.
     """
 
-    ordered = table.sort_values("bbip", kind="mergesort")
+    ordered = table.sort_values(["bbip", "pitcher_id"], kind="mergesort")
     _require_extremes_capacity(ordered, extremes_count, label=label)
     bottom = ordered.head(extremes_count)["pitcher_id"].astype(int).tolist()
     top = ordered.tail(extremes_count)["pitcher_id"].astype(int).tolist()
@@ -309,7 +374,7 @@ def label_bbip_tiers_for_pitcher_ids(
     *,
     extremes_count: int,
 ) -> dict[int, str]:
-    """Label selected pitchers as top/bottom by BB/IP rank within the selected set.
+    """Label selected pitchers as top/bottom by proxy rank within the selected set.
 
     Ranking within ``pitcher_ids`` (not the global league table) matches
     ``--bbip-extremes`` selection among an eligible subset.
@@ -344,9 +409,9 @@ def build_bbip_manifest(
     output_dir: Path | None = None,
     eligible_pitcher_ids: Sequence[int] | None = None,
 ) -> list[dict[str, object]]:
-    """Return BB/IP metadata for selected pitchers (bottom/top/middle tiers).
+    """Return walk/IP-proxy metadata for selected pitchers and tier labels.
 
-    ``eligible_pitcher_ids`` only restricts which rows enter the BB/IP table
+    ``eligible_pitcher_ids`` only restricts which rows enter the proxy table
     (same filter as ``select_bbip_extreme_pitcher_ids``). Tier labels are always
     assigned by rank among ``pitcher_ids`` present in that table.
     """
@@ -386,7 +451,7 @@ def select_bbip_extreme_pitcher_ids(
     output_dir: Path | None = None,
     eligible_pitcher_ids: Sequence[int] | None = None,
 ) -> tuple[int, ...]:
-    """Return top-N and bottom-N pitcher IDs by season BB/IP (deduplicated)."""
+    """Return top-N and bottom-N pitcher IDs by the walk/IP proxy (deduplicated)."""
 
     table = _filter_bbip_table(
         compute_bbip_by_pitcher(all_data, season_year=season_year, output_dir=output_dir),
@@ -402,7 +467,9 @@ def select_bbip_extreme_pitcher_ids(
 
 
 def parse_bbip_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prepare offline BB/IP artifacts for baseball HJEEDS.")
+    parser = argparse.ArgumentParser(
+        description="Prepare offline walk/IP-proxy artifacts for baseball HJEEDS."
+    )
     parser.add_argument(
         "--write-cache",
         action="store_true",

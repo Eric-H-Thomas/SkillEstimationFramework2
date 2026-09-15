@@ -1,0 +1,28 @@
+{
+  "description": "Canonical processed Statcast artifact paired with Environments/Baseball/final_OP for the paper MLB experiment.",
+  "pickle_filename": "ProcessedData-From-GivenFiles.pkl",
+  "pickle_bytes": 794830284,
+  "pickle_sha256": "4e1bb7e5412b1efce7f0ec08079164a5a85f3ff89bcabaa02a3ee847201a392c",
+  "model_weights_sha256": "de73de37a13c6fe803b990abcc9c76b14d6290d23dc8d44f90470a48936c2030",
+  "dataframe_shape": [3202041, 35],
+  "season_years": [2018, 2019, 2020, 2021, 2022],
+  "batter_mapping_shape": [2313, 2],
+  "batter_embedding_count": 2313,
+  "target_grid_shape": [103, 219],
+  "required_columns": [
+    "game_date",
+    "game_year",
+    "game_pk",
+    "pitcher",
+    "batter",
+    "pitch_type",
+    "at_bat_number",
+    "pitch_number",
+    "plate_x",
+    "plate_z",
+    "plate_x_feet",
+    "plate_z_feet",
+    "batter_index"
+  ],
+  "note": "The pickle contains the exact training-compatible batter-index mapping and standardized feature values. Re-fitting either from a fresh Statcast download is not equivalent."
+}

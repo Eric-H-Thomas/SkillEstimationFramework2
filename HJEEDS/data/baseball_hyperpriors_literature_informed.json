@@ -1,0 +1,53 @@
+{
+  "mean_vector": [
+    -0.6931471805599453,
+    4.605170185988092
+  ],
+  "covariance_diagonal": [
+    2.25,
+    16.0
+  ],
+  "log_tau_eta_mean": -1.0498221244986778,
+  "log_tau_eta_sd": 1.0,
+  "log_tau_rho_mean": 0.0,
+  "log_tau_rho_sd": 1.0,
+  "m_r": 0.0,
+  "s_r": 1.25,
+  "_provenance": {
+    "status": "fixed-before-corrected-MLB-evaluation",
+    "selection_method": "external-execution-evidence-and-prior-predictive-decision-check-v1",
+    "execution_kernel_version": "full-difference-grid-min-utility-fft-v3",
+    "pitch_order_version": "game-date-game-pk-at-bat-pitch-desc-v2",
+    "processed_pickle_sha256": "4e1bb7e5412b1efce7f0ec08079164a5a85f3ff89bcabaa02a3ee847201a392c",
+    "model_weights_sha256": "de73de37a13c6fe803b990abcc9c76b14d6290d23dc8d44f90470a48936c2030",
+    "execution_center": {
+      "sigma_feet": 0.5,
+      "source_url": "https://thesportjournal.org/article/the-association-between-pitch-accuracy-and-batter-outcomes-in-major-league-baseball/",
+      "source_summary": "A study of 1000 terminal pitches from 17 MLB games reported 45.3 percent within six inches of the intended target.",
+      "isotropic_gaussian_implied_sigma_feet": 0.45518297789351403,
+      "rounding_rule": "Rounded to 0.5 feet before viewing corrected experiment outcomes."
+    },
+    "decision_center": {
+      "lambda": 100.0,
+      "selection_summary": "Chosen by prior-predictive inspection on 25 deterministic, broadly spaced 2021 four-seam-fastball contexts at sigma=0.493559 feet.",
+      "median_optimal_action_probability_percent": 78.94,
+      "interquartile_range_percent": [
+        65.88,
+        85.87
+      ],
+      "selection_rule": "Rounded to 100 before viewing corrected experiment outcomes."
+    },
+    "population_scale_centers": {
+      "tau_eta": 0.35,
+      "tau_rho": 1.0,
+      "correlation": 0.0
+    },
+    "prior_widths": {
+      "mean_log_sigma_sd": 1.5,
+      "mean_log_lambda_sd": 4.0,
+      "log_tau_eta_sd": 1.0,
+      "log_tau_rho_sd": 1.0,
+      "fisher_z_correlation_sd": 1.25
+    }
+  }
+}

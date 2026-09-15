@@ -1,12 +1,12 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# Paper correspondence: Main/Supplement `app:decision_model`.
 """Run H-JEEDS true decision-model sensitivity experiments.
 
 This runner varies the simulator's true decision-making model while keeping
 the H-JEEDS estimator's likelihood fixed to the default softmax assumption.
-The default sweep is:
+The publication sweep holds population size and all other settings fixed:
 
 - true decision model: softmax, rational, flip, deceptive
-- agents per bucket: 1, 2, 5, 10, 25
+- agents per bucket: 5
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ from HJEEDS.decision_models import (
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_decision_model_sensitivity")
-DEFAULT_AGENTS_PER_BUCKET_VALUES = (1, 2, 5, 10, 25)
+DEFAULT_AGENTS_PER_BUCKET_VALUES = (base_experiment.DEFAULT_AGENTS_PER_BUCKET,)
 DEFAULT_COUNT_BUCKETS = base_experiment.DEFAULT_COUNT_BUCKETS
 
 SCENARIOS_FILENAME = "decision_model_sensitivity_scenarios.csv"
@@ -78,7 +78,7 @@ SCENARIO_METADATA_HEADER = [
 
 @dataclass(frozen=True)
 class DecisionModelScenario:
-    """One concrete true-decision-model x agents-per-bucket scenario."""
+    """One true-decision-model scenario at the default population size."""
 
     scenario_index: int
     config: base_experiment.ExperimentConfig
@@ -207,7 +207,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[DecisionModelScenario, ...]:
-    """Build the decision-model x agents-per-bucket scenarios."""
+    """Build one default-population-size scenario per true decision model."""
 
     scenarios: list[DecisionModelScenario] = []
     for decision_model in DECISION_MODEL_SPECS:
@@ -565,7 +565,7 @@ def print_dry_run_summary(
     decision_model_slugs = [model.slug for model in DECISION_MODEL_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
 
-    print("=== DRY RUN: True Decision Model x Agents Per Bucket Sensitivity ===")
+    print("=== DRY RUN: Isolated True Decision Model Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
     print(f"True decision models: {', '.join(decision_model_slugs)}")

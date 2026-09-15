@@ -1,12 +1,12 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
+# Paper correspondence: Supplement `app:true_correlation`.
 """Run H-JEEDS true population-correlation sensitivity experiments.
 
 This runner varies the simulator's true correlation between execution skill
 and decision-making skill while keeping the estimator model and default
-hyperpriors fixed. The default sweep is:
+hyperpriors and population size fixed. The publication sweep is:
 
 - true population correlation: -0.9, -0.5, 0.0, +0.5, +0.9
-- agents per bucket: 1, 2, 5, 10, 25
+- agents per bucket: 5
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from HJEEDS.artifacts import (
 
 
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_true_correlation_sensitivity")
-DEFAULT_AGENTS_PER_BUCKET_VALUES = (1, 2, 5, 10, 25)
+DEFAULT_AGENTS_PER_BUCKET_VALUES = (base_experiment.DEFAULT_AGENTS_PER_BUCKET,)
 DEFAULT_COUNT_BUCKETS = base_experiment.DEFAULT_COUNT_BUCKETS
 
 SCENARIOS_FILENAME = "true_correlation_sensitivity_scenarios.csv"
@@ -261,7 +261,7 @@ def build_scenarios(
     args: argparse.Namespace,
     agents_per_bucket_values: Sequence[int] = DEFAULT_AGENTS_PER_BUCKET_VALUES,
 ) -> tuple[TrueCorrelationScenario, ...]:
-    """Build the true-correlation x agents-per-bucket scenarios."""
+    """Build one default-population-size scenario per true correlation."""
 
     scenarios: list[TrueCorrelationScenario] = []
     for true_correlation in TRUE_CORRELATION_SPECS:
@@ -641,7 +641,7 @@ def print_dry_run_summary(
     true_correlation_labels = [spec.label for spec in TRUE_CORRELATION_SPECS]
     agents_values = sorted({scenario.config.agents_per_bucket for scenario in scenarios})
 
-    print("=== DRY RUN: True Population Correlation x Agents Per Bucket Sensitivity ===")
+    print("=== DRY RUN: Isolated True Population Correlation Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
     print(f"True correlations: {', '.join(true_correlation_labels)}")

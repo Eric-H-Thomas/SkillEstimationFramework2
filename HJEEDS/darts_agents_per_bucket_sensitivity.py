@@ -1,16 +1,16 @@
-# This file has been fully edited by a human researcher as of 05/25/26 at 11:47 AM MDT.
-"""Run agents-per-bucket ablations crossed with hyperprior sensitivity.
+# Paper correspondence: Supplement `app:agents_per_bucket`.
+"""Isolate sensitivity to the number of agents per observation-count bucket.
 
-This script repeats selected hyperprior-robustness conditions for several
-population sizes, where population size is controlled by the number of agents
-assigned to each observation-count bucket.
+This script repeats the matched default condition for several population
+sizes, where population size is controlled by the number of agents assigned
+to each observation-count bucket.
 
-Default sweep:
+The publication sweep varies only population size while holding the default
+hyperpriors and every other experimental setting fixed:
 
 - agents per bucket: 1, 2, 5, 10, 25
 - count buckets: 5, 10, 25, 100, 1000 observations
-- prior conditions: default, moderate combined misspecification, strong
-  combined misspecification
+- hyperprior condition: default
 
 The output tree intentionally mirrors the existing prior-sensitivity runner so
 each scenario has an ordinary experiment folder with CSVs and an
@@ -64,7 +64,7 @@ SCENARIO_METADATA_HEADER = [
 
 @dataclass(frozen=True)
 class AgentsPerBucketScenario:
-    """One concrete agents-per-bucket x hyperprior condition scenario."""
+    """One agents-per-bucket scenario under the default hyperpriors."""
 
     scenario_index: int
     config: base_experiment.ExperimentConfig
@@ -162,25 +162,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Root output directory for the agents-per-bucket sweep.",
     )
     parser.add_argument(
-        "--condition-preset",
-        choices=prior_sensitivity.CONDITION_PRESETS,
-        default=prior_sensitivity.CONDITION_PRESET_REPRESENTATIVE,
-        help=(
-            "Hyperprior condition set to cross with agents-per-bucket values. "
-            "The default representative preset gives 15 scenarios; full_60 gives 300."
-        ),
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report the agents-per-bucket x hyperprior workload and stop before simulation/inference.",
+        help="Report the isolated agents-per-bucket workload and stop before simulation/inference.",
     )
     parser.add_argument(
         "--scenario-index",
         type=int,
         default=None,
         help=(
-            "Run only one 0-based scenario from the agents-per-bucket x prior-condition grid. "
+            "Run only one 0-based agents-per-bucket scenario. "
             "Used by the Slurm array helper."
         ),
     )
@@ -328,6 +319,22 @@ def build_scenarios(
     return tuple(scenarios)
 
 
+def default_hyperprior_conditions() -> tuple[prior_sensitivity.PriorSensitivityCondition, ...]:
+    """Return only the matched default condition for the population-size study."""
+
+    default_conditions = tuple(
+        condition
+        for condition in prior_sensitivity.build_representative_conditions()
+        if condition.condition_slug == "default"
+    )
+    if len(default_conditions) != 1:
+        raise RuntimeError(
+            "Expected exactly one default hyperprior condition; "
+            f"found {len(default_conditions)}."
+        )
+    return default_conditions
+
+
 def _write_dict_rows(output_path: Path, header: Sequence[str], rows: Sequence[dict[str, Any]]) -> None:
     """Write dictionaries with a fixed header, leaving missing fields blank."""
 
@@ -380,7 +387,7 @@ def run_single_scenario(
     *,
     include_raw_rationality_error: bool = False,
 ) -> None:
-    """Run one agents-per-bucket x hyperprior scenario."""
+    """Run one agents-per-bucket scenario with default hyperpriors."""
 
     print(
         "[agents-per-bucket] "
@@ -412,7 +419,7 @@ def aggregate_existing_results(
 
     # Root-level rows--written to the top-level output direction for the whole sweep
     run_rows: list[dict[str, Any]] = [] # One row per agents-per-bucket setting
-    scenario_rows: list[dict[str, Any]] = [] # One row per agents-per-bucket x hyperprior scenario
+    scenario_rows: list[dict[str, Any]] = [] # One row per agents-per-bucket scenario
     all_agent_rows: list[dict[str, Any]] = [] # Agent-level results from every scenario
     all_bucket_rows: list[dict[str, Any]] = [] # Bucket summary rows from every scenario
     all_overall_rows: list[dict[str, Any]] = [] # Overall summary rows from every scenario
@@ -532,7 +539,7 @@ def aggregate_existing_results(
         AGENTS_PER_BUCKET_METADATA_HEADER,
         run_rows,
     )
-    # Write one row per agents-per-bucket x hyperprior scenario
+    # Write one row per agents-per-bucket scenario
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_SCENARIOS_FILENAME,
         combined_prefix_header,
@@ -569,7 +576,7 @@ def print_dry_run_summary(
     """Report the agents-per-bucket workload without running inference."""
 
     scenario_count = len(configs) * len(conditions)
-    print("=== DRY RUN: Agents Per Bucket x Hyperprior Sensitivity ===")
+    print("=== DRY RUN: Isolated Agents Per Bucket Sensitivity ===")
     print("No simulation or inference functions will be executed.")
     print()
     print(f"Agents-per-bucket values: {[config.agents_per_bucket for config in configs]}")
@@ -633,10 +640,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         field_name="agents_per_bucket",
     )
 
-    # BUILD SCENARIOS FOR EACH POPULATION-SIZE-HYPERPRIORS COMBO ---------------------------
+    # BUILD ONE DEFAULT-HYPERPRIOR SCENARIO FOR EACH POPULATION SIZE -----------------------
 
-    # Build the selected hyperprior sensitivity condition set
-    conditions = prior_sensitivity.build_sensitivity_conditions(args)
+    # Hold the hyperpriors fixed so this study isolates population size.
+    conditions = default_hyperprior_conditions()
 
     # Build one ExperimentConfig for each requested agents-per-bucket value
     configs = [
@@ -689,7 +696,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # All-in-one local run rows
     run_rows: list[dict[str, Any]] = []         # One row per agents-per-bucket setting
-    scenario_rows: list[dict[str, Any]] = []    # One row per agents-per-bucket x hyperprior scenario
+    scenario_rows: list[dict[str, Any]] = []    # One row per agents-per-bucket scenario
     all_agent_rows: list[dict[str, Any]] = []   # Every agent-level result from every scenario
     all_bucket_rows: list[dict[str, Any]] = []  # Every bucket summary row from every scenario
     all_overall_rows: list[dict[str, Any]] = [] # Every overall summary row from every scenario
@@ -744,7 +751,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         AGENTS_PER_BUCKET_METADATA_HEADER,
         run_rows,
     )
-    # Write one row per agents-per-bucket x hyperprior scenario
+    # Write one row per agents-per-bucket scenario
     _write_dict_rows(
         output_dir / AGENTS_PER_BUCKET_SCENARIOS_FILENAME,
         combined_prefix_header,

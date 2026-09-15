@@ -1,5 +1,5 @@
-# This file has been fully edited by a human researcher as of 05/22/26 at 6:01 PM MDT.
 
+# Paper correspondence: Main `subsec:background_jeeds`, `subsec:full_posterior`, and `subsec:inference`.
 from __future__ import annotations
 import math
 from typing import Any, Sequence
@@ -141,6 +141,9 @@ def fit_population_hyperparameters_map(
     # Validate the per-agent likelihood grids before optimization starts.  This
     # keeps the optimizer from failing later with a shape error that would be
     # much harder to interpret.
+    if not agent_log_likelihoods:
+        raise ValueError("At least one agent log-likelihood grid is required.")
+
     validated_log_likelihoods: list[np.ndarray] = []
     for agent_index, grid in enumerate(agent_log_likelihoods):
         grid = np.asarray(grid, dtype=float)
@@ -149,7 +152,20 @@ def fit_population_hyperparameters_map(
                 "Each agent log-likelihood grid must match the JEEDS skill-grid shape. "
                 f"Agent {agent_index} had shape {grid.shape}; expected {expected_shape}."
             )
-        validated_log_likelihoods.append(grid)
+        finite_mask = np.isfinite(grid)
+        if not np.any(finite_mask):
+            raise ValueError(
+                f"Agent {agent_index} has no finite entries in its log-likelihood grid."
+            )
+
+        # A likelihood is defined only up to an agent-specific multiplicative
+        # constant. Remove the corresponding additive log-likelihood constant
+        # before fitting the population model. Besides making the fit invariant
+        # to that arbitrary constant, this keeps Powell's relative stopping
+        # test from being dominated by a large, irrelevant objective offset.
+        centered_grid = np.full(expected_shape, -np.inf, dtype=float)
+        centered_grid[finite_mask] = grid[finite_mask] - float(np.max(grid[finite_mask]))
+        validated_log_likelihoods.append(centered_grid)
 
     # The paper's hyperpriors live in log-skill space, so these are the priors
     # over the population mean and spread parameters before seeing any agents.
@@ -211,9 +227,8 @@ def fit_population_hyperparameters_map(
         # The optimizer scores one candidate population model at a time by
         # asking: "How plausible are all observed agents under this shared
         # population, after also accounting for the hyperpriors?"
-        unpacked = unpack_parameters(parameter_vector)
-
         try:
+            unpacked = unpack_parameters(parameter_vector)
             # This is where the continuous population model gets projected onto
             # the discrete JEEDS grid used by every downstream posterior.
             #
@@ -228,7 +243,14 @@ def fit_population_hyperparameters_map(
                 sigma_grid=sigma_grid,
                 log_lambda_grid=log_lambda_grid,
             )
-        except (KeyError, RuntimeError, ValueError, np.linalg.LinAlgError):
+        except (
+            KeyError,
+            OverflowError,
+            RuntimeError,
+            ValueError,
+            FloatingPointError,
+            np.linalg.LinAlgError,
+        ):
             return -np.inf
 
         positive_prior_mask = discrete_prior > 0.0  # shape: (S, L)
@@ -331,6 +353,10 @@ def fit_population_hyperparameters_map(
     )
 
     initial_score = evaluate_log_posterior(initial_parameter_vector)
+    if not np.isfinite(initial_score):
+        raise RuntimeError(
+            "The empirical-Bayes objective is invalid at the hyperprior-center initialization."
+        )
     objective_evaluations = 0
 
     def objective(parameter_vector: np.ndarray) -> float:
@@ -353,36 +379,51 @@ def fit_population_hyperparameters_map(
         method="Powell",
         options={
             "maxiter": 300,
-            "xtol": 1e-3,
-            "ftol": 1e-3,
+            "xtol": 1e-4,
+            "ftol": 1e-6,
             "disp": False,
         },
     )
 
-    final_parameter_vector = np.asarray(optimization_result.x, dtype=float)
-    final_score = evaluate_log_posterior(final_parameter_vector)
+    optimizer_parameter_vector = np.asarray(optimization_result.x, dtype=float)
+    optimizer_score = evaluate_log_posterior(optimizer_parameter_vector)
     objective_evaluations += 1
 
-    # If Powell returns an invalid point, keep the initialization rather than
-    # silently emitting unusable hyperparameters.
-    if not np.isfinite(final_score):
+    # A numerical optimizer is not entitled to make the fit worse. Retain the
+    # initialization whenever Powell returns an invalid or lower-scoring point.
+    if np.isfinite(optimizer_score) and optimizer_score >= initial_score:
+        final_parameter_vector = optimizer_parameter_vector
+        final_score = float(optimizer_score)
+        selected_solution = "optimizer"
+    else:
         final_parameter_vector = initial_parameter_vector.copy()
-        final_score = initial_score
+        final_score = float(initial_score)
+        selected_solution = "initial"
 
     # Package both the fitted statistical parameters and optimizer diagnostics
     # because both are useful when manually checking experimental runs.
     fitted = unpack_parameters(final_parameter_vector)
     fitted["objective_value"] = float(final_score)
     fitted["initial_objective_value"] = float(initial_score)
+    fitted["optimizer_objective_value"] = (
+        float(optimizer_score) if np.isfinite(optimizer_score) else None
+    )
+    fitted["objective_improvement"] = float(final_score - initial_score)
+    fitted["selected_solution"] = selected_solution
     fitted["num_objective_evaluations"] = int(max(objective_evaluations, getattr(optimization_result, "nfev", 0)))
     fitted["num_optimizer_iterations"] = int(getattr(optimization_result, "nit", 0))
     fitted["optimization_method"] = "scipy.optimize.minimize(Powell)"
-    fitted["converged"] = bool(optimization_result.success)
+    fitted["converged"] = bool(
+        optimization_result.success
+        and np.isfinite(optimizer_score)
+        and optimizer_score >= initial_score
+    )
     fitted["optimizer_message"] = str(optimization_result.message)
     fitted["num_agents"] = len(validated_log_likelihoods)
     fitted["notes"] = (
         "Approximate empirical-Bayes MAP fit over a discretized hierarchical prior "
-        "using scipy.optimize.minimize with Powell search in unconstrained coordinates."
+        "using centered agent log likelihoods and scipy.optimize.minimize with "
+        "Powell search in unconstrained coordinates (xtol=1e-4, ftol=1e-6)."
     )
     return fitted
 

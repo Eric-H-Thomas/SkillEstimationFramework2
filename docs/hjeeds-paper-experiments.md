@@ -1,4 +1,3 @@
-<!-- This file was written or edited by AI and still requires human review. Delete this comment when done. -->
 
 # Unified H-JEEDS Paper Experiments
 
@@ -10,16 +9,16 @@ The unified runner `run_hjeeds_paper_experiments.py` launches the full current H
 |---|---:|---|
 | `baseline` | 1 | Compare independent JEEDS against H-JEEDS under the main uneven-data design |
 | `hyperprior_robustness` | 60 | Stress the empirical-Bayes hyperpriors across bias, confidence, and misspecified prior components |
-| `agents_per_bucket` | 15 | Test sensitivity to the number of demonstrators available at each observation-count level |
-| `population_shape` | 15 | Test whether the Gaussian population assumption is brittle when the true population is uniform or bimodal |
+| `agents_per_bucket` | 5 | Vary population size under the default hyperpriors |
+| `population_shape` | 3 | Vary only the true population shape at the default population size |
 | `outlier_sensitivity` | 3 | Test the effect of replacing 0, 1, or 5 default agents with explicit skill-profile outliers |
-| `anchor_availability` | 6 | Test whether low-data estimation depends on having some higher-data anchor agents |
-| `decision_model` | 20 | Test misspecification when true agents use non-softmax decision rules but H-JEEDS still assumes softmax |
-| `true_correlation` | 25 | Test sensitivity to the true execution/decision skill correlation |
+| `anchor_availability` | 6 | Upgrade 0--25 of 25 context agents to high-data anchors while holding the 50-agent population fixed |
+| `decision_model` | 4 | Vary only the true decision model while H-JEEDS retains its softmax likelihood |
+| `true_correlation` | 5 | Vary only the true execution/decision skill correlation |
 | `grid_resolution` | 3 | Check whether conclusions depend on the estimator grid resolution |
-| `compound_stress` | 15 | Combine representative stressors to show the estimator is not only robust one perturbation at a time |
+| `compound_stress` | 3 | Combine representative hyperprior, population-shape, decision-model, and correlation stressors |
 
-The default suite contains 10 experiment families and 163 Slurm scenario tasks before aggregation and final zipping.
+The default suite contains 10 experiment families and 93 Slurm scenario tasks before aggregation and final zipping.
 
 ## Local Run
 
@@ -102,9 +101,13 @@ The runner also writes:
 
 ## Design Logic
 
-The baseline experiment establishes the main H-JEEDS versus independent JEEDS comparison. Hyperprior robustness checks whether low-data improvements depend on overly convenient empirical-Bayes priors. The agents-per-bucket and anchor-availability studies separate two sample-size questions: how many demonstrators are available overall, and whether the population contains high-data anchor agents.
+The baseline experiment establishes the main H-JEEDS versus independent JEEDS comparison. Hyperprior robustness checks whether low-data improvements depend on overly convenient empirical-Bayes priors. The agents-per-bucket study varies population size only under the default hyperpriors. The anchor study holds 25 one-sample evaluation agents and 25 context agents fixed, varying only how many context agents receive 25 observations.
 
-Population-shape, outlier-contamination, decision-model, and true-correlation studies target modeling-assumption mismatch from four angles: higher-order population shape, explicit contamination, the behavioral policy that generated actions, and the true relationship between execution and decision-making skill. Grid resolution is mainly an appendix check to show numerical conclusions are not artifacts of one discretization. The compound-stress study is a compact sanity check that combines representative hard settings without turning the main paper into an ablation soup.
+Population-shape, outlier-contamination, decision-model, true-correlation, and grid-resolution studies each vary only their named factor while retaining the default five agents per bucket and other default settings. The compound-stress study is the sole deliberate combination: it jointly changes representative hyperpriors, population shapes, decision models, and correlations at the default population size. Its correlation prior/truth pairs are $(-0.5,-0.5)$ for default, $(-0.5,0)$ for moderate stress, and $(-0.9,+0.9)$ for strong wrong-sign stress.
+
+The anchor study's canonical summary and plots always use the fixed first 25 one-observation evaluation agents. Files containing `all_agents_summary` preserve the full 50-agent population, including context agents, for diagnostic analysis.
+
+After all scenarios finish, the unified runner validates exact scenario, seed, and agent coverage; estimator status; finite publication metrics; rationality bounds; rational-policy truth; and empirical-Bayes convergence. Plotting and archive creation stop if any check fails.
 
 ## Resume And Dry Run
 

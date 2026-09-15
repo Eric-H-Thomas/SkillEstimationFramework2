@@ -1,4 +1,4 @@
-# This file was written or edited by AI and still requires human review. Delete this comment when done.
+# Paper correspondence: Main `sec:experiments`; all 1D supplement experiment sections.
 """Run the full H-JEEDS paper experiment suite locally or on Slurm."""
 
 from __future__ import annotations
@@ -17,7 +17,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
+
+REPO_ROOT = Path(__file__).resolve().parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from HJEEDS.config import DEFAULT_NUM_SEEDS, parse_seed_argument
+from scripts.validate_publication_results import validate_publication_root
 
 
 # Default location for the all-paper output tree when the caller does not override it
@@ -27,6 +33,7 @@ DEFAULT_OUTPUT_ROOT = Path("HJEEDS/results/hjeeds_paper_experiments")
 # Files written at the top of the paper output tree
 MANIFEST_FILENAME = "paper_experiment_manifest.json" # Record of experimental design
 STATUS_FILENAME = "paper_experiment_status.csv" # Log of experiments started, finished, failed, etc.
+VALIDATION_FILENAME = "publication_result_validation.json"
 
 
 # Private subdirectory for runner-owned cache/config files used by local and Slurm child processes
@@ -111,23 +118,23 @@ EXPERIMENT_SPECS = (
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 5 agents-per-bucket values x 3 representative hyperprior conditions
+    # 5 agents-per-bucket values under the default hyperpriors
     ExperimentSpec(
         slug="agents_per_bucket",
         label="Agents per bucket",
         module="HJEEDS.darts_agents_per_bucket_sensitivity",
         output_subdir="agents_per_bucket",
-        scenario_count=15,
+        scenario_count=5,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 3 population shapes x 5 agents-per-bucket values
+    # 3 population shapes at the default five agents per bucket
     ExperimentSpec(
         slug="population_shape",
         label="Population shape",
         module="HJEEDS.darts_population_shape_sensitivity",
         output_subdir="population_shape",
-        scenario_count=15,
+        scenario_count=3,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
@@ -151,23 +158,23 @@ EXPERIMENT_SPECS = (
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 4 true decision models x 5 agents-per-bucket values
+    # 4 true decision models at the default five agents per bucket
     ExperimentSpec(
         slug="decision_model",
         label="Decision model",
         module="HJEEDS.darts_decision_model_sensitivity",
         output_subdir="decision_model",
-        scenario_count=20,
+        scenario_count=4,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 5 true correlations x 5 agents-per-bucket values
+    # 5 true correlations at the default five agents per bucket
     ExperimentSpec(
         slug="true_correlation",
         label="True population correlation",
         module="HJEEDS.darts_true_correlation_sensitivity",
         output_subdir="true_correlation",
-        scenario_count=25,
+        scenario_count=5,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
@@ -181,13 +188,13 @@ EXPERIMENT_SPECS = (
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
-    # 3 compound stress settings x 5 agents-per-bucket values
+    # 3 deliberately combined stress settings at the default population size
     ExperimentSpec(
         slug="compound_stress",
         label="Compound stress",
         module="HJEEDS.darts_compound_stress_sensitivity",
         output_subdir="compound_stress",
-        scenario_count=15,
+        scenario_count=3,
         supports_scenario_array=True,
         needs_aggregation=True,
     ),
@@ -261,7 +268,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--qos", type=str, default=None, help="Optional Slurm QOS.")
     parser.add_argument("--partition", type=str, default=None, help="Optional Slurm partition.")
     parser.add_argument("--account", type=str, default=None, help="Optional Slurm account.")
-    parser.add_argument("--time", type=str, default="23:00:00", help="Slurm wall time per job.")
+    parser.add_argument("--time", type=str, default="24:00:00", help="Slurm wall time per job.")
     parser.add_argument("--mem", type=str, default="16G", help="Slurm memory per task.")
     parser.add_argument("--cpus-per-task", type=int, default=1, help="Slurm CPUs per task.")
 
@@ -542,6 +549,24 @@ def zip_output_root(output_root: Path, zip_path: Path) -> None:
                 archive.write(path, path.relative_to(output_root.parent))
 
 
+def validate_completed_suite(output_root: Path, *, seed: int, num_seeds: int) -> Path:
+    """Validate every scenario before plotting or packaging publication results."""
+
+    report = validate_publication_root(
+        output_root,
+        first_seed=seed,
+        num_seeds=num_seeds,
+    )
+    report_path = output_root / VALIDATION_FILENAME
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(
+        f"[paper-runner] Validated {report['num_scenarios']} scenarios and "
+        f"{report['total_rows']} agent rows.",
+        flush=True,
+    )
+    return report_path
+
+
 def run_local_suite(
     experiment_specs: Sequence[ExperimentSpec],
     *,
@@ -620,6 +645,8 @@ def run_local_suite(
         print(f"[dry-run] zip {output_root} -> {zip_path}")
         return
 
+    validate_completed_suite(output_root, seed=seed, num_seeds=num_seeds)
+
     # The final local step packages every experiment into one export-ready zip
     append_status(
         output_root,
@@ -659,6 +686,7 @@ def run_plots_only_suite(
 
     if not dry_run:
         Path(local_env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+        validate_completed_suite(output_root, seed=seed, num_seeds=num_seeds)
 
     for spec in experiment_specs:
         command = experiment_command(
@@ -1067,10 +1095,17 @@ def run_slurm_suite(
     )
 
 
-def run_zip_only(output_root: Path, zip_path: Path) -> None:
+def run_zip_only(
+    output_root: Path,
+    zip_path: Path,
+    *,
+    seed: int,
+    num_seeds: int,
+) -> None:
     """Zip an already-computed paper output root."""
 
     # zip-only is used by the final Slurm dependency job after all experiments finish
+    validate_completed_suite(output_root, seed=seed, num_seeds=num_seeds)
     append_status(
         output_root,
         experiment_slug=ZIP_ONLY_EXPERIMENT_SLUG,
@@ -1103,8 +1138,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_root = Path(args.output_root)
     zip_path = zip_path_for_output_root(output_root, args.zip_path)
 
-    # The repository root is the directory containing this launcher
-    repo_root = Path(__file__).resolve().parent
+    # The launcher lives at the repository root
+    repo_root = REPO_ROOT
 
     # Basic validation happens here before writing manifests or submitting jobs
     if args.num_seeds <= 0:
@@ -1147,7 +1182,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.dry_run:
             print(f"[dry-run] zip {output_root} -> {zip_path}")
         else:
-            run_zip_only(output_root, zip_path)
+            run_zip_only(
+                output_root,
+                zip_path,
+                seed=args.seed,
+                num_seeds=args.num_seeds,
+            )
         return 0
 
     if args.mode == "plots-only":

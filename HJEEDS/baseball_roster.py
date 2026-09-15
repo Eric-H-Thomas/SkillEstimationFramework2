@@ -1,10 +1,10 @@
-# This file has been fully reviewed by a human researcher as of 07/17/26 at 12:30 PM MDT.
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_sigma_gap`.
 """Shared Statcast roster selection for baseball HJEEDS entry points.
 
-Paper BBIP convergence (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
+The paper walk/IP-proxy convergence workflow (``submit_hjeeds_baseball_convergence_paper_bbip.sh``)
 calls ``resolve_baseball_roster`` with ``--bbip-extremes 10``, ``--season-year
 2021``, ``--pitch-types FF``, and ``min_pitches_per_agent=100``. That path
-selects top-10 + bottom-10 BB/IP pitchers among FF-eligible pitchers, expands
+selects the ten highest and ten lowest processed-data proxy values among FF-eligible pitchers, expands
 to (pitcher, pitchType) agents, then drops any agent below the pitch floor.
 
 Exactly one roster selector is allowed among ``--all-eligible-agents``,
@@ -190,7 +190,7 @@ def resolve_baseball_roster(
             raise ValueError("--bbip-extremes requires --season-year.")
         from .baseball_bbip import select_bbip_extreme_pitcher_ids
 
-        # Eligibility is per (pitcher, pitchType); BB/IP extremes are pitcher-level.
+        # Eligibility is per (pitcher, pitchType); proxy extremes are pitcher-level.
         eligible_pitcher_ids = tuple(
             pitcher_id
             for pitcher_id, _pitch_type, _pitch_count in list_eligible_pitcher_counts(
@@ -294,7 +294,10 @@ def add_common_roster_arguments(parser: argparse.ArgumentParser) -> None:
         "--bbip-extremes",
         type=int,
         default=None,
-        help="Select top-N and bottom-N pitchers by season BB/IP (requires --season-year).",
+        help=(
+            "Select the top-N and bottom-N processed-data walk/IP-proxy pitchers "
+            "(requires --season-year)."
+        ),
     )
     parser.add_argument(
         "--max-agents",

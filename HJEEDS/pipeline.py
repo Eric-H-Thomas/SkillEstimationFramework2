@@ -1,4 +1,4 @@
-# This file was previously human-reviewed, but was modified by AI and requires re-review.
+# Paper correspondence: Main `subsec:inference` and `subsec:experimental_procedure`.
 from __future__ import annotations
 
 from dataclasses import replace
@@ -7,6 +7,7 @@ from typing import Callable
 import numpy as np
 
 from .aggregation import summarize_seed_results
+from .decision_models import RATIONAL_DECISION_MODEL_SLUG
 from .estimation import (
     build_discrete_hierarchical_prior,
     fit_population_hyperparameters_map,
@@ -36,6 +37,24 @@ TruthSampler = Callable[
     [np.random.Generator, ExperimentConfig, np.ndarray, np.ndarray],
     list[AgentTruth],
 ]
+
+
+def _true_rationality_percent(
+    expected_values: np.ndarray,
+    log_lambda_true: float,
+    decision_model_slug: str,
+) -> float | None:
+    """Return the behavioral rationality truth for a simulated policy.
+
+    A rational agent deterministically selects an optimal intended target, so
+    its behavioral truth is 100% regardless of the otherwise-unused sampled
+    lambda coordinate. Other sensitivity policies retain the study's existing
+    lambda-to-rationality interpretation.
+    """
+
+    if decision_model_slug == RATIONAL_DECISION_MODEL_SLUG:
+        return 100.0
+    return rationality_percent_from_expected_values(expected_values, log_lambda_true)
 
 
 def run_single_seed(
@@ -118,10 +137,25 @@ def run_single_seed(
         log_lambda_grid=log_lambda_grid,
     )
 
+    # Persist enough structured diagnostics in every agent-level CSV row to
+    # audit population fits after a distributed run. SeedResult.notes alone is
+    # not written by the publication artifact layer.
+    population_fit_diagnostic = (
+        "population_fit: "
+        f"converged={fitted_hyperparameters.get('converged')}; "
+        f"selected={fitted_hyperparameters.get('selected_solution')}; "
+        f"iterations={fitted_hyperparameters.get('num_optimizer_iterations')}; "
+        f"evaluations={fitted_hyperparameters.get('num_objective_evaluations')}; "
+        f"initial_objective={fitted_hyperparameters.get('initial_objective_value')}; "
+        f"optimizer_objective={fitted_hyperparameters.get('optimizer_objective_value')}; "
+        f"selected_objective={fitted_hyperparameters.get('objective_value')}; "
+        f"improvement={fitted_hyperparameters.get('objective_improvement')}; "
+        f"message={fitted_hyperparameters.get('optimizer_message')}"
+    )
+
     seed_result.notes = (
         "Seed result includes standalone JEEDS estimates and hierarchical empirical-Bayes estimates. "
-        f"Hierarchical population fit status: converged={fitted_hyperparameters.get('converged')}; "
-        f"objective={fitted_hyperparameters.get('objective_value')}."
+        f"{population_fit_diagnostic}"
     )
 
     for agent_truth, dataset, log_likelihood_grid, jeeds_estimate in agent_records:
@@ -146,9 +180,10 @@ def run_single_seed(
             delta=config.delta,
             environment=config.environment,
         )
-        rationality_percent_true = rationality_percent_from_expected_values(
+        rationality_percent_true = _true_rationality_percent(
             rationality_expected_values,
             agent_truth.log_lambda_true,
+            config.true_decision_model_slug,
         )
         if jeeds_estimate.status == "ok" and jeeds_estimate.posterior_mean_log_lambda is not None:
             jeeds_estimate = replace(
@@ -179,7 +214,8 @@ def run_single_seed(
                 jeeds=jeeds_estimate,
                 hierarchical=hierarchical_estimate,
                 notes=(
-                    "Agent result contains standalone JEEDS and hierarchical empirical-Bayes estimates."
+                    "Agent result contains standalone JEEDS and hierarchical empirical-Bayes estimates. "
+                    f"{population_fit_diagnostic}"
                 ),
             )
         )

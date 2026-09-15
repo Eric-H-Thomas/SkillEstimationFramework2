@@ -1,6 +1,7 @@
 #!/bin/bash
+# Paper correspondence: Main `subsec:baseball`; Supplement `app:baseball_sigma_gap`.
 # Submit a Slurm array for per-agent baseball convergence caches, then aggregate.
-# Paper BBIP entry: submit_hjeeds_baseball_convergence_paper_bbip.sh
+# Paper processed-data walk/IP-proxy entry: submit_hjeeds_baseball_convergence_paper_bbip.sh
 # Defaults: agent 08:00:00 / 8G; agg 01:00:00 / 4G (paper wrapper pins 12:00:00).
 
 set -euo pipefail
@@ -21,13 +22,14 @@ Experiment options:
   --pitch-types TYPES            Comma-separated pitch types (default: FF).
   --all-eligible-agents          Use every eligible (pitcher, pitchType) pair.
   --top-pitchers N               Alternative roster selector.
-  --bbip-extremes N              Top-N + bottom-N by season BB/IP.
+  --bbip-extremes N              Highest-N + lowest-N by processed-data walk/IP proxy.
   --pitcher-ids IDS              Alternative roster selector.
   --min-pitches-per-agent N      Minimum pitches per agent (default: 100).
   --max-agents N                 Cap roster size (smoke tests).
   --convergence-ns LIST          Comma-separated N values (default: 5,10,25,50,100).
   --max-reference-pitches N      Cap reference pitches per agent (default: 100).
-  --hyperprior-preset PRESET     darts|low-confidence|baseball-2021-ff|calibrated.
+  --hyperprior-preset PRESET     baseball-literature-informed (paper), darts,
+                                 low-confidence, baseball-2021-ff, or calibrated.
   --hyperprior-config PATH       JSON hyperprior file (required for calibrated).
   --output-dir PATH              Output root.
   --python-bin PATH              Python executable.
@@ -50,6 +52,7 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="${script_dir}"
 # shellcheck source=hjeeds_baseball_slurm_common.sh
 source "${script_dir}/hjeeds_baseball_slurm_common.sh"
 
@@ -251,6 +254,7 @@ if [[ ! -x "${resolved_python}" ]]; then
   echo "Error: Could not resolve a Python interpreter. Pass --python-bin." >&2
   exit 1
 fi
+hjeeds_baseball_preflight "${resolved_python}"
 
 prepare_args=(
   -m HJEEDS.baseball_convergence_study
@@ -286,12 +290,17 @@ fi
 echo "Preparing convergence roster locally..."
 echo "  ${resolved_python} ${prepare_args[*]}"
 (
-  cd "${script_dir}"
-  export PYTHONPATH="${script_dir}${PYTHONPATH:+:$PYTHONPATH}"
+  cd "${repo_root}"
+  export PYTHONPATH="${repo_root}${PYTHONPATH:+:$PYTHONPATH}"
   "${resolved_python}" "${prepare_args[@]}"
 )
 
-roster_file="${script_dir}/${output_dir}/convergence_roster.json"
+if [[ "${output_dir}" = /* ]]; then
+  resolved_output_dir="${output_dir}"
+else
+  resolved_output_dir="${repo_root}/${output_dir}"
+fi
+roster_file="${resolved_output_dir}/convergence_roster.json"
 agent_count="$(hjeeds_baseball_roster_agent_count "${resolved_python}" "${roster_file}")"
 
 if ! [[ "${agent_count}" =~ ^[0-9]+$ ]] || [[ "${agent_count}" -lt 1 ]]; then
@@ -303,7 +312,7 @@ common_sbatch_args=(
   --job-name="${job_name}"
   --qos="${qos}"
   --cpus-per-task="${cpus_per_task}"
-  --chdir="${script_dir}"
+  --chdir="${repo_root}"
 )
 if [[ -n "${partition}" ]]; then
   common_sbatch_args+=(--partition="${partition}")
@@ -316,6 +325,8 @@ if [[ -n "${slurm_output}" ]]; then
 fi
 
 experiment_env=(
+  "HJEEDS_REPO_ROOT=${repo_root}"
+  "HJEEDS_SLURM_DIR=${script_dir}"
   "BASE_SEED=${base_seed}"
   "NUM_SEEDS=1"
   "OUTPUT_DIR=${output_dir}"
@@ -333,7 +344,7 @@ fi
 if [[ -n "${hyperprior_config}" ]]; then
   experiment_env+=("HYPERPRIOR_CONFIG=${hyperprior_config}")
 fi
-bbip_cache_path="${script_dir}/${output_dir}/bbip_innings_cache.json"
+bbip_cache_path="${resolved_output_dir}/bbip_innings_cache.json"
 if [[ -f "${bbip_cache_path}" ]]; then
   experiment_env+=("BBIP_CACHE_PATH=${bbip_cache_path}")
 fi

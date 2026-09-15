@@ -10,9 +10,9 @@
 
 set -euo pipefail
 
-# Submit passes --chdir=<repo root>. Prefer PWD over BASH_SOURCE: Slurm may
-# execute a spool copy of this .sbatch, so dirname(BASH_SOURCE) would be wrong.
-_common="${PWD}/hjeeds_baseball_slurm_common.sh"
+# Submit passes --chdir=<repo root>. Prefer the exported launcher directory:
+# Slurm may execute a spool copy, so dirname(BASH_SOURCE) can be unreliable.
+_common="${HJEEDS_SLURM_DIR:-${HJEEDS_REPO_ROOT:-${PWD}}}/hjeeds_baseball_slurm_common.sh"
 if [[ ! -f "${_common}" && -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/hjeeds_baseball_slurm_common.sh" ]]; then
   _common="${SLURM_SUBMIT_DIR}/hjeeds_baseball_slurm_common.sh"
 fi
@@ -29,6 +29,7 @@ source "${_common}"
 hjeeds_baseball_setup_matplotlib_env
 python_bin="$(hjeeds_baseball_resolve_cluster_python submit_hjeeds_baseball_hyperprior_calibration.sh)" || exit 1
 echo "[baseball-calibrate] Using python: ${python_bin}" >&2
+hjeeds_baseball_preflight "${python_bin}"
 
 python_args=(
   -m HJEEDS.baseball_calibrate_hyperpriors
@@ -60,5 +61,9 @@ echo "[baseball-calibrate] Starting: ${python_bin} ${python_args[*]}" >&2
 "${python_bin}" "${python_args[@]}"
 
 if [[ "${AGGREGATE_RESULTS:-0}" == "1" ]]; then
+  echo "[baseball-calibrate] Validating completion sentinel and output hashes before zip." >&2
+  "${python_bin}" -m HJEEDS.baseball_calibrate_hyperpriors \
+    --output-dir "${OUTPUT_DIR}" \
+    --validate-results
   hjeeds_baseball_zip_results "${python_bin}" "${OUTPUT_DIR}" "baseball-calibrate"
 fi
