@@ -195,6 +195,39 @@ Use the Slurm submit helper to launch one array task per scenario and one depend
 
 After aggregation, the Slurm runner zips the top-level output folder for export. By default it writes `OUTPUT_DIR.zip`.
 
+## Skill-Dependent Exposure Bias Study
+
+Use `HJEEDS.darts_exposure_skill_bias_sensitivity` to test whether giving better
+demonstrators more observations changes estimation error beyond the ordinary
+count-bucket effect. It runs three matched assignments by default:
+
+- `quality_aligned`: higher-quality profiles receive larger observation buckets.
+- `randomized`: the same buckets are randomly assigned as a control.
+- `quality_reversed`: higher-quality profiles receive smaller buckets.
+
+Each condition writes the normal H-JEEDS artifacts, including
+`error_by_count_bucket.png`, plus `assignment_diagnostics.csv` with the true
+skills and realized count assignment.
+
+Dry run:
+
+```bash
+python3 -m HJEEDS.darts_exposure_skill_bias_sensitivity \
+  --seed default --num-seeds 1 --dry-run
+```
+
+Run:
+
+```bash
+python3 -m HJEEDS.darts_exposure_skill_bias_sensitivity \
+  --seed 12345 --num-seeds 500 \
+  --output-dir HJEEDS/results/hierarchical_darts_exposure_skill_bias
+```
+
+The quality score ranks execution quality (lower sigma) and decision quality
+(higher lambda) equally by within-seed percentile, avoiding arbitrary units
+when assigning counts.
+
 ## Outlier-Contamination Ablation
 
 Use `HJEEDS.darts_outlier_sensitivity` to test explicit contamination separately from population shape. Every seed retains the default 25-agent design with five agents in each observation-count bucket. The runner first draws the default Gaussian population, then replaces 0, 1, or 5 agents with profiles at Mahalanobis radius 3 in log-skill space. Directions outside the estimator's skill-grid support are redrawn. In the five-outlier condition, one replacement appears in every observation-count bucket.

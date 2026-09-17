@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import math
+from collections.abc import Callable
 import numpy as np
 from . import darts_environment as darts
 from .decision_models import sample_intended_targets_for_decision_model
@@ -146,6 +147,9 @@ def assign_observation_counts(config: ExperimentConfig) -> list[int]:
     # the bucket design maps to agent IDs. If we later want random bucket
     # assignments, we can do that explicitly and document the change.
     return counts
+
+
+ObservationCountAssigner = Callable[[ExperimentConfig, list[AgentTruth], int], list[int]]
 
 
 def simulate_agent_dataset(

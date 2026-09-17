@@ -18,6 +18,7 @@ from .likelihood import compute_agent_log_likelihood_grid
 from .models import AgentDataset, AgentResult, AgentTruth, ExperimentConfig, MethodEstimate, SeedResult
 from .rationality import compute_expected_values_for_rationality, rationality_percent_from_expected_values
 from .sampling import (
+    ObservationCountAssigner,
     assign_observation_counts,
     build_skill_grids,
     sample_reward_surface,
@@ -62,6 +63,7 @@ def run_single_seed(
     seed: int,
     *,
     truth_sampler: TruthSampler = sample_true_population_params,
+    observation_count_assigner: ObservationCountAssigner | None = None,
 ) -> SeedResult:
     """Run the experiment pipeline for one seed.
 
@@ -75,7 +77,15 @@ def run_single_seed(
     reward_surface = sample_reward_surface(rng, config)
     sigma_grid, log_lambda_grid = build_skill_grids(config)
     agent_truths = truth_sampler(rng, config, sigma_grid, log_lambda_grid)
-    observation_counts = assign_observation_counts(config)
+    if observation_count_assigner is None:
+        observation_counts = assign_observation_counts(config)
+    else:
+        observation_counts = observation_count_assigner(config, agent_truths, seed)
+        if len(observation_counts) != len(agent_truths):
+            raise RuntimeError(
+                "Custom observation-count assignment produced the wrong number of agents. "
+                f"Expected {len(agent_truths)}, received {len(observation_counts)}."
+            )
 
     seed_result = SeedResult(
         seed=seed,
