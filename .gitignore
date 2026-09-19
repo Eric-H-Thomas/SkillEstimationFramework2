@@ -37,6 +37,7 @@ Data/**/logs/
 # Per-job experiment outputs (one JSON per array task)
 Data/Hockey/experiments/**/results/
 Data/Hockey/experiments/**/work/
+Data/Hockey/experiments/hjeeds_*/
 
 /.idea/dictionaries
 /.idea
