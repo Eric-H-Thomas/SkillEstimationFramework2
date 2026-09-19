@@ -4,8 +4,10 @@
 #   sbatch run_hjeeds_hockey.sbatch [config.json] [output_dir]
 
 #SBATCH --job-name=hjeeds-hockey-bootstrap
-#SBATCH --time=00:05:00
-#SBATCH --mem=1G
+# Preflight reads every selected player's parquet and NPZ metadata before it
+# submits the worker array; this needs more than the tiny bootstrap allocation.
+#SBATCH --time=00:60:00
+#SBATCH --mem=8G
 #SBATCH --output=slurm-hjeeds-hockey-bootstrap-%j.out
 
 set -euo pipefail
