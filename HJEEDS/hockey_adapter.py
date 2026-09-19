@@ -2,7 +2,8 @@
 
 This module translates Blackhawks shot-map data into the same grid-based
 likelihood shape used by the generic HJEEDS likelihood code. The implementation
-is intentionally lightweight but structurally aligned with the real-data flow:
+uses the angular coordinate system used by production Blackhawks JEEDS, because
+the execution-skill grid is expressed in radians rather than feet:
 
 - each row in ``shots_df`` corresponds to one observed shot;
 - each event id maps to a cached 2D value_map representing the post-shot xG
@@ -23,6 +24,15 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
+from scipy.ndimage import gaussian_filter
+
+from BlackhawksSkillEstimation.BlackhawksJEEDS import (
+    EV_BLUR_MAX_SIGMA_BINS,
+    EV_NORMALIZE,
+    MIN_DISTANCE_FROM_NET_FT,
+    _infer_grid_axes_from_value_map,
+)
+from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 
 
 def _infer_hockey_grid_axes(value_map: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -92,10 +102,60 @@ def compute_hockey_log_likelihood_grid(
     if shots_df.empty:
         return log_likelihood_grid
 
-    required_columns = {"event_id", "location_y", "location_z"}
+    required_columns = {"event_id", "start_x", "start_y", "location_y", "location_z"}
     missing = required_columns.difference(shots_df.columns)
     if missing:
         raise ValueError(f"shots_df is missing required columns: {sorted(missing)}")
+
+    prepared_shots: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]] = []
+    for _, row in shots_df.iterrows():
+        event_id = int(row["event_id"])
+        if event_id not in shot_maps:
+            continue
+
+        player_location = np.array([float(row["start_x"]), float(row["start_y"])])
+        if np.linalg.norm(player_location - np.array([89.0, 0.0])) < MIN_DISTANCE_FROM_NET_FT:
+            continue
+
+        value_map = np.asarray(shot_maps[event_id].get("value_map"), dtype=float)
+        if value_map.ndim != 2 or value_map.size == 0 or not np.isfinite(value_map).all():
+            continue
+
+        grid_y, grid_z = _infer_grid_axes_from_value_map(value_map)
+        (
+            dirs,
+            elevations,
+            _,
+            grid_targets_angular,
+            _,
+            _,
+            _,
+            grid_utilities_computed,
+            executed_action_angular,
+            skip,
+            _,
+        ) = angular_heatmaps.getAngularHeatmap(
+            value_map,
+            player_location,
+            np.array([float(row["location_y"]), float(row["location_z"])]),
+            grid_y=grid_y,
+            grid_z=grid_z,
+        )
+        if skip or not np.isfinite(grid_utilities_computed).all():
+            continue
+
+        bin_size = (
+            ((dirs[-1] - dirs[0]) / (len(dirs) - 1) if len(dirs) > 1 else 0.01)
+            + ((elevations[-1] - elevations[0]) / (len(elevations) - 1) if len(elevations) > 1 else 0.01)
+        ) / 2.0
+        prepared_shots.append(
+            (
+                np.asarray(grid_targets_angular).reshape(-1, 2),
+                np.asarray(executed_action_angular, dtype=float),
+                np.asarray(grid_utilities_computed, dtype=float),
+                bin_size,
+            )
+        )
 
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
         sigma = float(sigma_hypothesis)
@@ -106,27 +166,19 @@ def compute_hockey_log_likelihood_grid(
             lambda_value = float(np.exp(log_lambda_hypothesis))
             shot_contributions: list[float] = []
 
-            for _, row in shots_df.iterrows():
-                event_id = int(row["event_id"])
-                if event_id not in shot_maps:
-                    continue
+            for target_angles, executed_action, utility_grid, bin_size in prepared_shots:
+                blur_sigma = max(min(sigma / bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
+                evs = gaussian_filter(utility_grid, sigma=blur_sigma, mode="constant", cval=0.0)
+                if EV_NORMALIZE:
+                    ev_scale = float(np.max(evs) - np.mean(evs))
+                    if ev_scale > 1e-12:
+                        evs = evs / ev_scale
+                value_flat = evs.reshape(-1)
 
-                value_map = np.asarray(shot_maps[event_id].get("value_map"), dtype=float)
-                if value_map.ndim != 2 or value_map.size == 0:
-                    continue
-                if not np.isfinite(value_map).all():
-                    continue
-
-                y_grid, z_grid = _infer_hockey_grid_axes(value_map)
-                # ``value_map.reshape(-1)`` uses C order, so y (the second
-                # array axis) changes fastest and z changes slowest.
-                y_targets = np.tile(y_grid, z_grid.size)
-                z_targets = np.repeat(z_grid, y_grid.size)
-
-                observed_y = float(row["location_y"])
-                observed_z = float(row["location_z"])
-
-                target_distances = np.hypot(y_targets - observed_y, z_targets - observed_z)
+                target_distances = np.hypot(
+                    target_angles[:, 0] - executed_action[0],
+                    target_angles[:, 1] - executed_action[1],
+                )
                 gaussian_coeff = 1.0 / (2.0 * math.pi * sigma**2)
                 gaussian_terms = gaussian_coeff * np.exp(-0.5 * np.square(target_distances / sigma))
                 gaussian_terms = np.asarray(gaussian_terms, dtype=float)
@@ -134,7 +186,6 @@ def compute_hockey_log_likelihood_grid(
                     continue
                 gaussian_terms = np.maximum(gaussian_terms, np.finfo(float).tiny)
 
-                value_flat = np.asarray(value_map, dtype=float).reshape(-1)
                 finite_values = np.isfinite(value_flat)
                 if not np.any(finite_values):
                     continue
