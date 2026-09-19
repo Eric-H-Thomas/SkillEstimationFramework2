@@ -92,6 +92,26 @@ python runExpBaseball.py -ids 642232 -types FF CH -startYear 2022 -endYear 2023 
 ## `runExpHockey.py`
 Runs hockey multi-agent experiments using shot data. Defaults set `-domain hockey-multi` and enable hockey-specific agent labels.
 
+## Cached Blackhawks HJEEDS population runs
+
+The new cached-data HJEEDS workflow is separate from the legacy `hockey-multi`
+runner. Launch `run_hjeeds_hockey.sbatch` to preflight the roster, compute one
+likelihood grid per player, and fit/apply the shared population prior in a
+dependent aggregation job.
+
+The first hockey hyperprior uses manually selected descriptive centers from
+prior Blackhawks JEEDS summaries, not estimates fitted from the HJEEDS run:
+
+```text
+sigma center = 0.075       -> mean_log_sigma  = ln(0.075) = -2.590267
+lambda center = 10         -> mean_log_lambda = ln(10)    =  2.302585
+```
+
+These are natural-log coordinates. The historical Blackhawks rationality
+support was `log10(lambda)=[-1,3]`, represented by HJEEDS as
+`log(lambda)=[ln(0.1),ln(1000)]`. The values and their provenance are copied
+into each run's `manifest.json` and `run_metadata.json`.
+
 **Key arguments**
 - Player and shot selection: `-id` (player ID), `-type` (shot type), plus baseball-style data filters (`-startYear`/`-endYear` etc.) reused for consistency.
 - Skill configuration: same set of `-xSkillsGiven`, `-pSkillsGiven`, and per-experiment counts used in other runners.
