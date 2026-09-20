@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-OUTPUT_DIR="${1:?Usage: sbatch $0 OUTPUT_DIR {preflight|worker|aggregate}}"
-MODE="${2:?Usage: sbatch $0 OUTPUT_DIR {preflight|worker|aggregate}}"
+OUTPUT_DIR="${1:?Usage: sbatch $0 OUTPUT_DIR MODE (preflight, worker, or aggregate)}"
+MODE="${2:?Usage: sbatch $0 OUTPUT_DIR MODE (preflight, worker, or aggregate)}"
 REPO_ROOT="${HJEEDS_REPO_ROOT:-$PWD}"
 
 cd "$REPO_ROOT"
