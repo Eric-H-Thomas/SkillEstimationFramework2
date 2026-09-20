@@ -80,8 +80,8 @@ def compute_hockey_log_likelihood_grid(
     Parameters
     ----------
     shots_df:
-        DataFrame containing at least ``event_id``, ``location_y``, and
-        ``location_z`` columns.
+        DataFrame containing at least ``event_id``, ``start_x``, ``start_y``,
+        ``location_y``, and ``location_z`` columns.
     shot_maps:
         Mapping keyed by event id whose values include a ``value_map`` array.
     sigma_grid:
