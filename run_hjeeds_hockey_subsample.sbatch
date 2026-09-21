@@ -45,17 +45,36 @@ case "$MODE" in
       exit 1
     fi
 
-    WORKER_JOB="$(sbatch --parsable \
-      --array="1-${N}%${HJEEDS_HOCKEY_ARRAY_LIMIT:-50}" \
-      --time="${HJEEDS_HOCKEY_WORKER_TIME:-2-00:00:00}" \
-      --mem="${HJEEDS_HOCKEY_WORKER_MEM:-16G}" \
-      --job-name="hjeeds-hockey-subsample-worker" \
-      --output="${OUTPUT_DIR}/slurm-worker-%A_%a.out" \
-      "$0" "$OUTPUT_DIR" worker)"
-    echo "Submitted HJEEDS hockey subsample worker array: ${WORKER_JOB} (${N} tasks)"
+    # Keep array task IDs below Slurm's MaxArraySize. The worker offset maps
+    # each chunk back to the corresponding manifest task.
+    ARRAY_CHUNK_SIZE="${HJEEDS_HOCKEY_ARRAY_CHUNK_SIZE:-5000}"
+    ARRAY_LIMIT="${HJEEDS_HOCKEY_ARRAY_LIMIT:-50}"
+    if [[ "$ARRAY_CHUNK_SIZE" -le 0 ]]; then
+      echo "HJEEDS_HOCKEY_ARRAY_CHUNK_SIZE must be positive." >&2
+      exit 1
+    fi
+
+    WORKER_JOBS=()
+    for ((offset = 0; offset < N; offset += ARRAY_CHUNK_SIZE)); do
+      chunk_size=$((N - offset))
+      if [[ "$chunk_size" -gt "$ARRAY_CHUNK_SIZE" ]]; then
+        chunk_size="$ARRAY_CHUNK_SIZE"
+      fi
+      WORKER_JOB="$(sbatch --parsable \
+        --array="1-${chunk_size}%${ARRAY_LIMIT}" \
+        --time="${HJEEDS_HOCKEY_WORKER_TIME:-2-00:00:00}" \
+        --mem="${HJEEDS_HOCKEY_WORKER_MEM:-16G}" \
+        --job-name="hjeeds-hockey-subsample-worker" \
+        --output="${OUTPUT_DIR}/slurm-worker-%A_%a.out" \
+        --export="ALL,HJEEDS_HOCKEY_TASK_OFFSET=${offset}" \
+        "$0" "$OUTPUT_DIR" worker)"
+      WORKER_JOBS+=("$WORKER_JOB")
+      echo "Submitted HJEEDS hockey subsample worker array: ${WORKER_JOB} (manifest tasks $((offset + 1))-$((offset + chunk_size)))"
+    done
+    WORKER_DEPENDENCY="$(IFS=:; echo "${WORKER_JOBS[*]}")"
 
     AGGREGATE_JOB="$(sbatch --parsable \
-      --dependency="afterany:${WORKER_JOB}" \
+      --dependency="afterany:${WORKER_DEPENDENCY}" \
       --time="${HJEEDS_HOCKEY_AGGREGATE_TIME:-04:00:00}" \
       --mem="${HJEEDS_HOCKEY_AGGREGATE_MEM:-16G}" \
       --job-name="hjeeds-hockey-subsample-aggregate" \
@@ -64,7 +83,13 @@ case "$MODE" in
     echo "Submitted HJEEDS hockey subsample aggregation: ${AGGREGATE_JOB}"
     ;;
   worker)
-    exec python -m HJEEDS.run_hockey_subsample worker "${COMMON_ARGS[@]}"
+    TASK_OFFSET="${HJEEDS_HOCKEY_TASK_OFFSET:-0}"
+    if [[ "$TASK_OFFSET" -lt 0 ]]; then
+      echo "HJEEDS_HOCKEY_TASK_OFFSET must be non-negative." >&2
+      exit 1
+    fi
+    exec python -m HJEEDS.run_hockey_subsample worker \
+      "${COMMON_ARGS[@]}" --task-index "$((TASK_OFFSET + ${SLURM_ARRAY_TASK_ID:-1} - 1))"
     ;;
   aggregate)
     exec python -m HJEEDS.run_hockey_subsample aggregate "${COMMON_ARGS[@]}"

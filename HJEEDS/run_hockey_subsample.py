@@ -8,7 +8,7 @@ applies that prior to every player's likelihood grid, including player 950160.
 Typical Slurm workflow::
 
     python -m HJEEDS.run_hockey_subsample preflight --output-dir OUT
-    sbatch --array=1-N%50 run_hjeeds_hockey_subsample.sbatch OUT worker
+    sbatch run_hjeeds_hockey_subsample.sbatch OUT preflight
     sbatch --dependency=afterany:JOB run_hjeeds_hockey_subsample.sbatch OUT aggregate
 """
 from __future__ import annotations
