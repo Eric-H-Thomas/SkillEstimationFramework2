@@ -100,6 +100,35 @@ def load_ees_xskills(
     return pd.DataFrame(rows).sort_values("xskill_ees").reset_index(drop=True)
 
 
+def load_hjeeds_sigmas(
+    results_path: Path,
+    player_ids: Sequence[int] | None = None,
+) -> pd.DataFrame:
+    """Load scalar execution estimates from an aggregated HJEEDS run."""
+    if not results_path.exists():
+        raise FileNotFoundError(f"Missing HJEEDS results file: {results_path}")
+
+    df = pd.read_csv(results_path)
+    required = {"player_id", "jeeds_status", "jeeds_mean_sigma"}
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(
+            f"HJEEDS results missing required columns: {sorted(missing)}"
+        )
+
+    if player_ids is not None:
+        df = df[df["player_id"].isin(player_ids)]
+    df = df[df["jeeds_status"] == "ok"].copy()
+    df["jeeds_mean_sigma"] = pd.to_numeric(df["jeeds_mean_sigma"], errors="coerce")
+    df = df[np.isfinite(df["jeeds_mean_sigma"]) & (df["jeeds_mean_sigma"] > 0)]
+    if df.empty:
+        raise RuntimeError("No usable HJEEDS JEEDS estimates found for the requested players")
+
+    return df[["player_id", "jeeds_mean_sigma"]].assign(
+        csv_path=str(results_path)
+    ).sort_values("player_id").reset_index(drop=True)
+
+
 def discover_mcse_csvs(data_dir: Path, season_tag: str, shot_group: str) -> list[Path]:
     return _discover_estimate_csvs(
         data_dir, season_tag, shot_group, logs_subdir="logs/mcse"
@@ -336,6 +365,35 @@ def evaluate_maxg(
     return pd.DataFrame(results)
 
 
+def evaluate_maxg_hjeeds(
+    angular_shots: list[AngularBenchmarkShot],
+    skill_table: pd.DataFrame,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+) -> pd.DataFrame:
+    """Evaluate HJEEDS scalar sigma as an isotropic MAXG skill profile."""
+    results: list[dict[str, object]] = []
+    for _, row in skill_table.iterrows():
+        player_id = int(row["player_id"])
+        sigma = float(row["jeeds_mean_sigma"])
+        maxg_sum = compute_maxg_sum(angular_shots, sigma)
+        print(f"MAXG (HJEEDS) finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
+        results.append(
+            {
+                "player_id": player_id,
+                "jeeds_mean_sigma": sigma,
+                "maxg_sum": maxg_sum,
+                "estimator": "hjeeds_jeeds_mean_sigma",
+                "benchmark_tag": benchmark_tag,
+                "season_tag": season_tag,
+                "shot_group": shot_group,
+                "num_benchmark_shots": len(angular_shots),
+            }
+        )
+    return pd.DataFrame(results)
+
+
 def _plot_maxg_over_xskill(results: pd.DataFrame, output_path: Path) -> None:
     if results.empty:
         return
@@ -467,9 +525,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--estimator",
-        choices=("jeeds", "mcse"),
+        choices=("jeeds", "mcse", "hjeeds"),
         default="jeeds",
-        help="Skill profile source: JEEDS scalar EES CSVs or MCSE 2D CSVs under logs/mcse/.",
+        help="Skill profile source: Blackhawks JEEDS, MCSE, or aggregated HJEEDS.",
+    )
+    parser.add_argument(
+        "--hjeeds-results",
+        type=Path,
+        default=None,
+        help="Aggregated HJEEDS agent_level_results.csv (required for --estimator hjeeds).",
     )
     parser.add_argument(
         "--mcse-profile",
@@ -493,7 +557,14 @@ def main() -> None:
             player_ids = file_ids
         else:
             player_ids = sorted(set(player_ids).union(file_ids))
-    if args.estimator == "mcse":
+    if args.estimator == "hjeeds":
+        if args.hjeeds_results is None:
+            parser.error("--hjeeds-results is required when --estimator hjeeds")
+        xskill_table = load_hjeeds_sigmas(
+            results_path=args.hjeeds_results,
+            player_ids=player_ids,
+        )
+    elif args.estimator == "mcse":
         xskill_table = load_mcse_skill_profiles(
             data_dir=args.data_dir,
             season_tag=args.season_tag,
@@ -543,7 +614,15 @@ def main() -> None:
     if args.debug == "only":
         return
 
-    if args.estimator == "mcse":
+    if args.estimator == "hjeeds":
+        results = evaluate_maxg_hjeeds(
+            angular_shots,
+            xskill_table,
+            benchmark_tag=args.benchmark_tag,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+        )
+    elif args.estimator == "mcse":
         results = evaluate_maxg_mcse(
             angular_shots,
             xskill_table,
