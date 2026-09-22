@@ -28,6 +28,11 @@ from HJEEDS.sampling import ObservationCountAssigner
 DEFAULT_OUTPUT_DIR = Path("HJEEDS/results/hierarchical_darts_exposure_skill_bias")
 ASSIGNMENT_DIAGNOSTICS_FILENAME = "assignment_diagnostics.csv"
 SCENARIO_MODES = ("quality_aligned", "randomized", "quality_reversed")
+SCENARIO_TITLES = {
+    "quality_aligned": "Better agents assigned more observations",
+    "quality_reversed": "Worse agents assigned more observations",
+    "randomized": "Agents assigned observations at random",
+}
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,7 @@ def _run_scenario(scenario: ExposureScenario, include_raw_rationality_error: boo
         output_paths["error_plot"],
         bucket_rows,
         include_raw_rationality_error=include_raw_rationality_error,
+        figure_title=SCENARIO_TITLES[scenario.mode],
     )
     _write_assignment_diagnostics(config.output_dir, agent_results)
 
@@ -188,6 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_experiment.regenerate_plots_from_existing_results(
                 output_dir,
                 include_raw_rationality_error=args.include_raw_rationality_error,
+                figure_title=SCENARIO_TITLES[mode],
             )
         else:
             _run_scenario(scenario, args.include_raw_rationality_error)

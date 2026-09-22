@@ -358,6 +358,7 @@ def _plot_bucket_error_panels(
     summary_by_bucket_rows: Sequence[dict[str, Any]],
     metric_panels: Sequence[tuple[str, str, str, str]],
     figure_size: tuple[float, float],
+    figure_title: str | None = None,
 ) -> None:
     """Create a multi-panel count-bucket error figure."""
 
@@ -388,9 +389,12 @@ def _plot_bucket_error_panels(
             missing_message,
         )
 
+    if figure_title:
+        figure.suptitle(figure_title)
+
     # Save directly to disk rather than showing interactively because this code
     # is also used in headless environments such as Slurm jobs.
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0, 1, 0.95) if figure_title else None)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=300)
     plt.close(figure)
@@ -401,6 +405,7 @@ def plot_error_by_bucket(
     summary_by_bucket_rows: Sequence[dict[str, Any]],
     *,
     include_raw_rationality_error: bool = False,
+    figure_title: str | None = None,
 ) -> None:
     """Create the combined bucketed error figure.
 
@@ -414,4 +419,5 @@ def plot_error_by_bucket(
         summary_by_bucket_rows,
         metric_panels,
         figure_size=error_metric_figure_size(len(metric_panels)),
+        figure_title=figure_title,
     )

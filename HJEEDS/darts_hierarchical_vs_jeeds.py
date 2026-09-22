@@ -108,6 +108,7 @@ def regenerate_plots_from_existing_results(
     output_dir: Path,
     *,
     include_raw_rationality_error: bool = False,
+    figure_title: str | None = None,
 ) -> None:
     """Regenerate plots from an existing summary CSV without rerunning seeds."""
 
@@ -122,6 +123,7 @@ def regenerate_plots_from_existing_results(
         output_paths["error_plot"],
         summary_by_bucket_rows,
         include_raw_rationality_error=include_raw_rationality_error,
+        figure_title=figure_title,
     )
     print(f"[hier-darts] Regenerated plot at {output_paths['error_plot'].resolve()}", flush=True)
 
