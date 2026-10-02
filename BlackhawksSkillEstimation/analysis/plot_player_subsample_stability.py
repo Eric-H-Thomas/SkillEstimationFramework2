@@ -57,7 +57,7 @@ METRICS: tuple[tuple[str, str], ...] = (
     ("log10_eps", "log10 rationality"),
 )
 
-ESTIMATOR_LABELS = {"jeeds": "JEEDS", "mcse": "MCSE"}
+ESTIMATOR_LABELS = {"jeeds": "JEEDS", "hjeeds": "H-JEEDS", "mcse": "MCSE"}
 SEASON_CATEGORY = "seasons"
 
 _BASELINE_COLOR = "#CC0000"
@@ -98,6 +98,53 @@ def results_frame(records: Sequence[dict[str, Any]]) -> pd.DataFrame:
     frame = pd.DataFrame(rows)
     if not frame.empty:
         frame = frame.sort_values(["estimator", "is_baseline", "n_requested", "seed"])
+    return frame.reset_index(drop=True)
+
+
+def hjeeds_results_frame(path: Path, player_id: int | None = None) -> pd.DataFrame:
+    """Adapt the hockey HJEEDS aggregate CSV to the plotting schema.
+
+    The CSV contains both the independent JEEDS pass and the population-adjusted
+    H-JEEDS pass for each target draw. Keep both so their movement can be compared.
+    HJEEDS stores log(lambda) in natural-log coordinates; the plotter's rationality
+    axis is the historical log10(lambda) scale.
+    """
+    source = pd.read_csv(path)
+    if player_id is not None:
+        source = source[source["player_id"] == int(player_id)]
+
+    rows: list[dict[str, Any]] = []
+    for _, record in source.iterrows():
+        sample_key = f"n{int(record['n_shots']):04d}_seed{int(record['seed']):04d}"
+        common = {
+            "sample_key": sample_key,
+            "is_baseline": False,
+            "n_requested": int(record["n_shots"]),
+            "seed": int(record["seed"]),
+            "num_shots": int(record["num_shots"]),
+        }
+        if record.get("jeeds_status") == "ok":
+            rows.append(
+                {
+                    **common,
+                    "estimator": "jeeds",
+                    "exec_skill": record["jeeds_mean_sigma"],
+                    "log10_eps": record["jeeds_mean_log_lambda"] / np.log(10.0),
+                }
+            )
+        if record.get("hierarchical_status") == "ok":
+            rows.append(
+                {
+                    **common,
+                    "estimator": "hjeeds",
+                    "exec_skill": record["hierarchical_mean_sigma"],
+                    "log10_eps": record["hierarchical_mean_log_lambda"] / np.log(10.0),
+                }
+            )
+
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame = frame.sort_values(["estimator", "n_requested", "seed"])
     return frame.reset_index(drop=True)
 
 
@@ -472,27 +519,32 @@ def plot_spread_vs_n(
     _save(fig, output_path, rect=(0, 0, 1, 0.95))
 
 
-def plot_jeeds_vs_mcse(
+def plot_estimators_comparison(
     frame: pd.DataFrame,
     *,
+    left_estimator: str,
+    right_estimator: str,
     title_prefix: str,
     output_path: Path,
 ) -> None:
     """Same draw, both estimators: do they agree on which subsets look good?"""
-    jeeds = frame[frame["estimator"] == "jeeds"].set_index("sample_key")
-    mcse = frame[frame["estimator"] == "mcse"].set_index("sample_key")
-    shared = sorted(set(jeeds.index) & set(mcse.index))
+    left = frame[frame["estimator"] == left_estimator].set_index("sample_key")
+    right = frame[frame["estimator"] == right_estimator].set_index("sample_key")
+    shared = sorted(set(left.index) & set(right.index))
     if not shared:
-        print("  Skipping JEEDS vs MCSE: no sample has results from both estimators.")
+        print(
+            f"  Skipping {left_estimator} vs {right_estimator}: "
+            "no sample has results from both estimators."
+        )
         return
 
     fig, axes = plt.subplots(1, len(METRICS), figsize=(6.2 * len(METRICS), 5.6), squeeze=False)
 
     for col, (metric, label) in enumerate(METRICS):
         ax = axes[0][col]
-        xs = jeeds.loc[shared, metric].to_numpy(dtype=float)
-        ys = mcse.loc[shared, metric].to_numpy(dtype=float)
-        sizes = jeeds.loc[shared, "n_requested"].to_numpy(dtype=float)
+        xs = left.loc[shared, metric].to_numpy(dtype=float)
+        ys = right.loc[shared, metric].to_numpy(dtype=float)
+        sizes = left.loc[shared, "n_requested"].to_numpy(dtype=float)
         keep = np.isfinite(xs) & np.isfinite(ys)
 
         if keep.sum() >= 2:
@@ -529,12 +581,16 @@ def plot_jeeds_vs_mcse(
             pad = 0.05 * max(high - low, 1e-9)
             ax.plot([low - pad, high + pad], [low - pad, high + pad], color="#888888", ls=":", lw=1.2)
 
-        ax.set_xlabel(f"JEEDS {label}")
-        ax.set_ylabel(f"MCSE {label}")
+        ax.set_xlabel(f"{ESTIMATOR_LABELS.get(left_estimator, left_estimator)} {label}")
+        ax.set_ylabel(f"{ESTIMATOR_LABELS.get(right_estimator, right_estimator)} {label}")
         ax.set_title(label)
         ax.grid(alpha=0.25)
 
-    fig.suptitle(f"{title_prefix}: JEEDS vs MCSE on identical subsamples", fontsize=14)
+    fig.suptitle(
+        f"{title_prefix}: {ESTIMATOR_LABELS.get(left_estimator, left_estimator)} vs "
+        f"{ESTIMATOR_LABELS.get(right_estimator, right_estimator)} on identical subsamples",
+        fontsize=14,
+    )
     _save(fig, output_path, rect=(0, 0, 1, 0.94))
 
 
@@ -640,6 +696,12 @@ def main() -> None:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--config", type=Path, help="Config JSON written by the builder.")
     source.add_argument("--run-dir", type=Path, help="Experiment run directory.")
+    parser.add_argument(
+        "--hjeeds-csv",
+        type=Path,
+        default=None,
+        help="HJEEDS aggregate CSV; plots hierarchical H-JEEDS and independent JEEDS.",
+    )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--output-dir", type=Path, default=None, help="Defaults to <run-dir>/plots.")
     args = parser.parse_args()
@@ -651,18 +713,32 @@ def main() -> None:
     else:
         run_dir = args.run_dir
 
-    records = load_results(run_dir)
-    if not records:
-        raise SystemExit(f"No result JSONs found under {run_dir / 'results'}.")
+    if args.hjeeds_csv:
+        frame = hjeeds_results_frame(args.hjeeds_csv, int(config.get("player_id", 950160)))
+        records = []
+    else:
+        records = load_results(run_dir)
+        if not records:
+            raise SystemExit(f"No result JSONs found under {run_dir / 'results'}.")
+        frame = results_frame(records)
 
-    frame = results_frame(records)
     if frame.empty:
-        raise SystemExit(f"Found {len(records)} result(s), but none completed successfully.")
+        source_path = args.hjeeds_csv if args.hjeeds_csv else run_dir / "results"
+        raise SystemExit(f"Found no completed results in {source_path}.")
 
     player_id = int(config.get("player_id") or records[0]["player_id"])
-    shot_group = str(config.get("shot_group") or records[0].get("shot_group", "wristshot_snapshot"))
-    seasons = [int(s) for s in (config.get("seasons") or records[0].get("seasons", []))]
-    estimators = [e for e in ("jeeds", "mcse") if e in set(frame["estimator"])]
+    shot_group = str(
+        config.get("shot_group")
+        or (records[0].get("shot_group", "wristshot_snapshot") if records else "wristshot_snapshot")
+    )
+    seasons = [
+        int(s)
+        for s in (
+            config.get("seasons")
+            or (records[0].get("seasons", []) if records else [])
+        )
+    ]
+    estimators = [e for e in ("jeeds", "hjeeds", "mcse") if e in set(frame["estimator"])]
 
     player_name = lookup_player(player_id) or str(player_id)
     title_prefix = f"{player_name} ({player_id})"
@@ -676,7 +752,11 @@ def main() -> None:
     expected = len(config.get("cluster_plan", {}).get("jobs", [])) or len(records)
     print(f"Player:      {title_prefix}")
     print(f"Run dir:     {run_dir}")
-    print(f"Results:     {len(frame)} successful of {len(records)} written ({expected} planned)")
+    if args.hjeeds_csv:
+        print(f"Source CSV:  {args.hjeeds_csv}")
+        print(f"Results:     {len(frame)} successful estimator rows from target CSV")
+    else:
+        print(f"Results:     {len(frame)} successful of {len(records)} written ({expected} planned)")
     print(f"Estimators:  {', '.join(estimators)}")
     for estimator in estimators:
         subs = _subsample_rows(frame, estimator)
@@ -701,8 +781,13 @@ def main() -> None:
             "so this is a plotting gap, not a sampling gap."
         )
 
-    out_dir = args.output_dir or plots_dir(run_dir)
-    summary_dir = summaries_dir(run_dir)
+    if args.output_dir:
+        out_dir = args.output_dir
+    elif args.hjeeds_csv:
+        out_dir = args.hjeeds_csv.parent / "plots"
+    else:
+        out_dir = plots_dir(run_dir)
+    summary_dir = out_dir.parent / "summaries" if args.hjeeds_csv else summaries_dir(run_dir)
     summary_dir.mkdir(parents=True, exist_ok=True)
 
     frame.to_csv(summary_dir / "final_estimates.csv", index=False)
@@ -743,9 +828,19 @@ def main() -> None:
         title_prefix=title_prefix,
         output_path=out_dir / "spread_vs_n.png",
     )
-    if len(estimators) > 1:
-        plot_jeeds_vs_mcse(
+    if {"jeeds", "hjeeds"}.issubset(estimators):
+        plot_estimators_comparison(
             frame,
+            left_estimator="jeeds",
+            right_estimator="hjeeds",
+            title_prefix=title_prefix,
+            output_path=out_dir / "jeeds_vs_hjeeds.png",
+        )
+    elif {"jeeds", "mcse"}.issubset(estimators):
+        plot_estimators_comparison(
+            frame,
+            left_estimator="jeeds",
+            right_estimator="mcse",
             title_prefix=title_prefix,
             output_path=out_dir / "jeeds_vs_mcse.png",
         )
