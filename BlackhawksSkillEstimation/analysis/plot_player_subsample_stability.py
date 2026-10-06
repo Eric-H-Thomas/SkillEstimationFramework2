@@ -264,6 +264,16 @@ def _pool_size_from_frame(frame: pd.DataFrame) -> int | None:
     return int(match.iloc[0])
 
 
+def _pool_size_from_manifest(path: Path, player_id: int) -> int | None:
+    """Read the full pooled shot count recorded by the HJEEDS run manifest."""
+    if not path.exists():
+        return None
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    pool_sizes = manifest.get("available_pool_sizes", {})
+    value = pool_sizes.get(str(player_id), pool_sizes.get(player_id))
+    return int(value) if value is not None else None
+
+
 def _subsample_n_values(frame: pd.DataFrame, planned: Sequence[int] | None) -> list[int]:
     """N values to plot: planned sizes, plus any extras that actually finished."""
     observed = {int(x) for x in frame.loc[~frame["is_baseline"], "n_requested"].dropna()}
@@ -292,9 +302,9 @@ def plot_subsample_by_n(
 ) -> None:
     """Subsample spread at each N, next to the observed season-to-season spread.
 
-    ``share_y`` puts JEEDS and MCSE on the same y-scale per metric (the union of
-    the two auto-scaled limits) so a wider cloud is actually wider, not just
-    plotted on a taller axis.
+    ``share_y`` puts the plotted estimators on the same y-scale per metric (the
+    union of their auto-scaled limits) so a wider cloud is actually wider, not
+    just plotted on a taller axis.
     """
     rng = np.random.default_rng(_JITTER_SEED)
     n_values = _subsample_n_values(frame, n_shots)
@@ -390,7 +400,8 @@ def plot_subsample_by_n(
     if pool_size is not None:
         notes.append(f"Full population size: N = {pool_size:,}")
     if share_y:
-        notes.append("JEEDS and MCSE share a y-scale per metric")
+        estimator_names = [ESTIMATOR_LABELS.get(estimator, estimator) for estimator in estimators]
+        notes.append(f"{' and '.join(estimator_names)} share a y-scale per metric")
     if notes:
         fig.text(
             0.5,
@@ -702,6 +713,12 @@ def main() -> None:
         default=None,
         help="HJEEDS aggregate CSV; plots hierarchical H-JEEDS and independent JEEDS.",
     )
+    parser.add_argument(
+        "--player-id",
+        type=int,
+        default=None,
+        help="Player to plot when reading an aggregate HJEEDS CSV.",
+    )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--output-dir", type=Path, default=None, help="Defaults to <run-dir>/plots.")
     args = parser.parse_args()
@@ -713,8 +730,9 @@ def main() -> None:
     else:
         run_dir = args.run_dir
 
+    selected_player_id = args.player_id or config.get("player_id") or 950160
     if args.hjeeds_csv:
-        frame = hjeeds_results_frame(args.hjeeds_csv, int(config.get("player_id", 950160)))
+        frame = hjeeds_results_frame(args.hjeeds_csv, int(selected_player_id))
         records = []
     else:
         records = load_results(run_dir)
@@ -726,7 +744,7 @@ def main() -> None:
         source_path = args.hjeeds_csv if args.hjeeds_csv else run_dir / "results"
         raise SystemExit(f"Found no completed results in {source_path}.")
 
-    player_id = int(config.get("player_id") or records[0]["player_id"])
+    player_id = int(selected_player_id if args.hjeeds_csv else config.get("player_id") or records[0]["player_id"])
     shot_group = str(
         config.get("shot_group")
         or (records[0].get("shot_group", "wristshot_snapshot") if records else "wristshot_snapshot")
@@ -744,6 +762,8 @@ def main() -> None:
     title_prefix = f"{player_name} ({player_id})"
     configured_pool = config.get("sampling", {}).get("pool_size")
     pool_size = int(configured_pool) if configured_pool is not None else _pool_size_from_frame(frame)
+    if args.hjeeds_csv and pool_size is None:
+        pool_size = _pool_size_from_manifest(args.hjeeds_csv.parent / "manifest.json", player_id)
     planned_n = [int(x) for x in (config.get("sampling", {}).get("n_shots") or [])]
     planned_seeds = config.get("sampling", {}).get("num_seeds")
     num_seeds = int(planned_seeds) if planned_seeds is not None else None
