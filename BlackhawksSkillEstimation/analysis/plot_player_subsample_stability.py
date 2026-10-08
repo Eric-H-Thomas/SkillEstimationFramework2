@@ -15,6 +15,9 @@ Figures
 ``subsample_by_n_shared_ylim``
                           Same figure, but JEEDS and MCSE share a y-scale per
                           metric so the two spreads can be compared by eye.
+``subsample_by_n_fixed_ylim``
+                          Same figure with fixed per-metric y-limits for
+                          cross-player comparisons.
 ``spread_vs_n``           How that spread shrinks with N, against the observed
                           season-to-season spread.
 ``jeeds_vs_mcse``         Do the two estimators react the same way to the same draw?
@@ -63,6 +66,12 @@ SEASON_CATEGORY = "seasons"
 _BASELINE_COLOR = "#CC0000"
 _SEASON_COLOR = "#1B7837"
 _JITTER_SEED = 12345
+
+# Covers the observed aggregate HJEEDS run while keeping the comparison view tight.
+FIXED_COMPARISON_Y_LIMITS: dict[str, tuple[float, float]] = {
+    "exec_skill": (0.019, 0.082),
+    "log10_eps": (0.37, 1.65),
+}
 
 
 def _season_label(season: int) -> str:
@@ -299,6 +308,7 @@ def plot_subsample_by_n(
     n_shots: Sequence[int] | None = None,
     num_seeds: int | None = None,
     share_y: bool = False,
+    y_limits: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Subsample spread at each N, next to the observed season-to-season spread.
 
@@ -379,9 +389,12 @@ def plot_subsample_by_n(
                 ax.set_ylabel(y_label)
             ax.set_title(f"{ESTIMATOR_LABELS.get(estimator, estimator)}")
             ax.grid(alpha=0.25, axis="y")
-            _apply_metric_limits(
-                ax, metric, np.concatenate([g for g in groups if g.size] or [np.array([])])
-            )
+            if y_limits is not None and metric in y_limits:
+                ax.set_ylim(*y_limits[metric])
+            else:
+                _apply_metric_limits(
+                    ax, metric, np.concatenate([g for g in groups if g.size] or [np.array([])])
+                )
             if row == 0 and col == 0:
                 handles, labels = ax.get_legend_handles_labels()
                 if handles:
@@ -395,6 +408,8 @@ def plot_subsample_by_n(
     title = f"{title_prefix}: subsample spread by sample size vs actual seasons"
     if share_y:
         title += " (shared y-scale)"
+    if y_limits is not None:
+        title += " (fixed y-scale)"
     fig.suptitle(title, fontsize=14, y=0.99)
     notes = []
     if pool_size is not None:
@@ -402,6 +417,8 @@ def plot_subsample_by_n(
     if share_y:
         estimator_names = [ESTIMATOR_LABELS.get(estimator, estimator) for estimator in estimators]
         notes.append(f"{' and '.join(estimator_names)} share a y-scale per metric")
+    if y_limits is not None:
+        notes.append("fixed y-scale per metric for cross-player comparison")
     if notes:
         fig.text(
             0.5,
@@ -840,6 +857,17 @@ def main() -> None:
             n_shots=planned_n or None,
             num_seeds=num_seeds,
             share_y=True,
+        )
+        plot_subsample_by_n(
+            frame,
+            season_finals,
+            estimators=estimators,
+            title_prefix=title_prefix,
+            output_path=out_dir / "subsample_by_n_fixed_ylim.png",
+            pool_size=pool_size,
+            n_shots=planned_n or None,
+            num_seeds=num_seeds,
+            y_limits=FIXED_COMPARISON_Y_LIMITS,
         )
     plot_spread_vs_n(
         spread,
