@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Evaluate HJEEDS jeeds_mean_sigma values on the fixed MAXG benchmark.
+# Evaluate HJEEDS hierarchical_mean_sigma values on the fixed MAXG benchmark.
 # Submit with `sbatch run_hjeeds_maxg.sbatch` or override BH_* variables with
 # `sbatch --export=ALL,BH_PIDS_FILE=... run_hjeeds_maxg.sbatch`.
 
@@ -26,7 +26,7 @@ SHOT_GROUP="${BH_SHOT_GROUP:-wristshot_snapshot}"
 BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_v1}"
 BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey/benchmarks}"
 DATA_DIR="${BH_DATA_DIR:-Data/Hockey}"
-HJEEDS_RESULTS="${BH_HJEEDS_RESULTS:-Data/Hockey/experiments/hjeeds_20242025/agent_level_results.csv}"
+HJEEDS_RESULTS="${BH_HJEEDS_RESULTS:-Data/Hockey/experiments/hjeeds_20242025_angular_fix/agent_level_results.csv}"
 PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
 OUTPUT_DIR="${BH_OUTPUT_DIR:-Data/Hockey/benchmarks/results}"
 

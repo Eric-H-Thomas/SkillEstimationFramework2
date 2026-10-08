@@ -104,12 +104,12 @@ def load_hjeeds_sigmas(
     results_path: Path,
     player_ids: Sequence[int] | None = None,
 ) -> pd.DataFrame:
-    """Load scalar execution estimates from an aggregated HJEEDS run."""
+    """Load hierarchical scalar execution estimates from an aggregated HJEEDS run."""
     if not results_path.exists():
         raise FileNotFoundError(f"Missing HJEEDS results file: {results_path}")
 
     df = pd.read_csv(results_path)
-    required = {"player_id", "jeeds_status", "jeeds_mean_sigma"}
+    required = {"player_id", "hierarchical_status", "hierarchical_mean_sigma"}
     missing = required.difference(df.columns)
     if missing:
         raise ValueError(
@@ -118,13 +118,17 @@ def load_hjeeds_sigmas(
 
     if player_ids is not None:
         df = df[df["player_id"].isin(player_ids)]
-    df = df[df["jeeds_status"] == "ok"].copy()
-    df["jeeds_mean_sigma"] = pd.to_numeric(df["jeeds_mean_sigma"], errors="coerce")
-    df = df[np.isfinite(df["jeeds_mean_sigma"]) & (df["jeeds_mean_sigma"] > 0)]
+    df = df[df["hierarchical_status"] == "ok"].copy()
+    df["hjeeds_mean_sigma"] = pd.to_numeric(
+        df["hierarchical_mean_sigma"], errors="coerce"
+    )
+    df = df[np.isfinite(df["hjeeds_mean_sigma"]) & (df["hjeeds_mean_sigma"] > 0)]
     if df.empty:
-        raise RuntimeError("No usable HJEEDS JEEDS estimates found for the requested players")
+        raise RuntimeError(
+            "No usable HJEEDS hierarchical estimates found for the requested players"
+        )
 
-    return df[["player_id", "jeeds_mean_sigma"]].assign(
+    return df[["player_id", "hjeeds_mean_sigma"]].assign(
         csv_path=str(results_path)
     ).sort_values("player_id").reset_index(drop=True)
 
@@ -372,17 +376,17 @@ def evaluate_maxg_hjeeds(
     season_tag: str,
     shot_group: str,
 ) -> pd.DataFrame:
-    """Evaluate HJEEDS scalar sigma as an isotropic MAXG skill profile."""
+    """Evaluate hierarchical HJEEDS scalar sigma as an isotropic MAXG profile."""
     results: list[dict[str, object]] = []
     for _, row in skill_table.iterrows():
         player_id = int(row["player_id"])
-        sigma = float(row["jeeds_mean_sigma"])
+        sigma = float(row["hjeeds_mean_sigma"])
         maxg_sum = compute_maxg_sum(angular_shots, sigma)
         print(f"MAXG (HJEEDS) finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
         results.append(
             {
                 "player_id": player_id,
-                "jeeds_mean_sigma": sigma,
+                "hjeeds_mean_sigma": sigma,
                 "maxg_sum": maxg_sum,
                 "estimator": "hjeeds_jeeds_mean_sigma",
                 "benchmark_tag": benchmark_tag,
