@@ -25,10 +25,38 @@ from HJEEDS.hockey_adapter import compute_hockey_log_likelihood_grid
 from HJEEDS.models import ExperimentConfig, HyperpriorConfig, TruePopulationConfig
 
 
-DEFAULT_HOCKEY_SIGMA_GRID = np.linspace(0.004, 0.25, 50, dtype=float)
-# Historical Blackhawks JEEDS used log10(lambda) in [-1, 3], i.e. lambda in
-# [0.1, 1000]. HJEEDS stores the equivalent grid in natural-log coordinates.
-DEFAULT_HOCKEY_LOG_LAMBDA_GRID = np.linspace(np.log(0.1), np.log(1000.0), 100, dtype=float)
+HOCKEY_SIGMA_MIN = 0.004
+HOCKEY_SIGMA_MAX = 0.25
+HOCKEY_LAMBDA_MIN = 0.1
+HOCKEY_LAMBDA_MAX = 1000.0
+DEFAULT_HOCKEY_NUM_SIGMA_GRID = 50
+DEFAULT_HOCKEY_NUM_LOG_LAMBDA_GRID = 100
+
+
+def make_hockey_sigma_grid(num_points: int) -> np.ndarray:
+    """Execution-skill grid on the historical Blackhawks JEEDS bounds."""
+
+    count = int(num_points)
+    if count < 2:
+        raise ValueError(f"sigma grid needs at least 2 points, got {count}.")
+    return np.linspace(HOCKEY_SIGMA_MIN, HOCKEY_SIGMA_MAX, count, dtype=float)
+
+
+def make_hockey_log_lambda_grid(num_points: int) -> np.ndarray:
+    """Natural-log lambda grid on the historical Blackhawks JEEDS bounds.
+
+    Blackhawks JEEDS used log10(lambda) in [-1, 3], i.e. lambda in [0.1, 1000].
+    HJEEDS stores that same interval in natural-log coordinates.
+    """
+
+    count = int(num_points)
+    if count < 2:
+        raise ValueError(f"log-lambda grid needs at least 2 points, got {count}.")
+    return np.linspace(np.log(HOCKEY_LAMBDA_MIN), np.log(HOCKEY_LAMBDA_MAX), count, dtype=float)
+
+
+DEFAULT_HOCKEY_SIGMA_GRID = make_hockey_sigma_grid(DEFAULT_HOCKEY_NUM_SIGMA_GRID)
+DEFAULT_HOCKEY_LOG_LAMBDA_GRID = make_hockey_log_lambda_grid(DEFAULT_HOCKEY_NUM_LOG_LAMBDA_GRID)
 
 # These are preliminary, manually chosen hockey centers for the first population
 # run. They summarize prior Blackhawks JEEDS output but are not fitted from this
@@ -327,8 +355,12 @@ def run_hockey_jeeds_for_player(
 
 
 __all__ = [
+    "DEFAULT_HOCKEY_NUM_LOG_LAMBDA_GRID",
+    "DEFAULT_HOCKEY_NUM_SIGMA_GRID",
     "DEFAULT_HOCKEY_SIGMA_GRID",
     "DEFAULT_HOCKEY_LOG_LAMBDA_GRID",
+    "make_hockey_log_lambda_grid",
+    "make_hockey_sigma_grid",
     "HOCKEY_PRELIMINARY_HYPERPRIORS",
     "HOCKEY_PRELIMINARY_MEAN_LOG_LAMBDA",
     "HOCKEY_PRELIMINARY_MEAN_LOG_SIGMA",

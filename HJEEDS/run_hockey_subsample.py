@@ -34,10 +34,12 @@ from BlackhawksSkillEstimation.player_subsample_stability import (
 )
 from HJEEDS.estimation import build_discrete_hierarchical_prior, run_hierarchical_estimator, run_independent_jeeds_baseline
 from HJEEDS.hockey_pipeline import (
-    DEFAULT_HOCKEY_LOG_LAMBDA_GRID,
-    DEFAULT_HOCKEY_SIGMA_GRID,
+    DEFAULT_HOCKEY_NUM_LOG_LAMBDA_GRID,
+    DEFAULT_HOCKEY_NUM_SIGMA_GRID,
     HOCKEY_PRELIMINARY_HYPERPRIORS,
     fit_hockey_population_hyperparameters,
+    make_hockey_log_lambda_grid,
+    make_hockey_sigma_grid,
 )
 from HJEEDS.hockey_adapter import compute_hockey_log_likelihood_grid
 
@@ -47,6 +49,7 @@ DEFAULT_OUTPUT_DIR = Path("Data/Hockey/experiments/hjeeds_subsample")
 DEFAULT_PLAYER_ID = 950160
 DEFAULT_N_SHOTS = (100, 200, 400)
 DEFAULT_NUM_SEEDS = 50
+DEFAULT_SEASONS = (20212022, 20222023, 20232024, 20242025, 20252026)
 
 
 def _now() -> str:
@@ -90,6 +93,8 @@ def _task_path(output_dir: Path, task: dict[str, Any]) -> Path:
 
 def _grid_metadata(sigma_grid: np.ndarray, log_lambda_grid: np.ndarray) -> dict[str, Any]:
     return {
+        "num_sigma_grid": int(len(sigma_grid)),
+        "num_log_lambda_grid": int(len(log_lambda_grid)),
         "sigma_grid": sigma_grid.tolist(),
         "log_lambda_grid": log_lambda_grid.tolist(),
         "lambda_bounds": [float(np.exp(log_lambda_grid[0])), float(np.exp(log_lambda_grid[-1]))],
@@ -269,13 +274,48 @@ def aggregate(args: argparse.Namespace) -> int:
     return 0 if rows else 1
 
 
+def resolve_skill_grids(args: argparse.Namespace) -> tuple[np.ndarray, np.ndarray]:
+    """Build the sigma and log-lambda grids from counts or explicit values.
+
+    Explicit ``--sigma-grid`` / ``--log-lambda-grid`` values win over the count
+    flags. The count flags linspace the historical Blackhawks bounds. Passing
+    both an explicit grid and its count is an error.
+    """
+
+    if args.sigma_grid is not None and args.num_sigma_grid is not None:
+        raise ValueError("Pass only one of --sigma-grid and --num-sigma-grid.")
+    if args.log_lambda_grid is not None and args.num_log_lambda_grid is not None:
+        raise ValueError("Pass only one of --log-lambda-grid and --num-log-lambda-grid.")
+
+    if args.sigma_grid is None:
+        num_sigma = (
+            DEFAULT_HOCKEY_NUM_SIGMA_GRID
+            if args.num_sigma_grid is None
+            else args.num_sigma_grid
+        )
+        sigma_grid = make_hockey_sigma_grid(num_sigma)
+    else:
+        sigma_grid = np.asarray(args.sigma_grid, dtype=float)
+
+    if args.log_lambda_grid is None:
+        num_lambda = (
+            DEFAULT_HOCKEY_NUM_LOG_LAMBDA_GRID
+            if args.num_log_lambda_grid is None
+            else args.num_log_lambda_grid
+        )
+        log_lambda_grid = make_hockey_log_lambda_grid(num_lambda)
+    else:
+        log_lambda_grid = np.asarray(args.log_lambda_grid, dtype=float)
+    return sigma_grid, log_lambda_grid
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("preflight", "worker", "aggregate"))
     parser.add_argument("--players-file", type=Path, default=DEFAULT_PLAYER_FILE)
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--seasons", type=int, nargs="+", default=[20232024, 20242025, 20252026])
+    parser.add_argument("--seasons", type=int, nargs="+", default=list(DEFAULT_SEASONS))
     parser.add_argument("--shot-group", default="wristshot_snapshot")
     parser.add_argument("--target-player-id", type=int, default=DEFAULT_PLAYER_ID)
     parser.add_argument("--n-shots", type=int, nargs="+", default=list(DEFAULT_N_SHOTS))
@@ -284,15 +324,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-target-in-prior", action="store_true")
     parser.add_argument("--task-index", type=int, default=None)
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--sigma-grid", type=float, nargs="+", default=DEFAULT_HOCKEY_SIGMA_GRID.tolist())
-    parser.add_argument("--log-lambda-grid", type=float, nargs="+", default=DEFAULT_HOCKEY_LOG_LAMBDA_GRID.tolist())
+    parser.add_argument("--num-sigma-grid", type=int, default=None)
+    parser.add_argument("--num-log-lambda-grid", type=int, default=None)
+    parser.add_argument("--sigma-grid", type=float, nargs="+", default=None)
+    parser.add_argument("--log-lambda-grid", type=float, nargs="+", default=None)
     return parser
 
 
 def main() -> int:
-    args = build_parser().parse_args()
-    args.sigma_grid = np.asarray(args.sigma_grid, dtype=float)
-    args.log_lambda_grid = np.asarray(args.log_lambda_grid, dtype=float)
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        args.sigma_grid, args.log_lambda_grid = resolve_skill_grids(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.mode == "preflight":
         return preflight(args)
     if args.mode == "worker":

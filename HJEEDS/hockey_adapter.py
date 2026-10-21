@@ -64,48 +64,15 @@ def _infer_hockey_grid_axes(value_map: np.ndarray) -> tuple[np.ndarray, np.ndarr
     return y_grid, z_grid
 
 
-def compute_hockey_log_likelihood_grid(
+def _empty_log_likelihood_grid(sigma_grid: np.ndarray, log_lambda_grid: np.ndarray) -> np.ndarray:
+    return np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
+
+
+def _prepare_hockey_shots(
     shots_df: pd.DataFrame,
     shot_maps: Mapping[int, Mapping[str, object]],
-    sigma_grid: np.ndarray,
-    log_lambda_grid: np.ndarray,
-) -> np.ndarray:
-    """Compute per-parameter-grid hockey log-likelihoods from shot-map data.
-
-    Each observed shot contributes a log-likelihood term under the assumption that
-    the observed shot location is a noisy realization of a target selected from the
-    shot's value map under a Gaussian execution model and a softmax decision
-    model.
-
-    Parameters
-    ----------
-    shots_df:
-        DataFrame containing at least ``event_id``, ``start_x``, ``start_y``,
-        ``location_y``, and ``location_z`` columns.
-    shot_maps:
-        Mapping keyed by event id whose values include a ``value_map`` array.
-    sigma_grid:
-        Execution-skill hypotheses.
-    log_lambda_grid:
-        Log-decision-skill hypotheses.
-
-    Returns
-    -------
-    np.ndarray
-        Array of shape ``(len(sigma_grid), len(log_lambda_grid))``.
-    """
-
-    sigma_grid = np.asarray(sigma_grid, dtype=float)
-    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
-    log_likelihood_grid = np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
-
-    if shots_df.empty:
-        return log_likelihood_grid
-
-    required_columns = {"event_id", "start_x", "start_y", "location_y", "location_z"}
-    missing = required_columns.difference(shots_df.columns)
-    if missing:
-        raise ValueError(f"shots_df is missing required columns: {sorted(missing)}")
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, float]]:
+    """Turn observed shots into angular targets, utilities, and a bin width."""
 
     prepared_shots: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]] = []
     for _, row in shots_df.iterrows():
@@ -156,7 +123,110 @@ def compute_hockey_log_likelihood_grid(
                 bin_size,
             )
         )
+    return prepared_shots
 
+
+def _blurred_utility(utility_grid: np.ndarray, sigma: float, bin_size: float) -> np.ndarray:
+    blur_sigma = max(min(sigma / bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
+    evs = gaussian_filter(utility_grid, sigma=blur_sigma, mode="constant", cval=0.0)
+    if EV_NORMALIZE:
+        ev_scale = float(np.max(evs) - np.mean(evs))
+        if ev_scale > 1e-12:
+            evs = evs / ev_scale
+    return np.asarray(evs, dtype=float).reshape(-1)
+
+
+def _execution_kernel(target_distances: np.ndarray, sigma: float) -> np.ndarray | None:
+    gaussian_coeff = 1.0 / (2.0 * math.pi * sigma**2)
+    gaussian_terms = gaussian_coeff * np.exp(-0.5 * np.square(target_distances / sigma))
+    gaussian_terms = np.asarray(gaussian_terms, dtype=float)
+    if not np.all(np.isfinite(gaussian_terms)):
+        return None
+    return np.maximum(gaussian_terms, np.finfo(float).tiny)
+
+
+def _shot_log_contribution(
+    value_flat: np.ndarray,
+    gaussian_terms: np.ndarray,
+    lambda_value: float,
+) -> float | None:
+    """Log observation density for one shot and one lambda, or None to skip it."""
+
+    finite_values = np.isfinite(value_flat)
+    if not np.any(finite_values):
+        return None
+
+    values = value_flat[finite_values]
+    score_values = lambda_value * values
+    score_shift = np.max(score_values)
+    exp_values = np.exp(score_values - score_shift)
+    normalization = np.sum(exp_values)
+    if not np.isfinite(normalization) or normalization <= 0.0:
+        return None
+
+    # The target grid is the same 2D hockey map used by the Blackhawks xG
+    # surfaces. The observation likelihood is the average of the Gaussian
+    # kernel over all target cells weighted by the softmax.
+    weighted_gaussian = np.sum(gaussian_terms[finite_values] * exp_values)
+    if not np.isfinite(weighted_gaussian) or weighted_gaussian <= 0.0:
+        return None
+    contribution = float(np.log(weighted_gaussian / normalization))
+    if not np.isfinite(contribution):
+        return None
+    return contribution
+
+
+def _lambda_log_contributions(
+    value_flat: np.ndarray,
+    gaussian_terms: np.ndarray,
+    lambdas: np.ndarray,
+) -> np.ndarray:
+    """Vectorized :func:`_shot_log_contribution` over every lambda at once.
+
+    Entries that the scalar loop would skip are NaN. The blur and the execution
+    kernel depend only on sigma, so callers compute those once per sigma.
+    """
+
+    contributions = np.full(lambdas.shape, np.nan, dtype=float)
+    finite_values = np.isfinite(value_flat)
+    if not np.any(finite_values):
+        return contributions
+
+    values = np.asarray(value_flat[finite_values], dtype=float)
+    weights = np.asarray(gaussian_terms[finite_values], dtype=float)
+    finite_lambdas = np.isfinite(lambdas)
+    if not np.any(finite_lambdas):
+        return contributions
+
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        scores = lambdas[finite_lambdas, None] * values[None, :]
+        score_shift = np.max(scores, axis=1, keepdims=True)
+        exp_values = np.exp(scores - score_shift)
+        normalization = np.sum(exp_values, axis=1)
+        weighted_gaussian = exp_values @ weights
+        shot_contributions = np.log(weighted_gaussian / normalization)
+
+    invalid = (
+        ~np.isfinite(normalization)
+        | (normalization <= 0.0)
+        | ~np.isfinite(weighted_gaussian)
+        | (weighted_gaussian <= 0.0)
+        | ~np.isfinite(shot_contributions)
+    )
+    shot_contributions = np.asarray(shot_contributions, dtype=float).copy()
+    shot_contributions[invalid] = np.nan
+    contributions[finite_lambdas] = shot_contributions
+    return contributions
+
+
+def _accumulate_reference(
+    prepared_shots: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]],
+    sigma_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
+) -> np.ndarray:
+    """Original sigma × lambda × shot loop, retained as a numerical reference."""
+
+    log_likelihood_grid = _empty_log_likelihood_grid(sigma_grid, log_lambda_grid)
     for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
         sigma = float(sigma_hypothesis)
         if not np.isfinite(sigma) or sigma <= 0.0:
@@ -167,50 +237,151 @@ def compute_hockey_log_likelihood_grid(
             shot_contributions: list[float] = []
 
             for target_angles, executed_action, utility_grid, bin_size in prepared_shots:
-                blur_sigma = max(min(sigma / bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
-                evs = gaussian_filter(utility_grid, sigma=blur_sigma, mode="constant", cval=0.0)
-                if EV_NORMALIZE:
-                    ev_scale = float(np.max(evs) - np.mean(evs))
-                    if ev_scale > 1e-12:
-                        evs = evs / ev_scale
-                value_flat = evs.reshape(-1)
-
+                value_flat = _blurred_utility(utility_grid, sigma, bin_size)
                 target_distances = np.hypot(
                     target_angles[:, 0] - executed_action[0],
                     target_angles[:, 1] - executed_action[1],
                 )
-                gaussian_coeff = 1.0 / (2.0 * math.pi * sigma**2)
-                gaussian_terms = gaussian_coeff * np.exp(-0.5 * np.square(target_distances / sigma))
-                gaussian_terms = np.asarray(gaussian_terms, dtype=float)
-                if not np.all(np.isfinite(gaussian_terms)):
+                gaussian_terms = _execution_kernel(target_distances, sigma)
+                if gaussian_terms is None:
                     continue
-                gaussian_terms = np.maximum(gaussian_terms, np.finfo(float).tiny)
-
-                finite_values = np.isfinite(value_flat)
-                if not np.any(finite_values):
-                    continue
-
-                value_flat = value_flat[finite_values]
-                score_values = lambda_value * value_flat
-                score_shift = np.max(score_values)
-                exp_values = np.exp(score_values - score_shift)
-                normalization = np.sum(exp_values)
-                if not np.isfinite(normalization) or normalization <= 0.0:
-                    continue
-
-                # The target grid is the same 2D hockey map used by the Blackhawks
-                # xG surfaces. The observation likelihood is the average of the
-                # Gaussian kernel over all target cells weighted by the softmax.
-                weighted_gaussian = np.sum(gaussian_terms[finite_values] * exp_values)
-                if not np.isfinite(weighted_gaussian) or weighted_gaussian <= 0.0:
-                    continue
-
-                shot_contributions.append(float(np.log(weighted_gaussian / normalization)))
+                contribution = _shot_log_contribution(value_flat, gaussian_terms, lambda_value)
+                if contribution is not None:
+                    shot_contributions.append(contribution)
 
             if shot_contributions:
                 log_likelihood_grid[sigma_index, lambda_index] = float(np.sum(shot_contributions))
 
     return log_likelihood_grid
+
+
+def _accumulate_vectorized(
+    prepared_shots: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]],
+    sigma_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
+) -> np.ndarray:
+    """Same sum as :func:`_accumulate_reference`, with lambda evaluated in bulk.
+
+    Each shot is blurred once per sigma. A grid cell stays ``-inf`` when every
+    shot was skipped for that hypothesis, matching the reference loop.
+    """
+
+    log_likelihood_grid = _empty_log_likelihood_grid(sigma_grid, log_lambda_grid)
+    lambdas = np.exp(np.asarray(log_lambda_grid, dtype=float))
+    prepared = []
+    for target_angles, executed_action, utility_grid, bin_size in prepared_shots:
+        target_distances = np.hypot(
+            target_angles[:, 0] - executed_action[0],
+            target_angles[:, 1] - executed_action[1],
+        )
+        prepared.append((target_distances, utility_grid, bin_size))
+
+    for sigma_index, sigma_hypothesis in enumerate(sigma_grid):
+        sigma = float(sigma_hypothesis)
+        if not np.isfinite(sigma) or sigma <= 0.0:
+            continue
+
+        total = np.zeros(lambdas.shape, dtype=float)
+        counts = np.zeros(lambdas.shape, dtype=np.int32)
+        for target_distances, utility_grid, bin_size in prepared:
+            value_flat = _blurred_utility(utility_grid, sigma, bin_size)
+            gaussian_terms = _execution_kernel(target_distances, sigma)
+            if gaussian_terms is None:
+                continue
+            contributions = _lambda_log_contributions(value_flat, gaussian_terms, lambdas)
+            valid = np.isfinite(contributions)
+            total[valid] += contributions[valid]
+            counts[valid] += 1
+
+        valid_cells = counts > 0
+        log_likelihood_grid[sigma_index, valid_cells] = total[valid_cells]
+
+    return log_likelihood_grid
+
+
+def _compute_hockey_log_likelihood_grid(
+    shots_df: pd.DataFrame,
+    shot_maps: Mapping[int, Mapping[str, object]],
+    sigma_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
+    accumulate,
+) -> np.ndarray:
+    sigma_grid = np.asarray(sigma_grid, dtype=float)
+    log_lambda_grid = np.asarray(log_lambda_grid, dtype=float)
+    log_likelihood_grid = _empty_log_likelihood_grid(sigma_grid, log_lambda_grid)
+
+    if shots_df.empty:
+        return log_likelihood_grid
+
+    required_columns = {"event_id", "start_x", "start_y", "location_y", "location_z"}
+    missing = required_columns.difference(shots_df.columns)
+    if missing:
+        raise ValueError(f"shots_df is missing required columns: {sorted(missing)}")
+
+    prepared_shots = _prepare_hockey_shots(shots_df, shot_maps)
+    if not prepared_shots:
+        return log_likelihood_grid
+    return accumulate(prepared_shots, sigma_grid, log_lambda_grid)
+
+
+def compute_hockey_log_likelihood_grid(
+    shots_df: pd.DataFrame,
+    shot_maps: Mapping[int, Mapping[str, object]],
+    sigma_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
+) -> np.ndarray:
+    """Compute per-parameter-grid hockey log-likelihoods from shot-map data.
+
+    Each observed shot contributes a log-likelihood term under the assumption that
+    the observed shot location is a noisy realization of a target selected from the
+    shot's value map under a Gaussian execution model and a softmax decision
+    model.
+
+    The Gaussian blur and execution kernel depend only on sigma, so each shot is
+    blurred once per sigma hypothesis and every lambda is evaluated together.
+
+    Parameters
+    ----------
+    shots_df:
+        DataFrame containing at least ``event_id``, ``start_x``, ``start_y``,
+        ``location_y``, and ``location_z`` columns.
+    shot_maps:
+        Mapping keyed by event id whose values include a ``value_map`` array.
+    sigma_grid:
+        Execution-skill hypotheses.
+    log_lambda_grid:
+        Log-decision-skill hypotheses.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape ``(len(sigma_grid), len(log_lambda_grid))``.
+    """
+
+    return _compute_hockey_log_likelihood_grid(
+        shots_df,
+        shot_maps,
+        sigma_grid,
+        log_lambda_grid,
+        _accumulate_vectorized,
+    )
+
+
+def _compute_hockey_log_likelihood_grid_reference(
+    shots_df: pd.DataFrame,
+    shot_maps: Mapping[int, Mapping[str, object]],
+    sigma_grid: np.ndarray,
+    log_lambda_grid: np.ndarray,
+) -> np.ndarray:
+    """Reference evaluator used to check the vectorized lambda loop."""
+
+    return _compute_hockey_log_likelihood_grid(
+        shots_df,
+        shot_maps,
+        sigma_grid,
+        log_lambda_grid,
+        _accumulate_reference,
+    )
 
 
 __all__ = ["compute_hockey_log_likelihood_grid"]

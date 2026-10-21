@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
 
-from HJEEDS.hockey_adapter import compute_hockey_log_likelihood_grid
+from HJEEDS.hockey_adapter import (
+    _compute_hockey_log_likelihood_grid_reference,
+    compute_hockey_log_likelihood_grid,
+)
 
 
 def test_compute_hockey_log_likelihood_grid_has_expected_shape():
@@ -134,3 +137,72 @@ def test_run_hockey_jeeds_for_player_uses_blackhawks_contract():
     assert result["num_shots"] == 3
     assert np.isfinite(result["posterior_mean_sigma"])
     assert np.isfinite(result["posterior_mean_log_lambda"])
+
+
+def test_vectorized_log_likelihood_matches_reference_loop():
+    rng = np.random.default_rng(19)
+    value_map = rng.random((16, 18), dtype=float)
+    shots_df = pd.DataFrame(
+        [
+            {
+                "event_id": 401,
+                "start_x": 75.5,
+                "start_y": 0.6,
+                "location_y": 0.2,
+                "location_z": 1.4,
+            },
+            {
+                "event_id": 402,
+                "start_x": 74.6,
+                "start_y": 1.2,
+                "location_y": -0.5,
+                "location_z": 1.1,
+            },
+            {
+                "event_id": 403,
+                "start_x": 70.0,
+                "start_y": -2.0,
+                "location_y": 1.5,
+                "location_z": 2.0,
+            },
+            {
+                "event_id": 404,
+                "start_x": 88.5,
+                "start_y": 0.0,
+                "location_y": 0.0,
+                "location_z": 1.0,
+            },
+        ]
+    )
+    shot_maps = {
+        401: {"value_map": value_map},
+        402: {"value_map": value_map * 0.5 + 0.1},
+        403: {"value_map": np.flip(value_map, axis=1)},
+    }
+    sigma_grid = np.concatenate([
+        np.linspace(0.004, 0.25, 5),
+        np.array([-0.01, np.nan]),
+    ])
+    log_lambda_grid = np.concatenate([
+        np.linspace(np.log(0.1), np.log(1000.0), 7),
+        np.array([np.nan]),
+    ])
+
+    reference = _compute_hockey_log_likelihood_grid_reference(
+        shots_df=shots_df,
+        shot_maps=shot_maps,
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+    )
+    actual = compute_hockey_log_likelihood_grid(
+        shots_df=shots_df,
+        shot_maps=shot_maps,
+        sigma_grid=sigma_grid,
+        log_lambda_grid=log_lambda_grid,
+    )
+
+    finite = np.isfinite(reference)
+    assert finite.any()
+    assert np.array_equal(finite, np.isfinite(actual))
+    assert np.all(np.isneginf(actual[~finite]))
+    np.testing.assert_allclose(actual[finite], reference[finite], rtol=0.0, atol=1e-8)
