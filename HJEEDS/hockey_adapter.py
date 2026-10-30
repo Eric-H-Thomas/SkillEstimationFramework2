@@ -20,7 +20,7 @@ minimal tests that only require the correct array shape and finite output.
 from __future__ import annotations
 
 import math
-from typing import Mapping
+from typing import Mapping, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -68,13 +68,38 @@ def _empty_log_likelihood_grid(sigma_grid: np.ndarray, log_lambda_grid: np.ndarr
     return np.full((len(sigma_grid), len(log_lambda_grid)), -np.inf, dtype=float)
 
 
-def _prepare_hockey_shots(
+class HockeySituation(NamedTuple):
+    """One shot situation on the angular grid used by the hockey likelihood.
+
+    ``executed_action`` is the observed angle of a real shot. Synthetic players
+    keep the targets and utilities and replace that angle.
+    """
+
+    event_id: int
+    target_angles: np.ndarray
+    executed_action: np.ndarray
+    utility_grid: np.ndarray
+    bin_size: float
+
+
+def prepare_hockey_situations(
     shots_df: pd.DataFrame,
     shot_maps: Mapping[int, Mapping[str, object]],
-) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, float]]:
-    """Turn observed shots into angular targets, utilities, and a bin width."""
+) -> list[HockeySituation]:
+    """Turn shot rows into angular targets, utilities, and the observed angle.
 
-    prepared_shots: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]] = []
+    Rows inside 10 ft of the net, rows without a finite value map, and rows the
+    angular transform marks ``skip`` are dropped. Target angles and the utility
+    grid flatten in the same C order, so a softmax over the flattened utilities
+    indexes ``target_angles`` directly.
+    """
+
+    required = {"event_id", "start_x", "start_y", "location_y", "location_z"}
+    missing = required.difference(shots_df.columns)
+    if missing and not shots_df.empty:
+        raise ValueError(f"shots_df is missing required columns: {sorted(missing)}")
+
+    situations: list[HockeySituation] = []
     for _, row in shots_df.iterrows():
         event_id = int(row["event_id"])
         if event_id not in shot_maps:
@@ -115,15 +140,28 @@ def _prepare_hockey_shots(
             ((dirs[-1] - dirs[0]) / (len(dirs) - 1) if len(dirs) > 1 else 0.01)
             + ((elevations[-1] - elevations[0]) / (len(elevations) - 1) if len(elevations) > 1 else 0.01)
         ) / 2.0
-        prepared_shots.append(
-            (
-                np.asarray(grid_targets_angular).reshape(-1, 2),
-                np.asarray(executed_action_angular, dtype=float),
-                np.asarray(grid_utilities_computed, dtype=float),
-                bin_size,
+        situations.append(
+            HockeySituation(
+                event_id=event_id,
+                target_angles=np.asarray(grid_targets_angular, dtype=float).reshape(-1, 2),
+                executed_action=np.asarray(executed_action_angular, dtype=float),
+                utility_grid=np.asarray(grid_utilities_computed, dtype=float),
+                bin_size=float(bin_size),
             )
         )
-    return prepared_shots
+    return situations
+
+
+def _prepare_hockey_shots(
+    shots_df: pd.DataFrame,
+    shot_maps: Mapping[int, Mapping[str, object]],
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, float]]:
+    """Turn observed shots into angular targets, utilities, and a bin width."""
+
+    return [
+        (situation.target_angles, situation.executed_action, situation.utility_grid, situation.bin_size)
+        for situation in prepare_hockey_situations(shots_df, shot_maps)
+    ]
 
 
 def _blurred_utility(utility_grid: np.ndarray, sigma: float, bin_size: float) -> np.ndarray:
@@ -216,6 +254,121 @@ def _lambda_log_contributions(
     shot_contributions = np.asarray(shot_contributions, dtype=float).copy()
     shot_contributions[invalid] = np.nan
     contributions[finite_lambdas] = shot_contributions
+    return contributions
+
+
+def lambda_log_contributions_batch(
+    value_flat: np.ndarray,
+    gaussian_terms: np.ndarray,
+    lambdas: np.ndarray,
+) -> np.ndarray:
+    """Log observation densities for many executions of one blurred value surface.
+
+    ``gaussian_terms`` has shape ``(n_shots, n_targets)`` and aligns with
+    ``value_flat``. The return has shape ``(n_shots, len(lambdas))``. Entries
+    the scalar :func:`_lambda_log_contributions` would skip are NaN.
+    """
+
+    weights_all = np.asarray(gaussian_terms, dtype=float)
+    if weights_all.ndim != 2:
+        raise ValueError(f"gaussian_terms must have shape (n_shots, n_targets); got {weights_all.shape}.")
+    num_shots = weights_all.shape[0]
+    lambda_values = np.asarray(lambdas, dtype=float)
+    contributions = np.full((num_shots, lambda_values.shape[0]), np.nan, dtype=float)
+    finite_values = np.isfinite(value_flat)
+    if not np.any(finite_values) or num_shots == 0:
+        return contributions
+
+    values = np.asarray(value_flat[finite_values], dtype=float)
+    weights = weights_all[:, finite_values]
+    finite_lambdas = np.isfinite(lambda_values)
+    if not np.any(finite_lambdas):
+        return contributions
+
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        scores = lambda_values[finite_lambdas, None] * values[None, :]
+        score_shift = np.max(scores, axis=1, keepdims=True)
+        exp_values = np.exp(scores - score_shift)
+        normalization = np.sum(exp_values, axis=1)
+        weighted = exp_values @ weights.T
+        shot_contributions = np.log(weighted / normalization[:, None])
+
+    invalid = (
+        ~np.isfinite(normalization)[:, None]
+        | (normalization[:, None] <= 0.0)
+        | ~np.isfinite(weighted)
+        | (weighted <= 0.0)
+        | ~np.isfinite(shot_contributions)
+    )
+    shot_contributions = np.asarray(shot_contributions, dtype=float).copy()
+    shot_contributions[invalid] = np.nan
+    contributions[:, finite_lambdas] = shot_contributions.T
+    return contributions
+
+
+def lambda_log_contributions_many_surfaces(
+    value_rows: np.ndarray,
+    gaussian_terms: np.ndarray,
+    lambdas: np.ndarray,
+    chunk_size: int = 1,
+) -> np.ndarray:
+    """Log densities when each shot has its own blurred value surface.
+
+    ``value_rows`` and ``gaussian_terms`` both have shape ``(n_shots, n_targets)``.
+    One shot at a time keeps the ``(n_lambda, n_targets)`` score tensor in cache.
+    A larger chunk is available, but on this grid it is slower. A chunk with
+    any non-finite entry falls back to
+    :func:`lambda_log_contributions_batch`.
+    """
+
+    values = np.asarray(value_rows, dtype=float)
+    weights = np.asarray(gaussian_terms, dtype=float)
+    if values.ndim != 2 or values.shape != weights.shape:
+        raise ValueError(
+            "value_rows and gaussian_terms must share shape (n_shots, n_targets). "
+            f"Received {values.shape} and {weights.shape}."
+        )
+    if int(chunk_size) < 1:
+        raise ValueError(f"chunk_size must be positive. Received {chunk_size}.")
+
+    lambda_values = np.asarray(lambdas, dtype=float)
+    contributions = np.full((values.shape[0], lambda_values.shape[0]), np.nan, dtype=float)
+    finite_lambdas = np.isfinite(lambda_values)
+    if values.shape[0] == 0 or not np.any(finite_lambdas):
+        return contributions
+    active_lambdas = lambda_values[finite_lambdas]
+
+    for start in range(0, values.shape[0], int(chunk_size)):
+        stop = min(start + int(chunk_size), values.shape[0])
+        shot_values = values[start:stop]
+        shot_weights = weights[start:stop]
+        if not np.isfinite(shot_values).all() or not np.isfinite(shot_weights).all():
+            for offset in range(stop - start):
+                contributions[start + offset, finite_lambdas] = lambda_log_contributions_batch(
+                    shot_values[offset],
+                    shot_weights[offset][None, :],
+                    active_lambdas,
+                )[0]
+            continue
+
+        with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+            scores = active_lambdas[None, :, None] * shot_values[:, None, :]
+            score_shift = np.max(scores, axis=2, keepdims=True)
+            exp_values = np.exp(scores - score_shift)
+            normalization = np.sum(exp_values, axis=2)
+            weighted = np.einsum("nlt,nt->nl", exp_values, shot_weights, optimize=True)
+            shot_contributions = np.log(weighted / normalization)
+
+        invalid = (
+            ~np.isfinite(normalization)
+            | (normalization <= 0.0)
+            | ~np.isfinite(weighted)
+            | (weighted <= 0.0)
+            | ~np.isfinite(shot_contributions)
+        )
+        shot_contributions = np.asarray(shot_contributions, dtype=float).copy()
+        shot_contributions[invalid] = np.nan
+        contributions[start:stop, finite_lambdas] = shot_contributions
     return contributions
 
 
@@ -384,4 +537,10 @@ def _compute_hockey_log_likelihood_grid_reference(
     )
 
 
-__all__ = ["compute_hockey_log_likelihood_grid"]
+__all__ = [
+    "HockeySituation",
+    "compute_hockey_log_likelihood_grid",
+    "lambda_log_contributions_batch",
+    "lambda_log_contributions_many_surfaces",
+    "prepare_hockey_situations",
+]
