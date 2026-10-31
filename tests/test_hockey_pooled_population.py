@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import load_player_data
+from BlackhawksSkillEstimation.maxg_evaluator import load_hjeeds_sigmas
 from BlackhawksSkillEstimation.shot_map_format import (
     CURRENT_SHOT_MAP_SHAPE,
     LEGACY_SHOT_MAP_SHAPE,
@@ -14,6 +15,7 @@ from BlackhawksSkillEstimation.shot_map_format import (
     read_value_map_shape,
 )
 from HJEEDS import run_hockey_population
+from HJEEDS.hockey_pipeline import HOCKEY_PRELIMINARY_HYPERPRIORS
 
 SEASON_A = 20232024
 SEASON_B = 20242025
@@ -129,9 +131,36 @@ def test_pooled_run_uses_each_players_available_seasons(tmp_path):
         2: (5, 2),
         3: (4, 1),
     }
+    assert rows[1]["seasons"] == f"{SEASON_A};{SEASON_B}"
+    for row in rows.values():
+        for prefix in ("jeeds", "hierarchical"):
+            assert row[f"{prefix}_status"] == "ok"
+            for axis in ("sigma", "log_lambda"):
+                low, mean, high = (float(row[f"{prefix}_{axis}_q05"]), float(row[f"{prefix}_mean_{axis}"]), float(row[f"{prefix}_{axis}_q95"]))
+                assert low <= mean <= high
+                assert float(row[f"{prefix}_sd_{axis}"]) > 0
     metadata = json.loads((output_dir / "run_metadata.json").read_text())
     assert metadata["seasons"] == [SEASON_A, SEASON_B]
     assert metadata["failed"] == 0
+    assert metadata["hyperprior"]["mean_sigma"] == pytest.approx(np.exp(HOCKEY_PRELIMINARY_HYPERPRIORS.mean_vector[0]))
+
+    results = load_hjeeds_sigmas(output_dir / "agent_level_results.csv", estimate="jeeds")
+    assert results["mean_sigma"].tolist() == pytest.approx([float(rows[pid]["jeeds_mean_sigma"]) for pid in (1, 2, 3)])
+    assert set(results["hjeeds_estimate"]) == {"jeeds"}
+    results = load_hjeeds_sigmas(output_dir / "agent_level_results.csv")
+    assert results["mean_sigma"].tolist() == pytest.approx([float(rows[pid]["hierarchical_mean_sigma"]) for pid in (1, 2, 3)])
+
+
+def test_marginal_spread_spreads_cell_mass_between_midpoints():
+    grid = np.arange(11, dtype=float)
+    point_mass = np.zeros(11)
+    point_mass[5] = 1.0
+    assert run_hockey_population._marginal_spread(point_mass, grid) == pytest.approx((0.0, 4.55, 5.45))
+
+    uniform = np.full(11, 1.0 / 11.0)
+    sd, low, high = run_hockey_population._marginal_spread(uniform, grid)
+    assert sd == pytest.approx(np.sqrt(10.0))
+    assert (low, high) == pytest.approx((0.275, 9.725))
 
 
 def test_preflight_stops_before_writing_a_manifest_on_legacy_maps(tmp_path, capsys):

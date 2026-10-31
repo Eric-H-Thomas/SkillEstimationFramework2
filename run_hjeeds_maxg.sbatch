@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# Evaluate HJEEDS hierarchical_mean_sigma values on the fixed MAXG benchmark.
+# Evaluate an HJEEDS run's sigma values on the fixed MAXG benchmark.
 # Submit with `sbatch run_hjeeds_maxg.sbatch` or override BH_* variables with
 # `sbatch --export=ALL,BH_PIDS_FILE=... run_hjeeds_maxg.sbatch`.
+# BH_HJEEDS_ESTIMATE=hierarchical (default) scores hierarchical_mean_sigma;
+# BH_HJEEDS_ESTIMATE=jeeds scores the same run's uniform-prior jeeds_mean_sigma.
 
 #SBATCH --job-name=hjeeds-maxg
 #SBATCH --time=32:00:00
@@ -27,6 +29,7 @@ BENCHMARK_TAG="${BH_BENCHMARK_TAG:-wristshot_snapshot_v1}"
 BENCHMARK_DIR="${BH_BENCHMARK_DIR:-Data/Hockey/benchmarks}"
 DATA_DIR="${BH_DATA_DIR:-Data/Hockey}"
 HJEEDS_RESULTS="${BH_HJEEDS_RESULTS:-Data/Hockey/experiments/hjeeds_20242025_angular_fix/agent_level_results.csv}"
+HJEEDS_ESTIMATE="${BH_HJEEDS_ESTIMATE:-hierarchical}"
 PIDS_FILE="${BH_PIDS_FILE:-Data/Hockey/forwards23-25.txt}"
 OUTPUT_DIR="${BH_OUTPUT_DIR:-Data/Hockey/benchmarks/results}"
 
@@ -40,6 +43,7 @@ done
 python -m BlackhawksSkillEstimation.maxg_evaluator \
   --estimator hjeeds \
   --hjeeds-results "$HJEEDS_RESULTS" \
+  --hjeeds-estimate "$HJEEDS_ESTIMATE" \
   --benchmark-tag "$BENCHMARK_TAG" \
   --benchmark-dir "$BENCHMARK_DIR" \
   --season-tag "$SEASON" \

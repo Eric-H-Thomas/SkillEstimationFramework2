@@ -102,16 +102,28 @@ def load_ees_xskills(
     return pd.DataFrame(rows).sort_values("xskill_ees").reset_index(drop=True)
 
 
+HJEEDS_ESTIMATE_SUFFIXES = {"hierarchical": "_hjeeds", "jeeds": "_jeeds_baseline"}
+
+
 def load_hjeeds_sigmas(
     results_path: Path,
     player_ids: Sequence[int] | None = None,
+    estimate: str = "hierarchical",
 ) -> pd.DataFrame:
-    """Load hierarchical scalar execution estimates from an aggregated HJEEDS run."""
+    """Load scalar execution estimates from an aggregated HJEEDS run.
+
+    ``estimate`` selects the hierarchical posterior or the uniform-prior JEEDS
+    baseline that the same aggregate computes from each player's likelihood.
+    """
+    if estimate not in HJEEDS_ESTIMATE_SUFFIXES:
+        raise ValueError(f"Unknown HJEEDS estimate '{estimate}'; expected one of {sorted(HJEEDS_ESTIMATE_SUFFIXES)}")
     if not results_path.exists():
         raise FileNotFoundError(f"Missing HJEEDS results file: {results_path}")
+    status_column = f"{estimate}_status"
+    sigma_column = f"{estimate}_mean_sigma"
 
     df = pd.read_csv(results_path)
-    required = {"player_id", "hierarchical_status", "hierarchical_mean_sigma"}
+    required = {"player_id", status_column, sigma_column}
     missing = required.difference(df.columns)
     if missing:
         raise ValueError(
@@ -120,18 +132,16 @@ def load_hjeeds_sigmas(
 
     if player_ids is not None:
         df = df[df["player_id"].isin(player_ids)]
-    df = df[df["hierarchical_status"] == "ok"].copy()
-    df["hjeeds_mean_sigma"] = pd.to_numeric(
-        df["hierarchical_mean_sigma"], errors="coerce"
-    )
-    df = df[np.isfinite(df["hjeeds_mean_sigma"]) & (df["hjeeds_mean_sigma"] > 0)]
+    df = df[df[status_column] == "ok"].copy()
+    df["mean_sigma"] = pd.to_numeric(df[sigma_column], errors="coerce")
+    df = df[np.isfinite(df["mean_sigma"]) & (df["mean_sigma"] > 0)]
     if df.empty:
         raise RuntimeError(
-            "No usable HJEEDS hierarchical estimates found for the requested players"
+            f"No usable HJEEDS {estimate} estimates found for the requested players"
         )
 
-    return df[["player_id", "hjeeds_mean_sigma"]].assign(
-        csv_path=str(results_path)
+    return df[["player_id", "mean_sigma"]].assign(
+        hjeeds_estimate=estimate, csv_path=str(results_path)
     ).sort_values("player_id").reset_index(drop=True)
 
 
@@ -378,19 +388,20 @@ def evaluate_maxg_hjeeds(
     season_tag: str,
     shot_group: str,
 ) -> pd.DataFrame:
-    """Evaluate hierarchical HJEEDS scalar sigma as an isotropic MAXG profile."""
+    """Evaluate an HJEEDS run's scalar sigma as an isotropic MAXG profile."""
     results: list[dict[str, object]] = []
     for _, row in skill_table.iterrows():
         player_id = int(row["player_id"])
-        sigma = float(row["hjeeds_mean_sigma"])
+        sigma = float(row["mean_sigma"])
+        estimate = str(row["hjeeds_estimate"])
         maxg_sum = compute_maxg_sum(angular_shots, sigma)
-        print(f"MAXG (HJEEDS) finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
+        print(f"MAXG (HJEEDS {estimate}) finished: player {player_id} | maxg_sum={maxg_sum:.4f}")
         results.append(
             {
                 "player_id": player_id,
-                "hjeeds_mean_sigma": sigma,
+                "mean_sigma": sigma,
                 "maxg_sum": maxg_sum,
-                "estimator": "hjeeds_jeeds_mean_sigma",
+                "estimator": f"hjeeds_{estimate}_mean_sigma",
                 "benchmark_tag": benchmark_tag,
                 "season_tag": season_tag,
                 "shot_group": shot_group,
@@ -542,6 +553,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Aggregated HJEEDS agent_level_results.csv (required for --estimator hjeeds).",
     )
     parser.add_argument(
+        "--hjeeds-estimate",
+        choices=tuple(HJEEDS_ESTIMATE_SUFFIXES),
+        default="hierarchical",
+        help="For --estimator hjeeds, score the hierarchical sigma or the run's uniform-prior JEEDS sigma.",
+    )
+    parser.add_argument(
         "--mcse-profile",
         choices=("ees", "map"),
         default="ees",
@@ -569,6 +586,7 @@ def main() -> None:
         xskill_table = load_hjeeds_sigmas(
             results_path=args.hjeeds_results,
             player_ids=player_ids,
+            estimate=args.hjeeds_estimate,
         )
     elif args.estimator == "mcse":
         xskill_table = load_mcse_skill_profiles(
@@ -648,7 +666,10 @@ def main() -> None:
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    est_suffix = f"_{args.estimator}" if args.estimator != "jeeds" else ""
+    if args.estimator == "hjeeds":
+        est_suffix = HJEEDS_ESTIMATE_SUFFIXES[args.hjeeds_estimate]
+    else:
+        est_suffix = f"_{args.estimator}" if args.estimator != "jeeds" else ""
     output_path = output_dir / (
         f"maxg_results_{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{est_suffix}.csv"
     )

@@ -1,8 +1,9 @@
 #!/bin/bash
 # Submit the pooled five-season HJEEDS hockey population fit on the 100 x 250
 # grid. Each player's likelihood pools every season they have data for, one
-# population prior is fit over the roster, and MAXG runs on the hierarchical
-# sigmas once the aggregate succeeds.
+# population prior is fit over the roster, and agent_level_results.csv keeps
+# both the uniform-prior JEEDS and the hierarchical estimates. Once the
+# aggregate succeeds, two MAXG jobs score the JEEDS and hierarchical sigmas.
 #
 #   bash submit_hjeeds_hockey_pooled.sh
 #   bash submit_hjeeds_hockey_pooled.sh --dry-run
@@ -20,9 +21,9 @@ usage() {
 Usage: submit_hjeeds_hockey_pooled.sh [--dry-run]
 
 Submits one HJEEDS hockey population run that pools 2021-22 through 2025-26
-per player on a 100 sigma x 250 log-lambda grid, then queues MAXG on the
-fitted hierarchical sigmas. Preflight refuses to start if any shot-map file
-is not on the current xG grid.
+per player on a 100 sigma x 250 log-lambda grid, then queues MAXG on both
+the JEEDS and the hierarchical sigmas. Preflight refuses to start if any
+shot-map file is not on the current xG grid.
 
 Environment:
   HJEEDS_HOCKEY_CONFIG              Roster config (default: Data/Hockey/jobs/jeeds_forwards_all_seasons.json)
@@ -31,7 +32,8 @@ Environment:
   HJEEDS_HOCKEY_NUM_SIGMA_GRID      Sigma grid points (default: 100)
   HJEEDS_HOCKEY_NUM_LOG_LAMBDA_GRID Log-lambda grid points (default: 250)
   HJEEDS_HOCKEY_WORKER_TIME         Worker walltime (default: 24:00:00)
-  HJEEDS_HOCKEY_RUN_MAXG            Set to 0 to skip the MAXG job (default: 1)
+  HJEEDS_HOCKEY_RUN_MAXG            Set to 0 to skip the MAXG jobs (default: 1)
+  HJEEDS_HOCKEY_MAXG_ESTIMATES      Sigmas to score with MAXG (default: "hierarchical jeeds")
 EOF
 }
 
@@ -64,6 +66,7 @@ export HJEEDS_HOCKEY_AGGREGATE_TIME="${HJEEDS_HOCKEY_AGGREGATE_TIME:-04:00:00}"
 export HJEEDS_HOCKEY_AGGREGATE_MEM="${HJEEDS_HOCKEY_AGGREGATE_MEM:-16G}"
 # MAXG took about 77 s per player on the 1,000-shot benchmark locally.
 export HJEEDS_HOCKEY_RUN_MAXG="${HJEEDS_HOCKEY_RUN_MAXG:-1}"
+export HJEEDS_HOCKEY_MAXG_ESTIMATES="${HJEEDS_HOCKEY_MAXG_ESTIMATES:-hierarchical jeeds}"
 export HJEEDS_HOCKEY_MAXG_TIME="${HJEEDS_HOCKEY_MAXG_TIME:-24:00:00}"
 export HJEEDS_HOCKEY_MAXG_MEM="${HJEEDS_HOCKEY_MAXG_MEM:-16G}"
 
@@ -77,7 +80,7 @@ if [[ -f "${OUTPUT_DIR}/manifest.json" ]]; then
   echo "Note: ${OUTPUT_DIR} already has a manifest; workers will reuse existing likelihood files there."
 fi
 
-echo "seasons=${HJEEDS_HOCKEY_SEASONS} grid=${HJEEDS_HOCKEY_NUM_SIGMA_GRID}x${HJEEDS_HOCKEY_NUM_LOG_LAMBDA_GRID} worker_time=${HJEEDS_HOCKEY_WORKER_TIME} maxg=${HJEEDS_HOCKEY_RUN_MAXG} output=${OUTPUT_DIR}"
+echo "seasons=${HJEEDS_HOCKEY_SEASONS} grid=${HJEEDS_HOCKEY_NUM_SIGMA_GRID}x${HJEEDS_HOCKEY_NUM_LOG_LAMBDA_GRID} worker_time=${HJEEDS_HOCKEY_WORKER_TIME} maxg=${HJEEDS_HOCKEY_RUN_MAXG} (${HJEEDS_HOCKEY_MAXG_ESTIMATES}) output=${OUTPUT_DIR}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "sbatch ${SBATCH_SCRIPT} ${CONFIG_PATH} ${OUTPUT_DIR}"
   exit 0

@@ -93,16 +93,61 @@ def _grid_metadata(sigma_grid: np.ndarray, log_lambda_grid: np.ndarray) -> dict[
 
 
 def _hyperprior_metadata() -> dict[str, Any]:
-    mean_sigma, mean_lambda = HOCKEY_PRELIMINARY_HYPERPRIORS.mean_vector
+    hyperpriors = HOCKEY_PRELIMINARY_HYPERPRIORS
+    mean_log_sigma, mean_log_lambda = hyperpriors.mean_vector
     return {
-        "source": "manual preliminary centers based on descriptive Blackhawks JEEDS summaries; not fitted from this HJEEDS run",
-        "mean_sigma": 0.075,
-        "mean_lambda": 10.0,
-        "mean_log_sigma": float(mean_sigma),
-        "mean_log_lambda": float(mean_lambda),
-        "log_standard_deviations": [0.5, 1.0],
-        "covariance_diagonal": list(HOCKEY_PRELIMINARY_HYPERPRIORS.covariance_diagonal),
+        "source": "manual hockey-wide hyperprior in HJEEDS.hockey_pipeline; not fitted from this HJEEDS run",
+        "mean_sigma": float(np.exp(mean_log_sigma)),
+        "mean_lambda": float(np.exp(mean_log_lambda)),
+        "mean_log_sigma": float(mean_log_sigma),
+        "mean_log_lambda": float(mean_log_lambda),
+        "log_standard_deviations": [float(np.sqrt(value)) for value in hyperpriors.covariance_diagonal],
+        "covariance_diagonal": list(hyperpriors.covariance_diagonal),
+        "tau_eta_median": float(np.exp(hyperpriors.log_tau_eta_mean)),
+        "log_tau_eta_sd": float(hyperpriors.log_tau_eta_sd),
+        "tau_rho_median": float(np.exp(hyperpriors.log_tau_rho_mean)),
+        "log_tau_rho_sd": float(hyperpriors.log_tau_rho_sd),
         "coordinate_note": "Stored means use natural logs; historical hockey bounds are log10(lambda)=[-1,3].",
+    }
+
+
+def _normalized_posterior(log_weights: np.ndarray) -> np.ndarray | None:
+    finite = np.isfinite(log_weights)
+    if not finite.any():
+        return None
+    weights = np.zeros_like(log_weights, dtype=float)
+    weights[finite] = np.exp(log_weights[finite] - log_weights[finite].max())
+    return weights / weights.sum()
+
+
+def _marginal_spread(marginal: np.ndarray, grid: np.ndarray) -> tuple[float, float, float]:
+    """Posterior SD and 90% interval, spreading each cell's mass evenly between grid midpoints."""
+    mean = float(marginal @ grid)
+    sd = float(np.sqrt(marginal @ (grid - mean) ** 2))
+    edges = np.concatenate([grid[:1], 0.5 * (grid[:-1] + grid[1:]), grid[-1:]])
+    cdf = np.concatenate([[0.0], np.cumsum(marginal)])
+    q05, q95 = np.interp([0.05, 0.95], cdf, edges)
+    return sd, float(q05), float(q95)
+
+
+def _estimate_columns(prefix: str, estimate: Any, log_weights: np.ndarray, sigma_grid: np.ndarray, log_lambda_grid: np.ndarray) -> dict[str, Any]:
+    posterior = _normalized_posterior(log_weights) if estimate.status == "ok" else None
+    sd_sigma = sigma_q05 = sigma_q95 = sd_log_lambda = log_lambda_q05 = log_lambda_q95 = None
+    if posterior is not None:
+        sd_sigma, sigma_q05, sigma_q95 = _marginal_spread(posterior.sum(axis=1), sigma_grid)
+        sd_log_lambda, log_lambda_q05, log_lambda_q95 = _marginal_spread(posterior.sum(axis=0), log_lambda_grid)
+    return {
+        f"{prefix}_status": estimate.status,
+        f"{prefix}_mean_sigma": estimate.posterior_mean_sigma,
+        f"{prefix}_sd_sigma": sd_sigma,
+        f"{prefix}_sigma_q05": sigma_q05,
+        f"{prefix}_sigma_q95": sigma_q95,
+        f"{prefix}_map_sigma": estimate.map_sigma,
+        f"{prefix}_mean_log_lambda": estimate.posterior_mean_log_lambda,
+        f"{prefix}_sd_log_lambda": sd_log_lambda,
+        f"{prefix}_log_lambda_q05": log_lambda_q05,
+        f"{prefix}_log_lambda_q95": log_lambda_q95,
+        f"{prefix}_map_log_lambda": estimate.map_log_lambda,
     }
 
 
@@ -275,7 +320,12 @@ def aggregate(args: argparse.Namespace) -> int:
             continue
 
         grids.append(artifact_grid)
-        retained.append({"player_id": int(player_id), "num_shots": artifact_num_shots, "num_seasons": len(artifact_seasons)})
+        retained.append({
+            "player_id": int(player_id),
+            "num_shots": artifact_num_shots,
+            "num_seasons": len(artifact_seasons),
+            "seasons": ";".join(str(season) for season in sorted(artifact_seasons)),
+        })
     if not grids:
         raise RuntimeError("No likelihood artifacts available for aggregation.")
 
@@ -284,11 +334,17 @@ def aggregate(args: argparse.Namespace) -> int:
     np.save(args.output_dir / "discrete_prior.npy", prior)
     (args.output_dir / "population_fit.json").write_text(json.dumps(_jsonable(fitted), indent=2) + "\n", encoding="utf-8")
 
+    with np.errstate(divide="ignore"):
+        log_prior = np.log(prior)
     rows = []
     for record, grid in zip(retained, grids):
         jeeds = run_independent_jeeds_baseline(grid, expected_sigma_grid, expected_log_lambda_grid)
         hierarchical = run_hierarchical_estimator(grid, prior, expected_sigma_grid, expected_log_lambda_grid)
-        rows.append({**record, "jeeds_status": jeeds.status, "jeeds_mean_sigma": jeeds.posterior_mean_sigma, "jeeds_mean_log_lambda": jeeds.posterior_mean_log_lambda, "hierarchical_status": hierarchical.status, "hierarchical_mean_sigma": hierarchical.posterior_mean_sigma, "hierarchical_mean_log_lambda": hierarchical.posterior_mean_log_lambda})
+        rows.append({
+            **record,
+            **_estimate_columns("jeeds", jeeds, grid, expected_sigma_grid, expected_log_lambda_grid),
+            **_estimate_columns("hierarchical", hierarchical, grid + log_prior, expected_sigma_grid, expected_log_lambda_grid),
+        })
     with (args.output_dir / "agent_level_results.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
@@ -300,7 +356,7 @@ def aggregate(args: argparse.Namespace) -> int:
         "failed": len(failed),
         "seasons": _manifest_seasons(manifest),
         "shot_map_format": manifest.get("shot_map_format"),
-        "hyperprior": manifest["hyperprior"],
+        "hyperprior": _hyperprior_metadata(),
         "grid": manifest["grid"],
     }
     (args.output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")

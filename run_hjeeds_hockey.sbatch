@@ -10,6 +10,8 @@
 #   HJEEDS_HOCKEY_NUM_SIGMA_GRID      Sigma grid points (runner default when unset)
 #   HJEEDS_HOCKEY_NUM_LOG_LAMBDA_GRID Log-lambda grid points (runner default when unset)
 #   HJEEDS_HOCKEY_RUN_MAXG=1          Queue run_hjeeds_maxg.sbatch after a successful aggregate
+#   HJEEDS_HOCKEY_MAXG_ESTIMATES      Space-separated sigmas to score, one MAXG job each
+#                                     (default "hierarchical jeeds")
 #   HJEEDS_HOCKEY_MAXG_SEASON_TAG     Tag in the MAXG results filename
 # Workers and the aggregate read seasons, grids, and the data directory from
 # the manifest that preflight writes.
@@ -84,15 +86,18 @@ if [[ -z "${HJEEDS_HOCKEY_MODE:-}" ]]; then
     else
       DEFAULT_MAXG_TAG="$SEASON"
     fi
-    MAXG_JOB="$(sbatch --parsable \
-      --dependency="afterok:${AGGREGATE_JOB}" \
-      --time="${HJEEDS_HOCKEY_MAXG_TIME:-24:00:00}" \
-      --mem="${HJEEDS_HOCKEY_MAXG_MEM:-16G}" \
-      --job-name="hjeeds-hockey-maxg" \
-      --output="${OUTPUT_DIR}/slurm-maxg-%j.out" \
-      --export=ALL,BH_REPO_ROOT="$REPO_ROOT",BH_HJEEDS_RESULTS="${OUTPUT_DIR}/agent_level_results.csv",BH_SEASON="${HJEEDS_HOCKEY_MAXG_SEASON_TAG:-$DEFAULT_MAXG_TAG}",BH_OUTPUT_DIR="${OUTPUT_DIR}/maxg" \
-      "${REPO_ROOT}/run_hjeeds_maxg.sbatch")"
-    echo "Submitted MAXG job: $MAXG_JOB"
+    read -r -a MAXG_ESTIMATES <<< "${HJEEDS_HOCKEY_MAXG_ESTIMATES:-hierarchical jeeds}"
+    for ESTIMATE in "${MAXG_ESTIMATES[@]}"; do
+      MAXG_JOB="$(sbatch --parsable \
+        --dependency="afterok:${AGGREGATE_JOB}" \
+        --time="${HJEEDS_HOCKEY_MAXG_TIME:-24:00:00}" \
+        --mem="${HJEEDS_HOCKEY_MAXG_MEM:-16G}" \
+        --job-name="hjeeds-hockey-maxg-${ESTIMATE}" \
+        --output="${OUTPUT_DIR}/slurm-maxg-${ESTIMATE}-%j.out" \
+        --export=ALL,BH_REPO_ROOT="$REPO_ROOT",BH_HJEEDS_RESULTS="${OUTPUT_DIR}/agent_level_results.csv",BH_HJEEDS_ESTIMATE="$ESTIMATE",BH_SEASON="${HJEEDS_HOCKEY_MAXG_SEASON_TAG:-$DEFAULT_MAXG_TAG}",BH_OUTPUT_DIR="${OUTPUT_DIR}/maxg" \
+        "${REPO_ROOT}/run_hjeeds_maxg.sbatch")"
+      echo "Submitted MAXG job (${ESTIMATE}): $MAXG_JOB"
+    done
   fi
   exit 0
 fi
