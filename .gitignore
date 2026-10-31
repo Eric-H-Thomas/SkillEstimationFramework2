@@ -11,7 +11,8 @@ build/
 # Environments
 venv/
 .env
-.cursor
+.cursor/
+.vscode/
 
 # Slurm logs
 slurm-*.out
@@ -34,10 +35,8 @@ Data/**/times/
 Data/**/plots/
 Data/**/logs/
 
-# Per-job experiment outputs (one JSON per array task)
-Data/Hockey/experiments/**/results/
-Data/Hockey/experiments/**/work/
-Data/Hockey/experiments/hjeeds_*/
+# Local hockey experiment outputs
+Data/Hockey/experiments/
 
 /.idea/dictionaries
 /.idea
