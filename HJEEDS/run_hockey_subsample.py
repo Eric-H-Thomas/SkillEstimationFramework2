@@ -17,6 +17,7 @@ import argparse
 import csv
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,11 @@ from typing import Any
 import numpy as np
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import load_player_data
+from BlackhawksSkillEstimation.shot_map_format import (
+    ShotMapFormatError,
+    check_shot_map_files,
+    player_shot_map_paths,
+)
 from BlackhawksSkillEstimation.player_subsample_stability import (
     DEFAULT_BASE_SEED,
     DEFAULT_DATA_ROOT,
@@ -103,6 +109,13 @@ def _grid_metadata(sigma_grid: np.ndarray, log_lambda_grid: np.ndarray) -> dict[
 
 def preflight(args: argparse.Namespace) -> int:
     player_ids = _read_player_ids(args.players_file)
+    try:
+        map_format = check_shot_map_files(
+            path for player_id in player_ids for path in player_shot_map_paths(args.data_dir, player_id, args.seasons)
+        )
+    except ShotMapFormatError as exc:
+        print(f"preflight failed: {exc}", file=sys.stderr)
+        return 2
     available: dict[str, int] = {}
     skipped: list[dict[str, Any]] = []
     for player_id in player_ids:
@@ -131,6 +144,7 @@ def preflight(args: argparse.Namespace) -> int:
         "seasons": args.seasons,
         "shot_group": args.shot_group,
         "data_dir": str(args.data_dir),
+        "shot_map_format": map_format,
         "base_seed": args.base_seed,
         "n_shots": args.n_shots,
         "num_seeds": args.num_seeds,

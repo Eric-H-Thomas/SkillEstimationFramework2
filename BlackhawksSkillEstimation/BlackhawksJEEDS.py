@@ -44,6 +44,7 @@ from BlackhawksAPI import (
     query_player_game_info,
     query_player_season_shots,
 )
+from BlackhawksSkillEstimation.shot_map_format import CURRENT_SHOT_MAP_SHAPE, check_loaded_shot_maps
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Estimators.joint import JointMethodQRE
 
@@ -839,23 +840,28 @@ def _load_shot_maps_npz(
     dict[int, dict[str, object]]
         Mapping of event_id_hawks -> {value_map, net_cov, net_coords}.
     """
-    data = np.load(str(path))
-    event_ids = data["event_ids"]
-    
-    if len(event_ids) == 0:
-        return {}
-    
+    # NpzFile decompresses an array on every key access, so read each once.
+    with np.load(str(path)) as data:
+        event_ids = data["event_ids"]
+        if len(event_ids) == 0:
+            return {}
+        value_maps = data["value_maps"]
+        net_covs = data["net_covs"]
+        net_coords = data["net_coords"]
+        has_grid = ("grid_ys" in data) and ("grid_zs" in data)
+        grid_ys = data["grid_ys"] if has_grid else None
+        grid_zs = data["grid_zs"] if has_grid else None
+
     shot_maps = {}
-    has_grid = ("grid_ys" in data) and ("grid_zs" in data)
     for i, eid in enumerate(event_ids):
         entry = {
-            "value_map": data["value_maps"][i].astype(np.float64),
-            "net_cov": data["net_covs"][i],
-            "net_coords": data["net_coords"][i],
+            "value_map": value_maps[i].astype(np.float64),
+            "net_cov": net_covs[i],
+            "net_coords": net_coords[i],
         }
         if has_grid:
-            entry["grid_y"] = data["grid_ys"][i]
-            entry["grid_z"] = data["grid_zs"][i]
+            entry["grid_y"] = grid_ys[i]
+            entry["grid_z"] = grid_zs[i]
         shot_maps[int(eid)] = entry
     return shot_maps
 
@@ -960,6 +966,7 @@ def load_player_data_by_games(
     player_id: int,
     tag: str = "games",
     data_dir: Path | str = Path("Data/Hockey"),
+    expected_map_shape: tuple[int, int] | None = CURRENT_SHOT_MAP_SHAPE,
 ) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
     """Load previously saved player data from disk (saved by game IDs).
 
@@ -973,6 +980,9 @@ def load_player_data_by_games(
         The tag used when saving (default: "games").
     data_dir : Path | str
         Base directory containing saved data (default: ``Data/Hockey``).
+    expected_map_shape : tuple[int, int] | None
+        Required value-map grid shape (default: the current xG grid). Pass
+        ``None`` to skip the check.
 
     Returns
     -------
@@ -983,6 +993,8 @@ def load_player_data_by_games(
     ------
     FileNotFoundError
         If parquet/npz files are missing.
+    ShotMapFormatError
+        If any value map does not have ``expected_map_shape``.
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / "players" / f"player_{player_id}"
@@ -998,6 +1010,8 @@ def load_player_data_by_games(
 
     df = pd.read_parquet(shots_path)
     shot_maps = _load_shot_maps_npz(maps_path)
+    if expected_map_shape is not None:
+        check_loaded_shot_maps(shot_maps, expected_map_shape, source=maps_path)
 
     return df, shot_maps
 
@@ -1096,6 +1110,7 @@ def load_player_data(
     player_id: int,
     seasons: list[int],
     data_dir: Path | str = Path("Data/Hockey"),
+    expected_map_shape: tuple[int, int] | None = CURRENT_SHOT_MAP_SHAPE,
 ) -> tuple[pd.DataFrame, dict[int, dict[str, object]]]:
     """Load previously saved player data from disk.
 
@@ -1109,6 +1124,9 @@ def load_player_data(
         List of season identifiers to load.
     data_dir : Path | str
         Base directory containing saved data (default: ``Data/Hockey``).
+    expected_map_shape : tuple[int, int] | None
+        Required value-map grid shape (default: the current xG grid). Pass
+        ``None`` to skip the check.
 
     Returns
     -------
@@ -1121,6 +1139,8 @@ def load_player_data(
     ------
     FileNotFoundError
         If parquet/npz files for any requested season are missing.
+    ShotMapFormatError
+        If any value map does not have ``expected_map_shape``.
     """
     data_dir = Path(data_dir)
     player_dir = data_dir / "players" / f"player_{player_id}"
@@ -1140,6 +1160,8 @@ def load_player_data(
 
         df = pd.read_parquet(shots_path)
         shot_maps = _load_shot_maps_npz(maps_path)
+        if expected_map_shape is not None:
+            check_loaded_shot_maps(shot_maps, expected_map_shape, source=maps_path)
 
         all_dfs.append(df)
         all_shot_maps.update(shot_maps)

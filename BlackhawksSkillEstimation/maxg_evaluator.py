@@ -12,6 +12,7 @@ import pandas as pd
 from scipy.signal import convolve2d
 
 from BlackhawksSkillEstimation.BlackhawksJEEDS import _BH_Y, _BH_Z, _load_shot_maps_npz
+from BlackhawksSkillEstimation.shot_map_format import CURRENT_SHOT_MAP_SHAPE, check_loaded_shot_maps
 from Environments.Hockey import getAngularHeatmapsPerPlayer as angular_heatmaps
 from Environments.Hockey.hockey import getCovMatrix, getNormalDistribution
 
@@ -36,6 +37,7 @@ def load_benchmark(benchmark_dir: Path, tag: str) -> tuple[pd.DataFrame, dict[in
 
     df = pd.read_parquet(shots_path)
     shot_maps = _load_shot_maps_npz(maps_path)
+    check_loaded_shot_maps(shot_maps, CURRENT_SHOT_MAP_SHAPE, source=maps_path)
     return df, shot_maps
 
 
