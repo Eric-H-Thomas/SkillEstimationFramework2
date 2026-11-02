@@ -103,6 +103,15 @@ def load_ees_xskills(
 
 
 HJEEDS_ESTIMATE_SUFFIXES = {"hierarchical": "_hjeeds", "jeeds": "_jeeds_baseline"}
+HJEEDS_ESTIMATOR_LABELS = {
+    "hierarchical": "hjeeds_mean_sigma",
+    "jeeds": "jeeds_baseline_mean_sigma",
+}
+HJEEDS_PLOT_ORDER = ("hierarchical", "jeeds")
+HJEEDS_PLOT_STYLE = {
+    "hierarchical": ("H-JEEDS hierarchical", "#D1495B"),
+    "jeeds": ("JEEDS baseline", "#1768AC"),
+}
 
 
 def load_hjeeds_sigmas(
@@ -401,7 +410,7 @@ def evaluate_maxg_hjeeds(
                 "player_id": player_id,
                 "mean_sigma": sigma,
                 "maxg_sum": maxg_sum,
-                "estimator": f"hjeeds_{estimate}_mean_sigma",
+                "estimator": HJEEDS_ESTIMATOR_LABELS[estimate],
                 "benchmark_tag": benchmark_tag,
                 "season_tag": season_tag,
                 "shot_group": shot_group,
@@ -427,6 +436,187 @@ def _plot_maxg_over_xskill(results: pd.DataFrame, output_path: Path) -> None:
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     plt.close()
+
+
+def hjeeds_maxg_results_stem(benchmark_tag: str, season_tag: str, shot_group: str) -> str:
+    return f"maxg_results_{benchmark_tag}_{season_tag}_{shot_group}"
+
+
+def hjeeds_maxg_results_path(
+    output_dir: Path,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+    estimate: str,
+) -> Path:
+    suffix = HJEEDS_ESTIMATE_SUFFIXES[estimate]
+    stem = hjeeds_maxg_results_stem(benchmark_tag, season_tag, shot_group)
+    return output_dir / f"{stem}{suffix}.csv"
+
+
+def hjeeds_maxg_comparison_path(
+    output_dir: Path,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+) -> Path:
+    stem = hjeeds_maxg_results_stem(benchmark_tag, season_tag, shot_group)
+    return output_dir / f"{stem}_hjeeds_vs_jeeds_baseline_maxg_over_sigma.png"
+
+
+def _format_season_span(season: str) -> str:
+    return f"{season[:4]}-{season[6:]}"
+
+
+def _format_maxg_season_tag(season_tag: str) -> str:
+    pooled = re.fullmatch(r"pooled_(\d{8})_(\d{8})", season_tag)
+    if pooled:
+        start, end = pooled.groups()
+        return f"pooled {_format_season_span(start)} to {_format_season_span(end)}"
+    if re.fullmatch(r"\d{8}", season_tag):
+        return _format_season_span(season_tag)
+    return season_tag
+
+
+def _usable_maxg_frame(frame: pd.DataFrame) -> pd.DataFrame | None:
+    if frame.empty or not {"mean_sigma", "maxg_sum"}.issubset(frame.columns):
+        return None
+    cleaned = frame.copy()
+    cleaned["mean_sigma"] = pd.to_numeric(cleaned["mean_sigma"], errors="coerce")
+    cleaned["maxg_sum"] = pd.to_numeric(cleaned["maxg_sum"], errors="coerce")
+    cleaned = cleaned[np.isfinite(cleaned["mean_sigma"]) & np.isfinite(cleaned["maxg_sum"])]
+    if cleaned.empty:
+        return None
+    return cleaned
+
+
+def _shared_maxg_ylim(frames: Sequence[pd.DataFrame]) -> tuple[float, float]:
+    values = np.concatenate([frame["maxg_sum"].to_numpy(dtype=float) for frame in frames])
+    ymin = float(np.min(values))
+    ymax = float(np.max(values))
+    span = ymax - ymin
+    pad = 0.05 * span if span > 0 else max(0.05 * abs(ymax), 0.5)
+    return ymin - pad, ymax + pad
+
+
+def _load_hjeeds_maxg_series(
+    output_dir: Path,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+) -> list[tuple[str, pd.DataFrame]]:
+    loaded: list[tuple[str, pd.DataFrame]] = []
+    for estimate in HJEEDS_PLOT_ORDER:
+        path = hjeeds_maxg_results_path(output_dir, benchmark_tag, season_tag, shot_group, estimate)
+        if not path.exists():
+            continue
+        frame = _usable_maxg_frame(pd.read_csv(path))
+        if frame is None:
+            print(f"Skipping MAXG plot for {path.name}: no finite sigma and MAXG rows")
+            continue
+        loaded.append((estimate, frame))
+    return loaded
+
+
+def _plot_maxg_over_sigma(
+    frame: pd.DataFrame,
+    output_path: Path,
+    *,
+    label: str,
+    color: str,
+    ylim: tuple[float, float] | None = None,
+) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(
+        frame["mean_sigma"],
+        frame["maxg_sum"],
+        alpha=0.7,
+        s=28,
+        color=color,
+        edgecolors="none",
+    )
+    ax.set_xlabel("Mean execution sigma")
+    ax.set_ylabel("MAXG sum")
+    ax.set_title(f"MAXG vs execution sigma — {label}")
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_hjeeds_maxg_side_by_side(
+    series: Sequence[tuple[str, pd.DataFrame]],
+    output_path: Path,
+    *,
+    season_tag: str,
+    ylim: tuple[float, float],
+) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+    for ax, (estimate, frame) in zip(axes, series):
+        label, color = HJEEDS_PLOT_STYLE[estimate]
+        ax.scatter(
+            frame["mean_sigma"],
+            frame["maxg_sum"],
+            alpha=0.7,
+            s=28,
+            color=color,
+            edgecolors="none",
+        )
+        ax.set_xlabel("Mean execution sigma")
+        ax.set_title(label)
+    axes[0].set_ylabel("MAXG sum")
+    axes[0].set_ylim(*ylim)
+    fig.suptitle(f"MAXG vs execution sigma — {_format_maxg_season_tag(season_tag)}")
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_hjeeds_maxg_results(
+    output_dir: Path,
+    benchmark_tag: str,
+    season_tag: str,
+    shot_group: str,
+) -> list[Path]:
+    """Plot HJEEDS MAXG scatters already written to ``output_dir``.
+
+    Hierarchical and uniform-prior JEEDS are separate runs. The run that
+    finishes second finds the sibling CSV, redraws both scatters on one MAXG
+    range, and writes the side-by-side comparison.
+    """
+    series = _load_hjeeds_maxg_series(output_dir, benchmark_tag, season_tag, shot_group)
+    if not series:
+        return []
+
+    ylim = _shared_maxg_ylim([frame for _, frame in series]) if len(series) > 1 else None
+    written: list[Path] = []
+    for estimate, frame in series:
+        label, color = HJEEDS_PLOT_STYLE[estimate]
+        csv_path = hjeeds_maxg_results_path(
+            output_dir, benchmark_tag, season_tag, shot_group, estimate
+        )
+        output_path = csv_path.with_name(csv_path.stem + "_maxg_over_sigma.png")
+        _plot_maxg_over_sigma(frame, output_path, label=label, color=color, ylim=ylim)
+        written.append(output_path)
+        print(f"Saved plot to {output_path}")
+
+    if ylim is not None and len(series) == len(HJEEDS_PLOT_ORDER):
+        comparison = hjeeds_maxg_comparison_path(output_dir, benchmark_tag, season_tag, shot_group)
+        _plot_hjeeds_maxg_side_by_side(series, comparison, season_tag=season_tag, ylim=ylim)
+        written.append(comparison)
+        print(f"Saved plot to {comparison}")
+    return written
 
 
 def _parse_player_ids(text: str | None) -> list[int] | None:
@@ -667,17 +857,30 @@ def main() -> None:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     if args.estimator == "hjeeds":
-        est_suffix = HJEEDS_ESTIMATE_SUFFIXES[args.hjeeds_estimate]
+        output_path = hjeeds_maxg_results_path(
+            output_dir,
+            args.benchmark_tag,
+            args.season_tag,
+            args.shot_group,
+            args.hjeeds_estimate,
+        )
     else:
         est_suffix = f"_{args.estimator}" if args.estimator != "jeeds" else ""
-    output_path = output_dir / (
-        f"maxg_results_{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{est_suffix}.csv"
-    )
+        output_path = output_dir / (
+            f"maxg_results_{args.benchmark_tag}_{args.season_tag}_{args.shot_group}{est_suffix}.csv"
+        )
     results.to_csv(output_path, index=False)
     print(f"Saved results to {output_path}")
 
-    plot_path = output_path.with_name(output_path.stem + "_maxg_over_xskill.png")
-    if args.estimator == "jeeds":
+    if args.estimator == "hjeeds":
+        plot_hjeeds_maxg_results(
+            output_dir,
+            benchmark_tag=args.benchmark_tag,
+            season_tag=args.season_tag,
+            shot_group=args.shot_group,
+        )
+    elif args.estimator == "jeeds":
+        plot_path = output_path.with_name(output_path.stem + "_maxg_over_xskill.png")
         _plot_maxg_over_xskill(results, plot_path)
         print(f"Saved plot to {plot_path}")
 
