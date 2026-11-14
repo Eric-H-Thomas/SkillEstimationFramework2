@@ -164,9 +164,15 @@ def _prepare_hockey_shots(
     ]
 
 
-def _blurred_utility(utility_grid: np.ndarray, sigma: float, bin_size: float) -> np.ndarray:
+def blur_utility(utility_grid: np.ndarray, sigma: float, bin_size: float) -> np.ndarray:
+    """The xG surface a player with execution skill ``sigma`` plans against, in raw xG units."""
+
     blur_sigma = max(min(sigma / bin_size, EV_BLUR_MAX_SIGMA_BINS), 1e-3)
-    evs = gaussian_filter(utility_grid, sigma=blur_sigma, mode="constant", cval=0.0)
+    return gaussian_filter(utility_grid, sigma=blur_sigma, mode="constant", cval=0.0)
+
+
+def _blurred_utility(utility_grid: np.ndarray, sigma: float, bin_size: float) -> np.ndarray:
+    evs = blur_utility(utility_grid, sigma, bin_size)
     if EV_NORMALIZE:
         ev_scale = float(np.max(evs) - np.mean(evs))
         if ev_scale > 1e-12:
