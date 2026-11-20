@@ -239,6 +239,87 @@ def _filter_df_by_shot_group(df: pd.DataFrame, shot_group: str) -> pd.DataFrame:
     return df_lc[mask]
 
 
+_BOUND_DIMENSIONS = ("y", "z", "rho", "lambda")
+
+
+def posterior_bound_masses(
+    particles: np.ndarray,
+    probs: np.ndarray,
+    ranges: dict[str, list[float]],
+) -> dict[str, float]:
+    """Probability mass sitting on each endpoint of the posterior cloud.
+
+    ``addNoise`` clamps a coordinate to its endpoint, so a particle on the
+    bound is one whose value matches that endpoint. Lambda is compared in
+    log10, which is the space the clamp uses. ``bound_mass_<dim>`` is the
+    mass on either end; the ``_low`` / ``_high`` keys split the two ends.
+    """
+    weights = np.asarray(probs, dtype=float).reshape(-1)
+    total = float(weights.sum())
+    if weights.size == 0 or not np.isfinite(total) or total <= 0:
+        weights = np.full(len(particles), 1.0 / max(len(particles), 1))
+    else:
+        weights = weights / total
+
+    cloud = np.asarray(particles, dtype=float)
+    masses: dict[str, float] = {}
+    for index, name in enumerate(_BOUND_DIMENSIONS):
+        start = float(ranges["start"][index])
+        end = float(ranges["end"][index])
+        if name == "lambda":
+            values = np.log10(np.maximum(cloud[:, index], 1e-12))
+            on_low = np.isclose(values, start, rtol=0.0, atol=1e-6)
+            on_high = np.isclose(values, end, rtol=0.0, atol=1e-6)
+        else:
+            on_low = np.isclose(cloud[:, index], start, rtol=0.0, atol=1e-8)
+            on_high = np.isclose(cloud[:, index], end, rtol=0.0, atol=1e-8)
+        low = float(weights[on_low].sum()) if on_low.any() else 0.0
+        high = float(weights[on_high].sum()) if on_high.any() else 0.0
+        masses[f"bound_mass_{name}_low"] = low
+        masses[f"bound_mass_{name}_high"] = high
+        masses[f"bound_mass_{name}"] = low + high
+    return masses
+
+
+class _HealthTrackingParticles(QREMethod_Multi_Particles):
+    """Snapshot the posterior before resampling and before the process noise.
+
+    ``add_observation`` resamples (sometimes) and then always jitters the
+    particles. Both steps replace the cloud the health numbers are about, so
+    the snapshot has to be taken on the way in. The first of those two calls
+    wins, which is the posterior: resample runs first when it runs at all.
+    """
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self._health_snapshot: dict[str, object] | None = None
+
+    def _capture_posterior(self) -> None:
+        if self._health_snapshot is not None:
+            return
+        neff = float(np.asarray(self.neff()).reshape(-1)[0])
+        self._health_snapshot = {
+            "neff": neff,
+            "particles": np.array(self.particles, copy=True),
+            "probs": np.array(self.probs, copy=True),
+        }
+
+    def resample(self, rng, spaces, state, i):  # type: ignore[no-untyped-def]
+        self._capture_posterior()
+        return super().resample(rng, spaces, state, i)
+
+    def addNoise(self, rng):  # type: ignore[no-untyped-def]
+        self._capture_posterior()
+        return super().addNoise(rng)
+
+    def consume_health_snapshot(self) -> dict[str, object]:
+        snapshot = self._health_snapshot
+        self._health_snapshot = None
+        if snapshot is None:
+            raise RuntimeError("MCSE health snapshot was not captured for this shot.")
+        return snapshot
+
+
 def _build_mcse_estimator(
     player_dir: Path,
     *,
@@ -250,13 +331,15 @@ def _build_mcse_estimator(
     ranges: dict[str, list[float]],
     rng_seed: int | None,
     lambda_mode: str = DEFAULT_LAMBDA_MODE,
+    record_filter_health: bool = False,
 ) -> QREMethod_Multi_Particles:
     env = _MCSEEnv(
         domain_name="hockey-multi",
         resultsFolder=str(player_dir),
         seedNum=int(rng_seed or 0),
     )
-    return QREMethod_Multi_Particles(
+    estimator_cls = _HealthTrackingParticles if record_filter_health else QREMethod_Multi_Particles
+    return estimator_cls(
         env,
         int(num_particles),
         list(noise),
@@ -325,6 +408,7 @@ def _run_mcse_estimation(
     compute_maxg: bool = False,
     benchmark_tag: str | None = None,
     benchmark_dir: Path | str = Path("Data/Hockey/benchmarks"),
+    record_filter_health: bool = False,
 ) -> dict[str, object]:
     if df.empty:
         return {
@@ -368,6 +452,7 @@ def _run_mcse_estimation(
         ranges=ranges,
         rng_seed=rng_seed,
         lambda_mode=lambda_mode,
+        record_filter_health=record_filter_health,
     )
 
     rng = np.random.default_rng(rng_seed)
@@ -377,6 +462,8 @@ def _run_mcse_estimation(
     for idx, (spaces, info, action) in enumerate(
         zip(mcse_inputs.spaces_per_shot, mcse_inputs.info_rows, mcse_inputs.actions)
     ):
+        if record_filter_health:
+            estimator._health_snapshot = None  # type: ignore[attr-defined]
         estimator.add_observation(
             rng,
             spaces,
@@ -391,11 +478,12 @@ def _run_mcse_estimation(
         # Drop per-shot PDF/EV caches; they are not reused across shots.
         spaces.clear_particle_caches()
 
-        if return_intermediate_estimates or save_intermediate_csv:
+        want_trace = return_intermediate_estimates or save_intermediate_csv or record_filter_health
+        if want_trace:
             partial = _extract_skill_vectors_from_estimator(estimator)
+            row: dict[str, object] = {"shot_count": idx + 1}
             if partial:
-                skill_log.append({
-                    "shot_count": idx + 1,
+                row.update({
                     "ees_y": partial["ees_y"],
                     "ees_z": partial["ees_z"],
                     "map_execution_skill_y": partial["execution_skill_y"],
@@ -413,6 +501,22 @@ def _run_mcse_estimation(
                         else None
                     ),
                 })
+            if record_filter_health:
+                snapshot = estimator.consume_health_snapshot()  # type: ignore[attr-defined]
+                neff = float(snapshot["neff"])
+                resampled_at = {int(step) for step in estimator.whenResampled}
+                row["neff"] = neff
+                row["neff_ratio"] = neff / float(num_particles) if num_particles else None
+                row["resampled"] = idx in resampled_at
+                row.update(
+                    posterior_bound_masses(
+                        np.asarray(snapshot["particles"]),
+                        np.asarray(snapshot["probs"]),
+                        ranges,
+                    )
+                )
+            if partial or record_filter_health:
+                skill_log.append(row)
 
     final = _extract_skill_vectors_from_estimator(estimator)
     if not final:
@@ -439,7 +543,7 @@ def _run_mcse_estimation(
         "maxg_map": None,
     }
 
-    if return_intermediate_estimates or save_intermediate_csv:
+    if return_intermediate_estimates or save_intermediate_csv or record_filter_health:
         result["skill_log"] = skill_log
 
     if save_intermediate_csv and skill_log:
@@ -503,6 +607,7 @@ def estimate_player_skill(
     compute_maxg: bool = False,
     benchmark_tag: str | None = None,
     benchmark_dir: Path | str = Path("Data/Hockey/benchmarks"),
+    record_filter_health: bool = False,
 ) -> dict[str, object]:
     """Estimate MCSE skills for a player (offline, game, or season modes)."""
     if shot_groups is not None:
@@ -531,6 +636,7 @@ def estimate_player_skill(
                 compute_maxg=compute_maxg,
                 benchmark_tag=benchmark_tag,
                 benchmark_dir=benchmark_dir,
+                record_filter_health=record_filter_health,
             )
         return {"player_id": player_id, "shot_groups": list(shot_groups), "per_group_results": per_group}
 
@@ -557,6 +663,7 @@ def estimate_player_skill(
         compute_maxg=compute_maxg,
         benchmark_tag=benchmark_tag,
         benchmark_dir=benchmark_dir,
+        record_filter_health=record_filter_health,
     )
 
     if offline_data is not None:

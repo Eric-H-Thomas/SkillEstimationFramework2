@@ -147,6 +147,60 @@ python -m BlackhawksSkillEstimation.maxg_evaluator \
 
 Compare **MAXG-to-MAXG** across estimators, not raw scalar JEEDS xskill vs MCSE `(x_y, x_z)`.
 
+## Parameter sweep
+
+Stage 1 crosses the knobs that move a long hockey sequence, holding the
+particle count at 500, the NEFF gate on, systematic resampling, estimated
+lambda, and the current JEEDS-aligned bounds:
+
+- state/rho noise divisors: `100, 200, 500, 1000` (larger = tighter random walk)
+- lambda noise divisors: `25, 50, 200, 400`
+- resample fraction: `0.75, 0.90, 0.95, 0.99`
+
+That is 64 settings. The builder picks the cached season with the most players
+who have at least 400 `wristshot_snapshot` shots, then the 3 highest-volume
+players in that season. Every seed of a player sees the same first 400 shots
+in chronological order; seeds `0, 1, 2` change only the particle RNG. 576
+jobs, 16G, 24h.
+
+A setting is ranked only when every player passes the health gates: mean
+`neff/N` at least 0.02, final bound mass at most 0.5 on every dimension, and
+late-trace drift at most 0.15 (std over the last 20% of shots, divided by the
+prior width). Among those, lower mean seed-to-seed spread wins, then lower
+late drift. An on-disk JEEDS MAXG table adds an absolute gap column and does
+not change that order. NEFF is the effective sample size of the posterior,
+recorded before resampling replaces the weights.
+
+Stage 2 is a second config, built from that ranking and not submitted on its
+own. It reruns the top 3 passing settings at 250 and 1000 particles, reruns
+the best setting with the NEFF gate off, and reruns the numeric defaults on
+`LEGACY_MCSE_RANGES`. The 1000-particle jobs are a separate 48h / 16G array.
+
+```bash
+python -m BlackhawksSkillEstimation.build_mcse_param_sweep_config \
+  --output Data/Hockey/jobs/mcse_param_sweep_stage1.json
+
+sbatch run_mcse_param_sweep_config.sbatch Data/Hockey/jobs/mcse_param_sweep_stage1.json
+
+python -m BlackhawksSkillEstimation.summarize_mcse_param_sweep \
+  --config Data/Hockey/jobs/mcse_param_sweep_stage1.json
+
+python -m BlackhawksSkillEstimation.build_mcse_param_sweep_config \
+  --stage 2 \
+  --from-config Data/Hockey/jobs/mcse_param_sweep_stage1.json \
+  --from-ranking Data/Hockey/experiments/mcse_param_sweep/stage1/summaries/ranking.csv \
+  --output Data/Hockey/jobs/mcse_param_sweep_stage2.json
+
+sbatch run_mcse_param_sweep_config.sbatch Data/Hockey/jobs/mcse_param_sweep_stage2.json
+```
+
+`--smoke` writes a 2-setting, 1-player, 1-seed, 5-shot config for a wiring
+check. One seed cannot produce a seed spread, so that config is not ranked.
+
+Thresholds live on the config and can be overridden at rank time
+(`--neff-ratio-min`, `--bound-mass-max`, `--late-drift-max`) without
+rerunning the array.
+
 ## Defaults
 
 - Particles: 1000 locally / smoke; **500** for league cluster configs
